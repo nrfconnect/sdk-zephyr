@@ -41,6 +41,14 @@ LOG_MODULE_REGISTER(net_sock_tls, CONFIG_NET_SOCKETS_LOG_LEVEL);
 #include <mbedtls/error.h>
 #include <mbedtls/platform.h>
 #include <mbedtls/ssl_cache.h>
+#include <mbedtls/pk.h>
+#if defined(MBEDTLS_PSA_CRYPTO_C) || defined(MBEDTLS_PSA_CRYPTO_CLIENT)
+#include <psa/crypto.h>
+/* Support for referencing a private key resident in PSA (TLS_CREDENTIAL_PRIVATE_KEY_PSA),
+ * so that the key material never has to be exported into the credential store.
+ */
+#define TLS_PRIV_KEY_PSA_ENABLED 1
+#endif
 #endif /* CONFIG_MBEDTLS */
 
 #include "sockets_internal.h"
@@ -1439,6 +1447,43 @@ static int tls_set_private_key(struct tls_context *tls,
 	return -ENOTSUP;
 }
 
+static int tls_set_private_key_psa(struct tls_context *tls,
+				   struct tls_credential *priv_key)
+{
+#if defined(CONFIG_MBEDTLS_X509_CRT_PARSE_C) && defined(TLS_PRIV_KEY_PSA_ENABLED)
+	psa_key_id_t key_id;
+	mbedtls_svc_key_id_t svc_key_id;
+	int err;
+
+	if (priv_key->len != sizeof(key_id)) {
+		return -EINVAL;
+	}
+
+	memcpy(&key_id, priv_key->buf, sizeof(key_id));
+
+	/* mbedtls_svc_key_id_make() exists in both PSA build variants: when keys
+	 * encode an owner it builds the {owner, key_id} struct, otherwise it just
+	 * returns the plain key_id. Passing owner 0 (the local/default owner) is
+	 * correct either way, so no build-time branching is needed here.
+	 */
+	svc_key_id = mbedtls_svc_key_id_make(0, key_id);
+
+	/* Build an opaque (MBEDTLS_PK_OPAQUE) PK context that only references
+	 * the PSA key. The private key material stays in PSA; handshake
+	 * signatures are dispatched to psa_sign_hash(). The public key is
+	 * derived internally so the context can be paired with its certificate.
+	 */
+	err = mbedtls_pk_wrap_psa(&tls->priv_key, svc_key_id);
+	if (err != 0) {
+		return -EINVAL;
+	}
+
+	return 0;
+#else
+	return -ENOTSUP;
+#endif /* CONFIG_MBEDTLS_X509_CRT_PARSE_C && TLS_PRIV_KEY_PSA_ENABLED */
+}
+
 static int tls_set_psk(struct tls_context *tls,
 		       struct tls_credential *psk,
 		       struct tls_credential *psk_id)
@@ -1470,6 +1515,10 @@ static int tls_set_credential(struct tls_context *tls,
 
 	case TLS_CREDENTIAL_PRIVATE_KEY:
 		return tls_set_private_key(tls, cred);
+	break;
+
+	case TLS_CREDENTIAL_PRIVATE_KEY_PSA:
+		return tls_set_private_key_psa(tls, cred);
 	break;
 
 	case TLS_CREDENTIAL_PSK:
@@ -1953,6 +2002,41 @@ static int tls_check_priv_key(struct tls_credential *priv_key)
 #endif /* CONFIG_MBEDTLS_X509_CRT_PARSE_C */
 }
 
+static int tls_check_private_key_psa(struct tls_credential *priv_key)
+{
+#if defined(CONFIG_MBEDTLS_X509_CRT_PARSE_C) && defined(TLS_PRIV_KEY_PSA_ENABLED)
+	psa_key_id_t key_id;
+	psa_key_attributes_t attr = PSA_KEY_ATTRIBUTES_INIT;
+	psa_status_t status;
+
+	if (priv_key->len != sizeof(key_id)) {
+		NET_ERR("Bad PSA key id length on tag %d", priv_key->tag);
+		return -EINVAL;
+	}
+
+	memcpy(&key_id, priv_key->buf, sizeof(key_id));
+
+	/* Validate that the referenced key exists and is usable, without
+	 * touching the key material.
+	 */
+	status = psa_get_key_attributes(key_id, &attr);
+	if (status != PSA_SUCCESS) {
+		NET_ERR("PSA key %u not found for tag %d, status: %d",
+			key_id, priv_key->tag, status);
+		return -EINVAL;
+	}
+
+	psa_reset_key_attributes(&attr);
+
+	return 0;
+#else
+	NET_ERR("TLS with PSA-resident private keys disabled. "
+		"Reconfigure mbed TLS to support PSA crypto.");
+
+	return -ENOTSUP;
+#endif /* CONFIG_MBEDTLS_X509_CRT_PARSE_C && TLS_PRIV_KEY_PSA_ENABLED */
+}
+
 static int tls_check_psk(struct tls_credential *psk)
 {
 #if defined(MBEDTLS_SSL_HANDSHAKE_WITH_PSK_ENABLED)
@@ -2004,6 +2088,13 @@ static int tls_check_credentials(const sec_tag_t *sec_tags, int sec_tag_count)
 				break;
 			case TLS_CREDENTIAL_PRIVATE_KEY:
 				err = tls_check_priv_key(cred);
+				if (err != 0) {
+					goto exit;
+				}
+
+				break;
+			case TLS_CREDENTIAL_PRIVATE_KEY_PSA:
+				err = tls_check_private_key_psa(cred);
 				if (err != 0) {
 					goto exit;
 				}
