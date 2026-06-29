@@ -45,8 +45,9 @@ NODELABEL_TO_KWARGS = {
     "dppic130": {"add_ppib_channel_links": False},
     # The interrupts for this node are not managed in IRQMAP.
     "canpll": {"has_irq_mapping": False},
+    # Skip SPU PERIPHCONF generation for audiopll.
+    "audiopll": {"has_irq_mapping": False, "skip_spu_periph_perm": True},
 }
-
 
 def get_additional_node_kwargs(node: Node) -> dict[str, Any]:
     additional_kwargs = {}
@@ -74,6 +75,12 @@ class Soc(enum.Enum):
         else:
             return cls.UNKNOWN
 
+NODELABEL_SOC_KWARGS: dict[Soc, dict[str, dict[str, Any]]] = {
+    Soc.NRF9251: {
+        # Skip until HW/IronSide mapping is known.
+        "audiopll": {"skip_spu_periph_perm": True},
+    },
+}
 
 def validate_soc_choice(soc):
     """Helper for argparse to validate soc parameter type"""
