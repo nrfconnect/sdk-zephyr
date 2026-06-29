@@ -98,10 +98,10 @@
 	pinctrl-names = "default", "sleep";
 };
 
-&uart30 {
+&uart21 {
 	current-speed = <115200>;
-	pinctrl-0 = <&uart30_default>;
-	pinctrl-1 = <&uart30_sleep>;
+	pinctrl-0 = <&uart21_default>;
+	pinctrl-1 = <&uart21_sleep>;
 	pinctrl-names = "default", "sleep";
 };
 
