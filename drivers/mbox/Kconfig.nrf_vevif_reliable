@@ -1,0 +1,43 @@
+# Copyright (c) 2026 Nordic Semiconductor ASA
+# SPDX-License-Identifier: Apache-2.0
+
+config MBOX_NRF_VEVIF_RELIABLE
+	bool "nRF VEVIF reliable signalling wrapper"
+	depends on DT_HAS_NORDIC_NRF_VEVIF_RELIABLE_ENABLED
+	default y
+	help
+	  Reliable signalling layer built on top of raw Nordic VEVIF mailbox
+	  channels. This wrapper uses shared counters and acknowledgements to
+	  guarantee that consecutive sends are replayed as distinct RX callbacks.
+
+config MBOX_NRF_VEVIF_RELIABLE_INIT_PRIORITY
+	int "Reliable VEVIF init priority"
+	default 41
+	depends on MBOX_NRF_VEVIF_RELIABLE
+	help
+	  Initialization priority for the reliable VEVIF wrapper. This must be
+	  later than the raw MBOX init priority.
+
+config MBOX_NRF_VEVIF_RELIABLE_LOCK_WAIT_USEC
+	int "Reliable VEVIF sender lock wait"
+	default 10000
+	range 1 1000000
+	depends on MBOX_NRF_VEVIF_RELIABLE
+	help
+	  Maximum time spent waiting for the reliable sender lock.
+
+config MBOX_NRF_VEVIF_RELIABLE_RETRY_DELAY_USEC
+	int "Reliable VEVIF retry delay"
+	default 10
+	range 1 100000
+	depends on MBOX_NRF_VEVIF_RELIABLE
+	help
+	  Delay between acknowledgment polls and retransmission attempts.
+
+config MBOX_NRF_VEVIF_RELIABLE_MAX_RETRIES
+	int "Reliable VEVIF retransmission attempts"
+	default 1000
+	range 1 1000000
+	depends on MBOX_NRF_VEVIF_RELIABLE
+	help
+	  Number of notify/retry cycles before reliable send times out.
