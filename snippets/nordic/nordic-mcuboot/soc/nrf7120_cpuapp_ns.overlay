@@ -1,0 +1,17 @@
+/*
+ * Copyright (c) 2026 Nordic Semiconductor
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+ */
+
+&cpuapp_mram {
+	/delete-node/ partitions;
+};
+
+/ {
+	chosen {
+		zephyr,code-partition = &slot0_ns_partition;
+	};
+};
+
+#define WITH_MCUBOOT_PARTITIONS
+#include <vendor/nordic/nrf7120_cpuapp_ns_partition.dtsi>
