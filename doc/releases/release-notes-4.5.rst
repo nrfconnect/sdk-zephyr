@@ -53,6 +53,22 @@ Removed APIs and options
 Deprecated APIs and options
 ===========================
 
+* :abbr:`DMIC (Digital Microphone Interface)`
+
+  * The :c:struct:`_dmic_ops` struct has been deprecated. DMIC drivers are now expected to use the
+    :c:macro:`DEVICE_API` macro to declare their driver API.
+
+* LoRa
+
+  * Renamed :c:func:`lora_recv_duty_cycle` to :c:func:`lora_recv_duty_cycle_async`
+    to be consistent with the existing sync/async naming convention.
+
+* Ring buffer
+
+  * The ring buffer item API (:c:func:`ring_buf_item_init`, :c:func:`ring_buf_item_put`,
+    :c:func:`ring_buf_item_get`, :c:func:`ring_buf_item_space_get`) has been deprecated in favor of
+    :c:struct:`sys_ringq` (see :ref:`fixed_size_ringq_api`).
+
 New APIs and options
 ====================
 ..
@@ -62,6 +78,9 @@ New APIs and options
   instead.
 
 .. zephyr-keep-sorted-start re(^\* \w)
+
+* :c:func:`lora_recv_duty_cycle_async`
+* :c:struct:`sys_ringq` (see :ref:`fixed_size_ringq_api`)
 
 .. zephyr-keep-sorted-stop
 
