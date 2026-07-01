@@ -179,8 +179,9 @@ docutils==0.22.4 \
     #   sphinx-rtd-theme
     #   sphinx-tabs
     #   sphinx-togglebutton
-doxmlparser==1.16.1 \
-    --hash=sha256:3f51651077a8a77360548e4a236b7b9ae71a283f187373677fa4a2ab763b9c2e
+    #   sphinxcontrib-programoutput
+doxmlparser==1.17.0 \
+    --hash=sha256:376b12f43ee037fb98f471512e257ba022245829940532019241f17be5a93b24
     # via -r requirements.in
 h11==0.16.0 \
     --hash=sha256:4e35b956cf45792e4caa5885e69fba00bdbc6ffafbfa020300e549b208ee5ff1 \
@@ -464,9 +465,9 @@ pyserial==3.5 \
     --hash=sha256:3c77e014170dfffbd816e6ffc205e9842efb10be9f58ec16d3e8675b4925cddb \
     --hash=sha256:c4451db6ba391ca6ca299fb3ec7bae67a5c55dde170964c7a14ceefec02f2cf0
     # via -r requirements.in
-pytest==9.0.2 \
-    --hash=sha256:711ffd45bf766d5264d487b917733b453d917afd2b0ad65223959f59089f875b \
-    --hash=sha256:75186651a92bd89611d1d9fc20f0b4345fd827c41ccd5c299a868a05d70edf11
+pytest==9.1.1 \
+    --hash=sha256:1088fbde8f2b49d95a549a195707afa7a76a3ce9bcadc26b6d71f0ffda5fe313 \
+    --hash=sha256:37a86b45efb9a47a61a36449063e8e18d0cab3161329fc099eb21783169c4f0c
     # via -r requirements.in
 python-dateutil==2.9.0.post0 \
     --hash=sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3 \
@@ -644,9 +645,9 @@ sphinxcontrib-jsmath==1.0.1 \
     --hash=sha256:2ec2eaebfb78f3f2078e73666b1415417a116cc848b72e5172e596c871103178 \
     --hash=sha256:a9925e4a4587247ed2191a22df5f6970656cb8ca2bd6284309578f2153e0c4b8
     # via sphinx
-sphinxcontrib-programoutput==0.19 \
-    --hash=sha256:787ca068b7e1205ed492ea20a23a8e599c3b4edb8c43bacf564e5ec7c30c7dad \
-    --hash=sha256:95ff4219ecee64bebf4fc6d2339cb1c2f313258b9999143e54839d83ae32afd1
+sphinxcontrib-programoutput==0.20 \
+    --hash=sha256:5c4282c1c7fc9b5a23febe16ae038b6392d7ce068d186ad4870ba22e74db0711 \
+    --hash=sha256:f473f9e7992879358efdeb9962fbec2103f6ba1cb6a738eb7f81dae554bc5ec7
     # via -r requirements.in
 sphinxcontrib-qthelp==2.0.0 \
     --hash=sha256:4fe7d0ac8fc171045be623aba3e2a8f613f8682731f9153bb2e40ece16b9bbab \
