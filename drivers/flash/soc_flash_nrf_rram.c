@@ -56,9 +56,6 @@ LOG_MODULE_REGISTER(flash_nrf_rram, CONFIG_FLASH_LOG_LEVEL);
 
 #if CONFIG_TRUSTED_EXECUTION_NONSECURE
 #include <soc_secure.h>
-#if USE_PARTITION_MANAGER
-#include <pm_config.h>
-#endif /* USE_PARTITION_MANAGER */
 #endif /* CONFIG_TRUSTED_EXECUTION_NONSECURE */
 
 #ifdef CONFIG_MULTITHREADING
@@ -363,17 +360,11 @@ static int nrf_rram_read(const struct device *dev, off_t addr, void *data, size_
 	}
 	addr += RRAM_START;
 
-#if CONFIG_TRUSTED_EXECUTION_NONSECURE
-#if USE_PARTITION_MANAGER && PM_APP_ADDRESS
-	if (addr < PM_APP_ADDRESS) {
-		return soc_secure_mem_read(data, (void *)addr, len);
-	}
-#elif !USE_PARTITION_MANAGER && DT_NODE_EXISTS(DT_NODELABEL(slot0_ns_partition))
+#if CONFIG_TRUSTED_EXECUTION_NONSECURE && DT_NODE_EXISTS(DT_NODELABEL(slot0_ns_partition))
 	if ((uintptr_t)addr < DT_REG_ADDR(DT_NODELABEL(slot0_ns_partition))) {
 		return soc_secure_mem_read(data, (void *)addr, len);
 	}
 #endif
-#endif /* CONFIG_TRUSTED_EXECUTION_NONSECURE */
 
 	memcpy(data, (void *)addr, len);
 
