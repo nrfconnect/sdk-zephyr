@@ -15,6 +15,7 @@
 #include <zephyr/drivers/flash.h>
 #include <string.h>
 #include <nrfx_nvmc.h>
+#include <soc_secure.h>
 
 #include "soc_flash_nrf.h"
 
@@ -36,12 +37,9 @@ LOG_MODULE_REGISTER(flash_nrf);
 
 #define SOC_NV_FLASH_NODE DT_INST(0, soc_nv_flash)
 
-#if CONFIG_TRUSTED_EXECUTION_NONSECURE
-#include <soc_secure.h>
-#if USE_PARTITION_MANAGER
+#if CONFIG_TRUSTED_EXECUTION_NONSECURE && USE_PARTITION_MANAGER
 #include <pm_config.h>
-#endif /* USE_PARTITION_MANAGER */
-#endif /* CONFIG_TRUSTED_EXECUTION_NONSECURE */
+#endif /* CONFIG_TRUSTED_EXECUTION_NONSECURE && USE_PARTITION_MANAGER */
 
 #ifndef CONFIG_SOC_FLASH_NRF_RADIO_SYNC_NONE
 #define FLASH_SLOT_WRITE     7500
@@ -172,17 +170,15 @@ static int flash_nrf_read(const struct device *dev, off_t addr,
 	}
 #endif
 
-#if CONFIG_TRUSTED_EXECUTION_NONSECURE
-#if USE_PARTITION_MANAGER && PM_APP_ADDRESS
+#if CONFIG_TRUSTED_EXECUTION_NONSECURE && USE_PARTITION_MANAGER && PM_APP_ADDRESS
 	if (addr < PM_APP_ADDRESS) {
 		return soc_secure_mem_read(data, (void *)addr, len);
 	}
-#elif !USE_PARTITION_MANAGER && DT_NODE_EXISTS(DT_NODELABEL(slot0_ns_partition))
-	if ((uintptr_t)addr < DT_REG_ADDR(DT_NODELABEL(slot0_ns_partition))) {
+#endif
+
+	if (soc_secure_flash_range_is_secure((uintptr_t)addr, len)) {
 		return soc_secure_mem_read(data, (void *)addr, len);
 	}
-#endif
-#endif /* CONFIG_TRUSTED_EXECUTION_NONSECURE */
 
 	nrf_nvmc_buffer_read(data, (uint32_t)addr, len);
 
