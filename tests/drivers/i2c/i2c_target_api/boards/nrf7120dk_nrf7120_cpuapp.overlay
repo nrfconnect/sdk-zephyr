@@ -10,7 +10,7 @@
  */
 
 &pinctrl {
-	i2c21_default: i2c21_default {
+	i2c23_default: i2c23_default {
 		group1 {
 			psels = <NRF_PSEL(TWIS_SDA, 1, 5)>,
 				<NRF_PSEL(TWIS_SCL, 1, 6)>;
@@ -18,7 +18,7 @@
 		};
 	};
 
-	i2c21_sleep: i2c21_sleep {
+	i2c23_sleep: i2c23_sleep {
 		group1 {
 			psels = <NRF_PSEL(TWIS_SDA, 1, 5)>,
 				<NRF_PSEL(TWIS_SCL, 1, 6)>;
@@ -43,9 +43,9 @@
 	};
 };
 
-&i2c21 {
-	pinctrl-0 = <&i2c21_default>;
-	pinctrl-1 = <&i2c21_sleep>;
+&i2c23 {
+	pinctrl-0 = <&i2c23_default>;
+	pinctrl-1 = <&i2c23_sleep>;
 	pinctrl-names = "default", "sleep";
 	zephyr,concat-buf-size = <256>;
 	status = "okay";
