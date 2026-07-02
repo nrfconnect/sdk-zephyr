@@ -958,9 +958,11 @@ static struct bt_gatt_attr proxy_attrs[] = {
 
 static struct bt_gatt_service proxy_svc = BT_GATT_SERVICE(proxy_attrs);
 
-static int proxy_gatt_service_register(void)
+int bt_mesh_proxy_gatt_enable(void)
 {
 	int err;
+
+	LOG_DBG("");
 
 	if (!bt_mesh_is_provisioned()) {
 		return -ENOTSUP;
@@ -982,20 +984,6 @@ static int proxy_gatt_service_register(void)
 		if (clients[i].cli) {
 			clients[i].filter_type = ACCEPT;
 		}
-	}
-
-	return 0;
-}
-
-int bt_mesh_proxy_gatt_enable(void)
-{
-	int err;
-
-	LOG_DBG("");
-
-	err = proxy_gatt_service_register();
-	if (err) {
-		return err;
 	}
 
 	bt_mesh_adv_gatt_update();
@@ -1181,8 +1169,7 @@ static void gatt_disconnected(struct bt_conn *conn, uint8_t reason)
 	}
 
 	if (!service_registered && bt_mesh_is_provisioned()) {
-		(void)proxy_gatt_service_register();
-		adv_restart_pending = true;
+		(void)bt_mesh_proxy_gatt_enable();
 		return;
 	}
 
