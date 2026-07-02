@@ -976,7 +976,7 @@ static int dtls_server_rx(void *ctx, unsigned char *buf, size_t len)
 {
 	struct tls_context *tls_ctx = ctx;
 	net_socklen_t addrlen = sizeof(struct net_sockaddr);
-	struct net_sockaddr_storage addr;
+	struct net_sockaddr_storage addr = { 0 };
 	int err;
 	ssize_t received;
 	uint8_t tmp_buf;
@@ -1032,7 +1032,7 @@ static int dtls_client_rx(void *ctx, unsigned char *buf, size_t len)
 {
 	struct tls_context *tls_ctx = ctx;
 	net_socklen_t addrlen = sizeof(struct net_sockaddr);
-	struct net_sockaddr_storage addr;
+	struct net_sockaddr_storage addr = { 0 };
 	ssize_t received;
 
 	received = zsock_recvfrom(tls_ctx->sock, buf, len,
@@ -1216,7 +1216,7 @@ static int dtls_server_switch_active_session_by_cid(struct tls_context *tls_ctx)
 static int dtls_server_switch_session_on_rx(struct tls_context *tls_ctx)
 {
 	net_socklen_t addrlen = sizeof(struct net_sockaddr);
-	struct net_sockaddr_storage addr;
+	struct net_sockaddr_storage addr = { 0 };
 	uint8_t tmp_buf;
 	int ret;
 
@@ -2410,6 +2410,10 @@ static int tls_opt_dtls_peer_connection_id_value_get(struct tls_context *context
 	session_ctx = get_latest_session(context);
 	if (session_ctx == NULL) {
 		return -ENOTCONN;
+	}
+
+	if (*optlen < MBEDTLS_SSL_CID_OUT_LEN_MAX) {
+		return -EINVAL;
 	}
 
 	ret = mbedtls_ssl_get_peer_cid(&session_ctx->ssl, &enabled, optval, &optlen_local);

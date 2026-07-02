@@ -90,12 +90,12 @@ struct gpio_esp32_data {
 
 static inline bool gpio_pin_is_valid(uint32_t pin)
 {
-	return ((BIT(pin) & SOC_GPIO_VALID_GPIO_MASK) != 0);
+	return ((BIT64(pin) & SOC_GPIO_VALID_GPIO_MASK) != 0);
 }
 
 static inline bool gpio_pin_is_output_capable(uint32_t pin)
 {
-	return ((BIT(pin) & SOC_GPIO_VALID_OUTPUT_GPIO_MASK) != 0);
+	return ((BIT64(pin) & SOC_GPIO_VALID_OUTPUT_GPIO_MASK) != 0);
 }
 
 static int IRAM_ATTR gpio_esp32_config(const struct device *dev,
@@ -454,6 +454,12 @@ static int gpio_esp32_pin_interrupt_configure(const struct device *port,
 {
 	const struct gpio_esp32_config *const cfg = port->config;
 	uint32_t io_pin = (uint32_t) pin + ((cfg->gpio_port == 1 && pin < 32) ? 32 : 0);
+
+	/* Wakeup is configured in gpio_esp32_config(); strip the bit so
+	 * convert_int_type() only sees edge/level trigger bits.
+	 */
+	trig &= ~GPIO_INT_WAKEUP;
+
 	int intr_trig_mode = convert_int_type(mode, trig);
 	uint32_t key;
 

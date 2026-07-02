@@ -188,7 +188,7 @@ static uint32_t eth_esp32_receive_frame(struct eth_esp32_dev_data *dev_data, uin
 	       (used_descs < CONFIG_ETH_DMA_RX_BUFFER_NUM)) {
 		used_descs++;
 
-		if (desc_iter->RDES0.FirstDescriptor) {
+		if (desc_iter->RDES0.FirstDescriptor && first_desc == NULL) {
 			first_desc = desc_iter;
 		}
 
@@ -242,6 +242,7 @@ static uint32_t eth_esp32_receive_frame(struct eth_esp32_dev_data *dev_data, uin
 	return copy_len;
 }
 
+#if !DT_INST_NODE_HAS_PROP(0, ref_clk_output_gpios)
 static void eth_esp32_iomux_rmii_clk_input(void)
 {
 	const emac_iomux_info_t *pin = emac_rmii_iomux_pins.clki;
@@ -252,6 +253,7 @@ static void eth_esp32_iomux_rmii_clk_input(void)
 		PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[pin->gpio_num], pin->func);
 	}
 }
+#endif
 
 static void eth_esp32_iomux_init_mii(void)
 {

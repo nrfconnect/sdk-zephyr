@@ -464,6 +464,7 @@ SECTIONS
     *libzephyr.a:systimer.*(.literal .literal.* .text .text.*)
     *libzephyr.a:mspi_timing_config.*(.literal .literal.* .text .text.*)
     *libzephyr.a:mspi_timing_tuning.*(.literal .literal.* .text .text.*)
+    *libzephyr.a:mspi_timing_by_mspi_delay.*(.literal .literal.* .text .text.*)
     *libzephyr.a:regi2c_ctrl.*(.literal .text .literal.* .text.*)
     *(.literal.sar_periph_ctrl_power_enable .text.sar_periph_ctrl_power_enable)
 
@@ -709,6 +710,7 @@ SECTIONS
     *libzephyr.a:systimer.*(.rodata .rodata.*)
     *libzephyr.a:mspi_timing_config.*(.rodata .rodata.*)
     *libzephyr.a:mspi_timing_tuning.*(.rodata .rodata.*)
+    *libzephyr.a:mspi_timing_by_mspi_delay.*(.rodata .rodata.*)
     *(.rodata.sar_periph_ctrl_power_enable)
 
     /* [mapping:soc_pm] */
@@ -910,6 +912,9 @@ SECTIONS
      */
     . += 16;
 
+    /* Enforce flash segment size alignment */
+    . = ALIGN(0x10);
+
     _text_end = ABSOLUTE(.);
     _instruction_reserved_end = ABSOLUTE(.);  /* This is a symbol marking the flash.text end, this can be used for mmu driver to maintain virtual address */
     __text_region_end = ABSOLUTE(.);
@@ -998,7 +1003,8 @@ SECTIONS
    * This is used to calculate the size of the _image_drom_size variable */
   .flash.rodata_end : ALIGN(0x10)
   {
-    . = ALIGN(4);
+    /* Enforce flash segment size alignment */
+    LONG(0);
     _rodata_reserved_end = ABSOLUTE(.);
     _image_rodata_end = ABSOLUTE(.);
   } GROUP_DATA_LINK_IN(RODATA_REGION, ROMABLE_REGION)
