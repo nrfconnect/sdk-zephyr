@@ -15,7 +15,9 @@ zephyr_library_sources_ifdef(CONFIG_MCUMGR_GRP_FS_CHECKSUM_IEEE_CRC32 src/fs_mgm
 zephyr_library_sources_ifdef(CONFIG_MCUMGR_GRP_FS_HASH_SHA256 src/fs_mgmt_hash_checksum_sha256.c)
 
 if(CONFIG_MCUMGR_GRP_FS_CHECKSUM_HASH AND CONFIG_MCUMGR_GRP_FS_HASH_SHA256)
-  zephyr_library_link_libraries_ifdef(CONFIG_MBEDTLS_BUILTIN mbedTLS)
+  if(CONFIG_MBEDTLS)
+    zephyr_library_link_libraries(mbedTLS)
+  endif()
 endif()
 
 zephyr_library_include_directories(include)
