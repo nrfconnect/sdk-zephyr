@@ -10,8 +10,6 @@
 
 MODEM_CELLULAR_COMMON_CHAT_MATCHES();
 
-MODEM_CELLULAR_UNSOL_DEFINE(swir_hl7800_unsol, MODEM_CELLULAR_COMMON_UNSOL_MATCHES);
-
 MODEM_CHAT_SCRIPT_CMDS_DEFINE(
 	swir_hl7800_init_chat_script_cmds, MODEM_CHAT_SCRIPT_CMD_RESP_NONE("AT", 1000),
 	MODEM_CHAT_SCRIPT_CMD_RESP_NONE("AT", 1000), MODEM_CHAT_SCRIPT_CMD_RESP_NONE("AT", 1000),
@@ -73,7 +71,6 @@ static const struct modem_cellular_config_scripts hl7800_scripts = {
                                                                                                    \
 	MODEM_CELLULAR_DEFINE_AND_INIT_USER_PIPES(inst, (user_pipe_0, 3), (user_pipe_1, 4))        \
                                                                                                    \
-	MODEM_CELLULAR_DEFINE_INSTANCE(inst, 1500, 100, 10000, 5000, false, &hl7800_scripts,       \
-				       &swir_hl7800_unsol)
+	MODEM_CELLULAR_DEFINE_INSTANCE(inst, 1500, 100, 10000, 5000, false, &hl7800_scripts)
 
 DT_INST_FOREACH_STATUS_OKAY(MODEM_CELLULAR_DEVICE_SWIR_HL7800)

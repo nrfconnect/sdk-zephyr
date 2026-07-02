@@ -10,8 +10,6 @@
 
 MODEM_CELLULAR_COMMON_CHAT_MATCHES();
 
-MODEM_CELLULAR_UNSOL_DEFINE(nordic_nrf91_slm_unsol, MODEM_CELLULAR_COMMON_UNSOL_MATCHES);
-
 MODEM_CHAT_MATCH_DEFINE(xiccid_match, "%XICCID: ", "", modem_cellular_chat_on_iccid);
 MODEM_CHAT_MATCH_DEFINE(uicc_initialized, "%XSIM: 1", "", NULL);
 
@@ -74,7 +72,6 @@ static const struct modem_cellular_config_scripts nrf91_slm_scripts = {
                                                                                                    \
 	MODEM_CELLULAR_DEFINE_AND_INIT_USER_PIPES(inst, (gnss_pipe, 3))                            \
                                                                                                    \
-	MODEM_CELLULAR_DEFINE_INSTANCE(inst, 0, 500, 5000, 0, false, &nrf91_slm_scripts,           \
-				       &nordic_nrf91_slm_unsol)
+	MODEM_CELLULAR_DEFINE_INSTANCE(inst, 0, 500, 5000, 0, false, &nrf91_slm_scripts)
 
 DT_INST_FOREACH_STATUS_OKAY(MODEM_CELLULAR_DEVICE_NORDIC_NRF91_SLM)
