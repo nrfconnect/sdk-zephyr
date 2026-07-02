@@ -27,9 +27,6 @@
 #if CONFIG_SPI_NRFX_RAM_BUFFER_SIZE
 #define SPI_NRFX_HAS_RAM_BUF 1
 #define SPI_NRFX_RAM_BUF_SIZE CONFIG_SPI_NRFX_RAM_BUFFER_SIZE
-#elif CONFIG_SPI_NRFX_DMM_BUFFER_SIZE
-#define SPI_NRFX_HAS_DMM_BUF 1
-#define SPI_NRFX_DMM_BUF_SIZE CONFIG_SPI_NRFX_DMM_BUFFER_SIZE
 #endif
 
 #if DT_ANY_COMPAT_HAS_PROP_STATUS_OKAY(nordic_nrf_spim, wake_gpios)
@@ -38,22 +35,18 @@
 
 typedef void (*spi_nrfx_data_common_wake_handler)(const struct device *dev);
 
-typedef void (*spi_nrfx_data_common_evt_handler)(const struct device *dev, int ret);
+typedef void (*spi_nrfx_data_common_evt_handler)(const struct device *dev,
+						 nrfx_spim_event_t *evt);
 
 struct spi_nrfx_common_data {
 	nrfx_spim_t spim;
 	bool configured;
 	struct spi_config spi_cfg;
-#if SPI_NRFX_HAS_RAM_BUF
-	uint8_t *rx_ram_buf;
-#elif SPI_NRFX_HAS_DMM_BUF
-	void *tx_dmm_buf;
-	void *rx_dmm_buf;
-#endif
+#if SPI_NRFX_HAS_RAM_BUF || CONFIG_HAS_NORDIC_DMM
 	const uint8_t *tx_user_buf;
 	uint8_t *rx_user_buf;
-	size_t user_buf_len;
-	size_t user_buf_pos;
+	size_t rx_user_buf_len;
+#endif
 #if SPI_NRFX_HAS_WAKE
 	const struct device *dev;
 	struct gpio_callback wake_pin_callback;
@@ -70,7 +63,8 @@ struct spi_nrfx_common_config {
 #if SPI_NRFX_HAS_RAM_BUF
 	uint8_t *tx_ram_buf;
 	uint8_t *rx_ram_buf;
-#elif SPI_NRFX_HAS_DMM_BUF
+#endif
+#if CONFIG_HAS_NORDIC_DMM
 	void *mem_reg;
 #endif
 	uint32_t max_freq;
@@ -91,13 +85,16 @@ void spi_nrfx_spim_common_wake_start(const struct device *dev,
 void spi_nrfx_spim_common_cs_set(const struct device *dev, const struct spi_config *spi_cfg);
 void spi_nrfx_spim_common_cs_clear(const struct device *dev, const struct spi_config *spi_cfg);
 
-void spi_nrfx_spim_common_transfer_start(const struct device *dev,
-					 const uint8_t *tx_buf,
-					 size_t tx_buf_len,
-					 uint8_t *rx_buf,
-					 size_t rx_buf_len);
+int spi_nrfx_spim_common_transfer_start(const struct device *dev,
+					const uint8_t *tx_buf,
+					size_t tx_buf_len,
+					uint8_t *rx_buf,
+					size_t rx_buf_len);
 
 void spi_nrfx_spim_common_transfer_stop(const struct device *dev);
+
+void spi_nrfx_spim_common_transfer_end(const struct device *dev,
+				       const nrfx_spim_xfer_desc_t *xfer);
 
 int spi_nrfx_spim_common_configure(const struct device *dev, const struct spi_config *spi_cfg);
 int spi_nrfx_spim_common_pm_action(const struct device *dev, enum pm_device_action action);
@@ -191,7 +188,7 @@ int spi_nrfx_spim_common_deinit(const struct device *dev);
 
 #define SPI_NRFX_COMMON_CONFIG_MEM_REG_INIT(inst)						\
 	IF_ENABLED(										\
-		SPI_NRFX_HAS_DMM_BUF,								\
+		CONFIG_HAS_NORDIC_DMM,								\
 		(										\
 			.mem_reg = DMM_DEV_TO_REG(DT_DRV_INST(inst)),				\
 		)										\
