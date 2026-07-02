@@ -417,6 +417,7 @@ static ssize_t read_adv_data(struct bt_conn *conn,
 static int eds_slot_restart(struct eds_slot *slot, uint8_t type)
 {
 	int err;
+	char addr_s[BT_ADDR_LE_STR_LEN];
 	bt_addr_le_t addr = {0};
 
 	/* Restart advertising */
@@ -444,7 +445,8 @@ static int eds_slot_restart(struct eds_slot *slot, uint8_t type)
 		return err;
 	}
 
-	printk("Advertising as %s\n", bt_addr_le_str(&addr));
+	bt_addr_le_to_str(&addr, addr_s, sizeof(addr_s));
+	printk("Advertising as %s\n", addr_s);
 
 	slot->type = type;
 
@@ -621,6 +623,7 @@ BT_GATT_SERVICE_DEFINE(eds_svc,
 
 static void bt_ready(int err)
 {
+	char addr_s[BT_ADDR_LE_STR_LEN];
 	struct bt_le_oob oob;
 
 	if (err) {
@@ -639,7 +642,8 @@ static void bt_ready(int err)
 
 	/* Restore connectable if slot */
 	bt_le_oob_get_local(BT_ID_DEFAULT, &oob);
-	printk("Initial advertising as %s\n", bt_addr_le_str(&oob.addr));
+	bt_addr_le_to_str(&oob.addr, addr_s, sizeof(addr_s));
+	printk("Initial advertising as %s\n", addr_s);
 
 	k_work_schedule(&idle_work, EDS_IDLE_TIMEOUT);
 

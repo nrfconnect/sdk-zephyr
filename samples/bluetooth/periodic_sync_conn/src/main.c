@@ -26,9 +26,11 @@ static void sync_cb(struct bt_le_per_adv_sync *sync, struct bt_le_per_adv_sync_s
 {
 	struct bt_le_per_adv_sync_subevent_params params;
 	uint8_t subevents[1];
+	char le_addr[BT_ADDR_LE_STR_LEN];
 	int err;
 
-	printk("Synced to %s with %d subevents\n", bt_addr_le_str(info->addr), info->num_subevents);
+	bt_addr_le_to_str(info->addr, le_addr, sizeof(le_addr));
+	printk("Synced to %s with %d subevents\n", le_addr, info->num_subevents);
 
 	params.properties = 0;
 	params.num_subevents = 1;
@@ -45,6 +47,10 @@ static void sync_cb(struct bt_le_per_adv_sync *sync, struct bt_le_per_adv_sync_s
 static void term_cb(struct bt_le_per_adv_sync *sync,
 		    const struct bt_le_per_adv_sync_term_info *info)
 {
+	char le_addr[BT_ADDR_LE_STR_LEN];
+
+	bt_addr_le_to_str(info->addr, le_addr, sizeof(le_addr));
+
 	printk("Sync terminated (reason %d)\n", info->reason);
 }
 
@@ -57,6 +63,7 @@ static void recv_cb(struct bt_le_per_adv_sync *sync,
 {
 	int err;
 	struct bt_le_oob oob;
+	char addr_str[BT_ADDR_LE_STR_LEN];
 
 	if (default_conn) {
 		/* Only respond with address if not already connected */
@@ -79,7 +86,8 @@ static void recv_cb(struct bt_le_per_adv_sync *sync,
 			return;
 		}
 
-		printk("Responding with own addr: %s\n", bt_addr_le_str(&oob.addr));
+		bt_addr_le_to_str(&oob.addr, addr_str, sizeof(addr_str));
+		printk("Responding with own addr: %s\n", addr_str);
 
 		net_buf_simple_add_u8(&rsp_buf, sizeof(bt_addr_le_t));
 		net_buf_simple_add_u8(&rsp_buf, BT_DATA_LE_BT_DEVICE_ADDRESS);

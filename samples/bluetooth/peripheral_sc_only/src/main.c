@@ -42,13 +42,16 @@ static void start_adv(void)
 
 static void connected(struct bt_conn *conn, uint8_t err)
 {
+	char addr[BT_ADDR_LE_STR_LEN];
+
+	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+
 	if (err) {
-		printk("Failed to connect to %s %u %s\n", bt_conn_dst_str(conn),
-		       err, bt_hci_err_to_str(err));
+		printk("Failed to connect to %s %u %s\n", addr, err, bt_hci_err_to_str(err));
 		return;
 	}
 
-	printk("Connected %s\n", bt_conn_dst_str(conn));
+	printk("Connected %s\n", addr);
 
 	if (bt_conn_set_security(conn, BT_SECURITY_L4)) {
 		printk("Failed to set security\n");
@@ -57,23 +60,37 @@ static void connected(struct bt_conn *conn, uint8_t err)
 
 static void disconnected(struct bt_conn *conn, uint8_t reason)
 {
-	printk("Disconnected from %s, reason 0x%02x %s\n", bt_conn_dst_str(conn),
+	char addr[BT_ADDR_LE_STR_LEN];
+
+	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+
+	printk("Disconnected from %s, reason 0x%02x %s\n", addr,
 	       reason, bt_hci_err_to_str(reason));
 }
 
 static void identity_resolved(struct bt_conn *conn, const bt_addr_le_t *rpa,
 			      const bt_addr_le_t *identity)
 {
-	printk("Identity resolved %s -> %s\n", bt_addr_le_str(rpa), bt_addr_le_str(identity));
+	char addr_identity[BT_ADDR_LE_STR_LEN];
+	char addr_rpa[BT_ADDR_LE_STR_LEN];
+
+	bt_addr_le_to_str(identity, addr_identity, sizeof(addr_identity));
+	bt_addr_le_to_str(rpa, addr_rpa, sizeof(addr_rpa));
+
+	printk("Identity resolved %s -> %s\n", addr_rpa, addr_identity);
 }
 
 static void security_changed(struct bt_conn *conn, bt_security_t level,
 			     enum bt_security_err err)
 {
+	char addr[BT_ADDR_LE_STR_LEN];
+
+	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+
 	if (!err) {
-		printk("Security changed: %s level %u\n", bt_conn_dst_str(conn), level);
+		printk("Security changed: %s level %u\n", addr, level);
 	} else {
-		printk("Security failed: %s level %u err %s(%d)\n", bt_conn_dst_str(conn), level,
+		printk("Security failed: %s level %u err %s(%d)\n", addr, level,
 		       bt_security_err_to_str(err), err);
 	}
 }
@@ -88,12 +105,20 @@ BT_CONN_CB_DEFINE(conn_callbacks) = {
 
 static void auth_passkey_display(struct bt_conn *conn, unsigned int passkey)
 {
-	printk("Passkey for %s: %06u\n", bt_conn_dst_str(conn), passkey);
+	char addr[BT_ADDR_LE_STR_LEN];
+
+	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+
+	printk("Passkey for %s: %06u\n", addr, passkey);
 }
 
 static void auth_cancel(struct bt_conn *conn)
 {
-	printk("Pairing cancelled: %s\n", bt_conn_dst_str(conn));
+	char addr[BT_ADDR_LE_STR_LEN];
+
+	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+
+	printk("Pairing cancelled: %s\n", addr);
 }
 
 static void pairing_complete(struct bt_conn *conn, bool bonded)
