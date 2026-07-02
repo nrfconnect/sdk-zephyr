@@ -51,17 +51,24 @@ BT_GATT_SERVICE_DEFINE(test_gatt_service, BT_GATT_PRIMARY_SERVICE(test_service_u
 
 static void disconnected(struct bt_conn *conn, uint8_t reason)
 {
-	LOG_DBG("Disconnected: %s (reason 0x%02x)", bt_conn_dst_str(conn), reason);
+	char addr_str[BT_ADDR_LE_STR_LEN];
+
+	bt_addr_le_to_str(bt_conn_get_dst(conn), addr_str, sizeof(addr_str));
+
+	LOG_DBG("Disconnected: %s (reason 0x%02x)", addr_str, reason);
 
 	SET_FLAG(disconnected_flag);
 }
 
 static void security_changed(struct bt_conn *conn, bt_security_t level, enum bt_security_err err)
 {
-	TEST_ASSERT(err == 0, "Security update failed: %s level %u err %d", bt_conn_dst_str(conn),
-		    level, err);
+	char addr_str[BT_ADDR_LE_STR_LEN];
 
-	LOG_DBG("Security changed: %s level %u", bt_conn_dst_str(conn), level);
+	bt_addr_le_to_str(bt_conn_get_dst(conn), addr_str, sizeof(addr_str));
+
+	TEST_ASSERT(err == 0, "Security update failed: %s level %u err %d", addr_str, level, err);
+
+	LOG_DBG("Security changed: %s level %u", addr_str, level);
 	SET_FLAG(security_changed_flag);
 }
 

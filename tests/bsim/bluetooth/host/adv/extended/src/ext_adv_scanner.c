@@ -24,14 +24,18 @@ DEFINE_FLAG_STATIC(flag_conn_recycled);
 
 static void connected(struct bt_conn *conn, uint8_t err)
 {
+	char addr[BT_ADDR_LE_STR_LEN];
+
+	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+
 	if (err != BT_HCI_ERR_SUCCESS) {
-		TEST_FAIL("Failed to connect to %s: %u", bt_conn_dst_str(conn), err);
+		TEST_FAIL("Failed to connect to %s: %u", addr, err);
 		bt_conn_unref(g_conn);
 		g_conn = NULL;
 		return;
 	}
 
-	printk("Connected to %s\n", bt_conn_dst_str(conn));
+	printk("Connected to %s\n", addr);
 	SET_FLAG(flag_connected);
 }
 
@@ -47,7 +51,11 @@ static K_WORK_DELAYABLE_DEFINE(free_conn_object_work, free_conn_object_work_fn);
 
 static void disconnected(struct bt_conn *conn, uint8_t reason)
 {
-	printk("Disconnected: %s (reason %u)\n", bt_conn_dst_str(conn), reason);
+	char addr[BT_ADDR_LE_STR_LEN];
+
+	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+
+	printk("Disconnected: %s (reason %u)\n", addr, reason);
 
 	/* Schedule to cause de-sync between disconnected and recycled events,
 	 * in order to prove the test is relying properly on it.

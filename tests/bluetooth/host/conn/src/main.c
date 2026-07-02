@@ -13,6 +13,7 @@
 
 #include "mocks/addr_internal.h"
 #include "mocks/att_internal.h"
+#include "mocks/bt_str.h"
 #include "mocks/buf_view.h"
 #include "mocks/hci_core.h"
 #include "mocks/id.h"

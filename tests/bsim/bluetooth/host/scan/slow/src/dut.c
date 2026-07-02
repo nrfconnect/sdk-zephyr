@@ -20,10 +20,13 @@ extern unsigned long runtime_log_level;
 static void device_found(const bt_addr_le_t *addr, int8_t rssi, uint8_t type,
 			 struct net_buf_simple *ad)
 {
+	char addr_str[BT_ADDR_LE_STR_LEN];
+
 	k_msleep(500); /* simulate a slow memcpy (or user processing the scan data) */
 
-	LOG_DBG("Device found: %s (RSSI %d), type %u, AD data len %u", bt_addr_le_str(addr),
-		rssi, type, ad->len);
+	bt_addr_le_to_str(addr, addr_str, sizeof(addr_str));
+	LOG_DBG("Device found: %s (RSSI %d), type %u, AD data len %u", addr_str, rssi, type,
+		ad->len);
 }
 
 #define BT_LE_SCAN_ACTIVE_CONTINUOUS_WITH_DUPLICATES                                               \

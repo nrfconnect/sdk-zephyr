@@ -80,17 +80,25 @@ static int l2cap_server_register(bt_security_t sec_level)
 
 static void acl_connected(struct bt_conn *conn, uint8_t err)
 {
+	char addr[BT_ADDR_LE_STR_LEN];
+
+	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+
 	if (err) {
-		LOG_ERR("Failed to connect to %s (0x%02x)", bt_conn_dst_str(conn), err);
+		LOG_ERR("Failed to connect to %s (0x%02x)", addr, err);
 		return;
 	}
 
-	LOG_DBG("Connected to %s", bt_conn_dst_str(conn));
+	LOG_DBG("Connected to %s", addr);
 }
 
 static void acl_disconnected(struct bt_conn *conn, uint8_t reason)
 {
-	LOG_DBG("Disconnected from %s (reason 0x%02x)", bt_conn_dst_str(conn), reason);
+	char addr[BT_ADDR_LE_STR_LEN];
+
+	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+
+	LOG_DBG("Disconnected from %s (reason 0x%02x)", addr, reason);
 }
 
 /* Read the comments on `entrypoint_dut()` first. */
