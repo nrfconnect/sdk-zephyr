@@ -14,13 +14,12 @@
 #include <zephyr/sys/util.h>
 #include <zephyr/kernel/mm.h>
 #include <zephyr/linker/linker-defs.h>
-#include <zephyr/devicetree.h>
 
 /** Start address of physical memory. */
-#define K_MEM_PHYS_RAM_START	((uintptr_t)DT_CHOSEN_SRAM_ADDR)
+#define K_MEM_PHYS_RAM_START	((uintptr_t)CONFIG_SRAM_BASE_ADDRESS)
 
 /** Size of physical memory. */
-#define K_MEM_PHYS_RAM_SIZE	DT_CHOSEN_SRAM_SIZE
+#define K_MEM_PHYS_RAM_SIZE	(KB(CONFIG_SRAM_SIZE))
 
 /** End address (exclusive) of physical memory. */
 #define K_MEM_PHYS_RAM_END	(K_MEM_PHYS_RAM_START + K_MEM_PHYS_RAM_SIZE)
@@ -50,7 +49,7 @@
  */
 #define K_MEM_VM_OFFSET	\
 	((CONFIG_KERNEL_VM_BASE + CONFIG_KERNEL_VM_OFFSET) - \
-	 (K_MEM_PHYS_RAM_START + CONFIG_SRAM_OFFSET))
+	 (CONFIG_SRAM_BASE_ADDRESS + CONFIG_SRAM_OFFSET))
 
 /**
  * @brief Get physical address from virtual address for boot RAM mappings.
@@ -88,7 +87,7 @@
  *
  * - If it is enabled, which means all physical memory are mapped in virtual
  *   memory address space, and it is the same as
- *   (DT_CHOSEN_SRAM_ADDR + DT_CHOSEN_SRAM_SIZE).
+ *   (CONFIG_SRAM_BASE_ADDRESS + CONFIG_SRAM_SIZE).
  *
  * - If it is disabled, K_MEM_VM_FREE_START is the same K_MEM_KERNEL_VIRT_END which
  *   is the end of the kernel image.
@@ -114,8 +113,8 @@
  * @brief Number of page frames.
  *
  * At present, page frame management is only done for main system RAM,
- * and we generate paging structures based on DT_CHOSEN_SRAM_ADDR
- * and DT_CHOSEN_SRAM_SIZE.
+ * and we generate paging structures based on CONFIG_SRAM_BASE_ADDRESS
+ * and CONFIG_SRAM_SIZE.
  *
  * If we have other RAM regions (DCCM, etc) these typically have special
  * properties and shouldn't be used generically for demand paging or
