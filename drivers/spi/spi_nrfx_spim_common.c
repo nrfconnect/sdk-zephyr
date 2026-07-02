@@ -610,11 +610,8 @@ static int cs_put(const struct device *dev)
 static int pm_suspend(const struct device *dev)
 {
 	struct spi_nrfx_common_data *dev_data = dev->data;
-	int ret;
-
-#if CONFIG_PINCTRL_KEEP_SLEEP_STATE
 	const struct spi_nrfx_common_config *dev_config = dev->config;
-#endif
+	int ret;
 
 	if (dev_data->configured) {
 		nrfx_spim_uninit(&dev_data->spim);
@@ -626,12 +623,10 @@ static int pm_suspend(const struct device *dev)
 		return ret;
 	}
 
-#if CONFIG_PINCTRL_KEEP_SLEEP_STATE
 	ret = pinctrl_apply_state(dev_config->pcfg, PINCTRL_STATE_SLEEP);
 	if (ret) {
 		return ret;
 	}
-#endif
 
 	return 0;
 }
@@ -804,6 +799,11 @@ int spi_nrfx_spim_common_init(const struct device *dev)
 	}
 
 	ret = wake_init(dev);
+	if (ret) {
+		return ret;
+	}
+
+	ret = pinctrl_apply_state(dev_config->pcfg, PINCTRL_STATE_SLEEP);
 	if (ret) {
 		return ret;
 	}
