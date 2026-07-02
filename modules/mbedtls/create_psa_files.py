@@ -29,13 +29,19 @@ KCONFIG_HEADER="""\
 # from {}.
 # Some manual additions are made, but no deletion.
 
-if PSA_CRYPTO
+config PSA_CRYPTO_CLIENT
+	bool
+	help
+	  Promptless symbol to state that there is a PSA crypto API provider
+	  enabled in the system. This allows to select desired PSA_WANT features.
+
+if PSA_CRYPTO_CLIENT
 
 config PSA_CRYPTO_ENABLE_ALL
 	bool "All PSA crypto features"
 """.format(os.path.basename(__file__), INPUT_REL_PATH)
 
-KCONFIG_FOOTER="\nendif # PSA_CRYPTO\n"
+KCONFIG_FOOTER="\nendif # PSA_CRYPTO_CLIENT\n"
 
 H_HEADER="""\
 /*
