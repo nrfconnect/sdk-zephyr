@@ -112,6 +112,11 @@ struct ironside_se_call_buf *ironside_se_call_alloc(void)
 void ironside_se_call_dispatch(struct ironside_se_call_buf *buf)
 {
 	const uint32_t buf_bit = BIT(buf - bufs);
+#if CONFIG_IRONSIDE_SE_CALL_RESPONSE_TIMEOUT_MS > 0
+	const k_timeout_t rsp_timeout = K_MSEC(CONFIG_IRONSIDE_SE_CALL_RESPONSE_TIMEOUT_MS);
+#else
+	const k_timeout_t rsp_timeout = K_FOREVER;
+#endif
 	int err;
 
 	buf->status = IRONSIDE_SE_CALL_STATUS_REQ;
@@ -121,10 +126,13 @@ void ironside_se_call_dispatch(struct ironside_se_call_buf *buf)
 
 	k_event_clear(&rsp_evts, buf_bit);
 
-	err = mbox_send_dt(&mbox_tx, NULL);
-	__ASSERT_NO_MSG(err == 0);
-
-	k_event_wait(&rsp_evts, buf_bit, false, K_FOREVER);
+	/* Post the request, re-posting on timeout; see
+	 * CONFIG_IRONSIDE_SE_CALL_RESPONSE_TIMEOUT_MS.
+	 */
+	do {
+		err = mbox_send_dt(&mbox_tx, NULL);
+		__ASSERT_NO_MSG(err == 0);
+	} while (k_event_wait(&rsp_evts, buf_bit, false, rsp_timeout) == 0);
 }
 
 void ironside_se_call_release(struct ironside_se_call_buf *buf)

@@ -50,6 +50,19 @@ config IRONSIDE_SE_CALL_MINIMAL
 
 endchoice
 
+config IRONSIDE_SE_CALL_RESPONSE_TIMEOUT_MS
+	int "IronSide call response timeout (ms)"
+	default 1000
+	depends on IRONSIDE_SE_CALL_ZEPHYR
+	help
+	  Time to wait for a response before posting the request again,
+	  in milliseconds. This is a workaround for IronSide SE versions
+	  that notify the client before dequeuing the request: a request
+	  posted in that window is skipped and would otherwise never be
+	  answered. Posting the request again is harmless because the
+	  enqueue is idempotent. Set to 0 to wait forever and disable the
+	  workaround on IronSide SE versions that include the fix.
+
 config IRONSIDE_SE_CALL_INIT_PRIORITY
 	int "IronSide calls' driver initialization priority"
 	default 41
