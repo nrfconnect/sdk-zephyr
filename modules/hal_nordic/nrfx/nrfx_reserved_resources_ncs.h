@@ -7,6 +7,8 @@
 #ifndef NRFX_RESERVED_RESOURCES_NCS_H__
 #define NRFX_RESERVED_RESOURCES_NCS_H__
 
+#include <mdk_config.h>
+
 #if defined(CONFIG_BT_LL_SOFTDEVICE)
 #include <sdc_soc.h>
 #if defined(CONFIG_SOC_COMPATIBLE_NRF52X)
