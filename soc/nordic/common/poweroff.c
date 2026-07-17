@@ -33,6 +33,9 @@
 void z_sys_poweroff(void)
 {
 #if defined(CONFIG_TFM_NRF_SYSTEM_OFF_SERVICE)
+#if defined(CONFIG_RETAINED_MEM_NRF_RAM_CTRL)
+	(void)z_nrf_retained_mem_retention_apply();
+#endif
 	tfm_platform_system_off();
 #else
 
