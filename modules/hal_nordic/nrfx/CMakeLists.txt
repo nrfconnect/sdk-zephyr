@@ -145,7 +145,7 @@ zephyr_library_sources(nrfx_glue.c)
 zephyr_library_sources(${HELPERS_DIR}/nrfx_flag32_allocator.c)
 zephyr_library_sources_ifdef(CONFIG_HAS_NORDIC_RAM_CTRL       ${HELPERS_DIR}/nrfx_ram_ctrl.c)
 
-if(CONFIG_NRFX_GPPI AND NOT CONFIG_NRFX_GPPI_V1)
+if(CONFIG_NRFX_GPPI)
   zephyr_library_sources_ifdef(CONFIG_HAS_HW_NRF_PPI ${HELPERS_DIR}/nrfx_gppi_ppi.c)
   zephyr_library_sources_ifndef(CONFIG_HAS_HW_NRF_PPI ${HELPERS_DIR}/nrfx_gppi_dppi.c)
   if(NOT CONFIG_NRF_DONT_USE_STABLE_BSP)
@@ -260,11 +260,6 @@ zephyr_compile_definitions_ifdef(CONFIG_SOC_NRF54LX_DISABLE_FICR_TRIMCNF NRF_DIS
 zephyr_compile_definitions_ifdef(CONFIG_SOC_NRF54LX_SKIP_TAMPC_SETUP NRF_SKIP_TAMPC_SETUP)
 zephyr_compile_definitions_ifdef(CONFIG_SOC_NRF54LX_SKIP_GLITCHDETECTOR_DISABLE NRF_SKIP_GLITCHDETECTOR_DISABLE)
 zephyr_compile_definitions_ifndef(CONFIG_SOC_NRF54L_ANOMALY_56_WORKAROUND NRF54L_CONFIGURATION_56_ENABLE=0)
-
-if(CONFIG_SOC_SERIES_NRF54H AND CONFIG_NRFX_GPPI_V1)
-  zephyr_library_sources(${HELPERS_DIR}/internal/nrfx_gppiv1_ipct.c)
-  zephyr_library_sources(${HELPERS_DIR}/internal/nrfx_gppiv1_shim.c)
-endif()
 
 # Get the SVD file for the current SoC
 macro(mdk_svd_ifdef feature_toggle filename)
