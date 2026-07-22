@@ -28,7 +28,6 @@ from twisterlib.environment import PYTEST_PLUGIN_INSTALLED, ZEPHYR_BASE
 from twisterlib.error import BuildError, ConfigurationError, StatusAttributeError
 from twisterlib.handlers import DeviceHandler, Handler, terminate_process
 from twisterlib.harnessconfig import TWISTER_PYTEST_CONFIG_FILE, HarnessPytestConfig
-from twisterlib.modulevars import expand_zephyr_vars
 from twisterlib.reports import ReportStatus
 from twisterlib.statuses import TwisterStatus
 from twisterlib.testinstance import TestInstance
@@ -591,10 +590,7 @@ class Pytest(Script):
         command.extend(
             [
                 os.path.normpath(
-                    os.path.join(
-                        self.source_dir,
-                        expand_zephyr_vars(os.path.expanduser(os.path.expandvars(src))),
-                    )
+                    os.path.join(self.source_dir, os.path.expanduser(os.path.expandvars(src)))
                 )
                 for src in config.pytest_root
             ]
