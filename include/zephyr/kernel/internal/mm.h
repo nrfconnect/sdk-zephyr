@@ -9,7 +9,6 @@
 
 #include <zephyr/sys/util.h>
 #include <zephyr/toolchain.h>
-#include <zephyr/devicetree.h>
 
 /**
  * @defgroup kernel_mm_internal_apis Kernel Memory Management Internal APIs
@@ -27,7 +26,7 @@
  *     virt_addr = phys_addr + K_MEM_VIRT_OFFSET
  *
  * This only works for virtual addresses within the interval
- * [CONFIG_KERNEL_VM_BASE, CONFIG_KERNEL_VM_BASE + DT_CHOSEN_SRAM_ADDR).
+ * [CONFIG_KERNEL_VM_BASE, CONFIG_KERNEL_VM_BASE + (CONFIG_SRAM_SIZE * 1024)).
  *
  * These macros are intended for assembly, linker code, and static initializers.
  * Use with care.
@@ -40,20 +39,22 @@
  */
 #ifdef CONFIG_MMU
 #define K_MEM_VIRT_OFFSET	((CONFIG_KERNEL_VM_BASE + CONFIG_KERNEL_VM_OFFSET) - \
-				 (DT_CHOSEN_SRAM_ADDR + CONFIG_SRAM_OFFSET))
+				 (CONFIG_SRAM_BASE_ADDRESS + CONFIG_SRAM_OFFSET))
 #else
 #define K_MEM_VIRT_OFFSET	0
 #endif /* CONFIG_MMU */
 
-#if DT_CHOSEN_SRAM_ADDR != 0
-#define IS_SRAM_ADDRESS_LOWER(ADDR)  ((ADDR) >= DT_CHOSEN_SRAM_ADDR)
+#if CONFIG_SRAM_BASE_ADDRESS != 0
+#define IS_SRAM_ADDRESS_LOWER(ADDR)  ((ADDR) >= CONFIG_SRAM_BASE_ADDRESS)
 #else
 #define IS_SRAM_ADDRESS_LOWER(ADDR)  true
-#endif /* DT_CHOSEN_SRAM_ADDR != 0 */
+#endif /* CONFIG_SRAM_BASE_ADDRESS != 0 */
 
-#if (DT_CHOSEN_SRAM_ADDR + DT_CHOSEN_SRAM_SIZE) != 0
+
+#if (CONFIG_SRAM_BASE_ADDRESS + (CONFIG_SRAM_SIZE * 1024UL)) != 0
 #define IS_SRAM_ADDRESS_UPPER(ADDR)              \
-	((ADDR) < (DT_CHOSEN_SRAM_ADDR + DT_CHOSEN_SRAM_SIZE))
+	((ADDR) < (CONFIG_SRAM_BASE_ADDRESS +    \
+		  (CONFIG_SRAM_SIZE * 1024UL)))
 #else
 #define IS_SRAM_ADDRESS_UPPER(ADDR)  false
 #endif
