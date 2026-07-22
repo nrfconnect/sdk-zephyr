@@ -121,7 +121,6 @@ static int ppp_parse_option_conf_req_unsupported(struct net_pkt *pkt,
 		ppp_peer_option_info_get(parse_data->options_info,
 					 parse_data->num_options_info,
 					 code);
-	int ret;
 
 	NET_DBG("[%s/%p] %s option %s (%d) len %d",
 		fsm->name, fsm, "Check",
@@ -134,15 +133,8 @@ static int ppp_parse_option_conf_req_unsupported(struct net_pkt *pkt,
 
 	parse_data->rej_count++;
 
-	ret = net_pkt_write_u8(ret_pkt, code);
-	if (ret < 0) {
-		return ret;
-	}
-
-	ret = net_pkt_write_u8(ret_pkt, len + sizeof(code) + sizeof(len));
-	if (ret < 0) {
-		return ret;
-	}
+	net_pkt_write_u8(ret_pkt, code);
+	net_pkt_write_u8(ret_pkt, len + sizeof(code) + sizeof(len));
 
 	if (len > 0) {
 		net_pkt_copy(ret_pkt, pkt, len);
@@ -176,16 +168,8 @@ static int ppp_parse_option_conf_req_supported(struct net_pkt *pkt,
 			net_pkt_cursor_init(ret_pkt);
 			parse_data->nack_count = 0;
 		}
-		ret = net_pkt_write_u8(ret_pkt, code);
-		if (ret < 0) {
-			return ret;
-		}
-
-		ret = net_pkt_write_u8(ret_pkt, len + sizeof(code) + sizeof(len));
-		if (ret < 0) {
-			return ret;
-		}
-
+		net_pkt_write_u8(ret_pkt, code);
+		net_pkt_write_u8(ret_pkt, len + sizeof(code) + sizeof(len));
 		if (len > 0) {
 			net_pkt_copy(ret_pkt, pkt, len);
 		}

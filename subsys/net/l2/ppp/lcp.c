@@ -302,13 +302,7 @@ static void lcp_finished(struct ppp_fsm *fsm)
 
 static int lcp_add_mru(struct ppp_context *ctx, struct net_pkt *pkt)
 {
-	int ret;
-
-	ret = net_pkt_write_u8(pkt, MRU_OPTION_LEN);
-	if (ret < 0) {
-		return ret;
-	}
-
+	net_pkt_write_u8(pkt, MRU_OPTION_LEN);
 	return net_pkt_write_be16(pkt, ctx->lcp.my_options.mru);
 }
 
@@ -366,13 +360,7 @@ static int lcp_nak_mru(struct ppp_context *ctx, struct net_pkt *pkt,
 
 static int lcp_add_async_map(struct ppp_context *ctx, struct net_pkt *pkt)
 {
-	int ret;
-
-	ret = net_pkt_write_u8(pkt, ASYNC_MAP_OPTION_LEN);
-	if (ret < 0) {
-		return ret;
-	}
-
+	net_pkt_write_u8(pkt, ASYNC_MAP_OPTION_LEN);
 	return net_pkt_write_be32(pkt, ctx->lcp.my_options.async_map);
 }
 

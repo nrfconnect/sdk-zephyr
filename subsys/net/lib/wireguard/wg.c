@@ -1550,11 +1550,7 @@ static int create_packet(struct net_if *iface,
 	}
 
 	if (packet_len > 0) {
-		ret = net_pkt_write(*pkt, packet, packet_len);
-		if (ret < 0) {
-			NET_DBG("Cannot write packet data");
-			goto out;
-		}
+		net_pkt_write(*pkt, packet, packet_len);
 	}
 
 	net_pkt_cursor_init(*pkt);

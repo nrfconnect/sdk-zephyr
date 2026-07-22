@@ -185,27 +185,18 @@ static int send_icmpv4_echo_request(struct net_icmp_ctx *ctx,
 	net_pkt_set_data(pkt, &icmpv4_access);
 
 	if (params->data != NULL && params->data_size > 0) {
-		ret = net_pkt_write(pkt, params->data, params->data_size);
-		if (ret < 0) {
-			goto drop;
-		}
+		net_pkt_write(pkt, params->data, params->data_size);
 	} else if (params->data == NULL && params->data_size > 0) {
 		/* Generate payload. */
 		if (params->data_size >= sizeof(uint32_t)) {
 			uint32_t time_stamp = net_htonl(k_cycle_get_32());
 
-			ret = net_pkt_write(pkt, &time_stamp, sizeof(time_stamp));
-			if (ret < 0) {
-				goto drop;
-			}
+			net_pkt_write(pkt, &time_stamp, sizeof(time_stamp));
 			params->data_size -= sizeof(time_stamp);
 		}
 
 		for (size_t i = 0; i < params->data_size; i++) {
-			ret = net_pkt_write_u8(pkt, (uint8_t)i);
-			if (ret < 0) {
-				goto drop;
-			}
+			net_pkt_write_u8(pkt, (uint8_t)i);
 		}
 	} else {
 		/* No payload. */
@@ -318,27 +309,18 @@ static int send_icmpv6_echo_request(struct net_icmp_ctx *ctx,
 	net_pkt_set_data(pkt, &icmpv6_access);
 
 	if (params->data != NULL && params->data_size > 0) {
-		ret = net_pkt_write(pkt, params->data, params->data_size);
-		if (ret < 0) {
-			goto drop;
-		}
+		net_pkt_write(pkt, params->data, params->data_size);
 	} else if (params->data == NULL && params->data_size > 0) {
 		/* Generate payload. */
 		if (params->data_size >= sizeof(uint32_t)) {
 			uint32_t time_stamp = net_htonl(k_cycle_get_32());
 
-			ret = net_pkt_write(pkt, &time_stamp, sizeof(time_stamp));
-			if (ret < 0) {
-				goto drop;
-			}
+			net_pkt_write(pkt, &time_stamp, sizeof(time_stamp));
 			params->data_size -= sizeof(time_stamp);
 		}
 
 		for (size_t i = 0; i < params->data_size; i++) {
-			ret = net_pkt_write_u8(pkt, (uint8_t)i);
-			if (ret < 0) {
-				goto drop;
-			}
+			net_pkt_write_u8(pkt, (uint8_t)i);
 		}
 	} else {
 		/* No payload. */
