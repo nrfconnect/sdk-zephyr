@@ -179,7 +179,9 @@ DT_FLASH_SIZE macro to determine the region size and DT_FLASH_ADDR to determine
 the address where the region begins.
 
 If you want to have the data placed in the subregion of a memory, which will
-likely be the case when using DDR, select "zephyr,sram = &sram".
+likely be the case when using DDR, select "zephyr,sram = &sram", which sets the
+CONFIG_SRAM_SIZE macro to determine the region size and
+CONFIG_SRAM_BASE_ADDRESS to determine the address where the region begins.
 
 Otherwise set "zephyr,flash" and/or "zephyr,sram" to one of the predefined
 regions:
