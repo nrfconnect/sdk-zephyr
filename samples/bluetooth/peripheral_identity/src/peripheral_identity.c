@@ -95,6 +95,8 @@ static void adv_start(struct k_work *work)
 
 static void connected(struct bt_conn *conn, uint8_t err)
 {
+	char addr[BT_ADDR_LE_STR_LEN];
+
 	if (err) {
 		printk("Connection failed, err 0x%02x %s\n", err, bt_hci_err_to_str(err));
 		return;
@@ -105,13 +107,18 @@ static void connected(struct bt_conn *conn, uint8_t err)
 		k_work_submit(&work_adv_start);
 	}
 
-	printk("Connected (%u): %s\n", conn_count, bt_conn_dst_str(conn));
+	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+
+	printk("Connected (%u): %s\n", conn_count, addr);
 }
 
 static void disconnected(struct bt_conn *conn, uint8_t reason)
 {
-	printk("Disconnected %s, reason %s(0x%02x)\n", bt_conn_dst_str(conn),
-	       bt_hci_err_to_str(reason), reason);
+	char addr[BT_ADDR_LE_STR_LEN];
+
+	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+
+	printk("Disconnected %s, reason %s(0x%02x)\n", addr, bt_hci_err_to_str(reason), reason);
 
 	if (reason == BT_HCI_ERR_CONN_TIMEOUT && conn_count < conn_count_max && !is_disconnecting) {
 		k_work_submit(&work_adv_start);
@@ -126,8 +133,12 @@ static void disconnected(struct bt_conn *conn, uint8_t reason)
 
 static bool le_param_req(struct bt_conn *conn, struct bt_le_conn_param *param)
 {
+	char addr[BT_ADDR_LE_STR_LEN];
+
+	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+
 	printk("LE conn  param req: %s int (0x%04x, 0x%04x) lat %d to %d\n",
-	       bt_conn_dst_str(conn), param->interval_min, param->interval_max, param->latency,
+	       addr, param->interval_min, param->interval_max, param->latency,
 	       param->timeout);
 
 	return true;
@@ -136,15 +147,23 @@ static bool le_param_req(struct bt_conn *conn, struct bt_le_conn_param *param)
 static void le_param_updated(struct bt_conn *conn, uint16_t interval,
 			     uint16_t latency, uint16_t timeout)
 {
+	char addr[BT_ADDR_LE_STR_LEN];
+
+	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+
 	printk("LE conn param updated: %s int 0x%04x lat %d to %d\n",
-	       bt_conn_dst_str(conn), interval, latency, timeout);
+	       addr, interval, latency, timeout);
 }
 
 #if defined(CONFIG_BT_USER_PHY_UPDATE)
 static void le_phy_updated(struct bt_conn *conn,
 			   struct bt_conn_le_phy_info *param)
 {
-	printk("LE PHY Updated: %s Tx 0x%x, Rx 0x%x\n", bt_conn_dst_str(conn), param->tx_phy,
+	char addr[BT_ADDR_LE_STR_LEN];
+
+	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+
+	printk("LE PHY Updated: %s Tx 0x%x, Rx 0x%x\n", addr, param->tx_phy,
 	       param->rx_phy);
 }
 #endif /* CONFIG_BT_USER_PHY_UPDATE */
@@ -153,8 +172,12 @@ static void le_phy_updated(struct bt_conn *conn,
 static void le_data_len_updated(struct bt_conn *conn,
 				struct bt_conn_le_data_len_info *info)
 {
+	char addr[BT_ADDR_LE_STR_LEN];
+
+	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+
 	printk("Data length updated: %s max tx %u (%u us) max rx %u (%u us)\n",
-	       bt_conn_dst_str(conn), info->tx_max_len, info->tx_max_time, info->rx_max_len,
+	       addr, info->tx_max_len, info->tx_max_time, info->rx_max_len,
 	       info->rx_max_time);
 }
 #endif /* CONFIG_BT_USER_DATA_LEN_UPDATE */
@@ -163,17 +186,25 @@ static void le_data_len_updated(struct bt_conn *conn,
 static void security_changed(struct bt_conn *conn, bt_security_t level,
 			     enum bt_security_err err)
 {
+	char addr[BT_ADDR_LE_STR_LEN];
+
+	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+
 	if (!err) {
-		printk("Security changed: %s level %u\n", bt_conn_dst_str(conn), level);
+		printk("Security changed: %s level %u\n", addr, level);
 	} else {
-		printk("Security failed: %s level %u err %s(%d)\n", bt_conn_dst_str(conn), level,
+		printk("Security failed: %s level %u err %s(%d)\n", addr, level,
 		       bt_security_err_to_str(err), err);
 	}
 }
 
 static void auth_cancel(struct bt_conn *conn)
 {
-	printk("Pairing cancelled: %s\n", bt_conn_dst_str(conn));
+	char addr[BT_ADDR_LE_STR_LEN];
+
+	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+
+	printk("Pairing cancelled: %s\n", addr);
 }
 
 static struct bt_conn_auth_cb auth_callbacks = {
@@ -210,19 +241,25 @@ static struct bt_conn_cb conn_callbacks = {
 static void device_found(const bt_addr_le_t *addr, int8_t rssi, uint8_t type,
 			 struct net_buf_simple *ad)
 {
-	printk("Device found: %s (RSSI %d)\n", bt_addr_le_str(addr), rssi);
+	char addr_str[BT_ADDR_LE_STR_LEN];
+
+	bt_addr_le_to_str(addr, addr_str, sizeof(addr_str));
+	printk("Device found: %s (RSSI %d)\n", addr_str, rssi);
 }
 #endif /* CONFIG_BT_OBSERVER */
 
 static void disconnect(struct bt_conn *conn, void *data)
 {
+	char addr[BT_ADDR_LE_STR_LEN];
 	int err;
 
-	printk("Disconnecting %s...\n", bt_conn_dst_str(conn));
+	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+
+	printk("Disconnecting %s...\n", addr);
 
 	err = bt_conn_disconnect(conn, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
 	if (err) {
-		printk("Failed disconnection %s.\n", bt_conn_dst_str(conn));
+		printk("Failed disconnection %s.\n", addr);
 		return;
 	}
 

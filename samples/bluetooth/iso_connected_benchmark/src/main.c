@@ -481,6 +481,7 @@ static int stop_scan(void)
 static void scan_recv(const struct bt_le_scan_recv_info *info,
 		      struct net_buf_simple *buf)
 {
+	char le_addr[BT_ADDR_LE_STR_LEN];
 	char name[DEVICE_NAME_LEN];
 
 	if (advertiser_found) {
@@ -495,8 +496,11 @@ static void scan_recv(const struct bt_le_scan_recv_info *info,
 		return;
 	}
 
+	bt_addr_le_to_str(info->addr, le_addr, sizeof(le_addr));
+
 	LOG_INF("Found peripheral with address %s (RSSI %i)",
-		bt_addr_le_str(info->addr), info->rssi);
+		le_addr, info->rssi);
+
 
 	bt_addr_le_copy(&adv_addr, info->addr);
 	advertiser_found = true;
@@ -509,9 +513,12 @@ static struct bt_le_scan_cb scan_callbacks = {
 
 static void connected(struct bt_conn *conn, uint8_t err)
 {
+	char addr[BT_ADDR_LE_STR_LEN];
+
+	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+
 	if (err != 0 && role == ROLE_CENTRAL) {
-		LOG_INF("Failed to connect to %s: %u %s", bt_conn_dst_str(conn),
-			err, bt_hci_err_to_str(err));
+		LOG_INF("Failed to connect to %s: %u %s", addr, err, bt_hci_err_to_str(err));
 
 		bt_conn_unref(default_conn);
 		default_conn = NULL;
@@ -520,15 +527,18 @@ static void connected(struct bt_conn *conn, uint8_t err)
 		default_conn = bt_conn_ref(conn);
 	}
 
-	LOG_INF("Connected: %s", bt_conn_dst_str(conn));
+	LOG_INF("Connected: %s", addr);
 
 	k_sem_give(&sem_connected);
 }
 
 static void disconnected(struct bt_conn *conn, uint8_t reason)
 {
-	LOG_INF("Disconnected: %s, reason 0x%02x %s", bt_conn_dst_str(conn),
-		reason, bt_hci_err_to_str(reason));
+	char addr[BT_ADDR_LE_STR_LEN];
+
+	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+
+	LOG_INF("Disconnected: %s, reason 0x%02x %s", addr, reason, bt_hci_err_to_str(reason));
 
 	bt_conn_unref(default_conn);
 	default_conn = NULL;

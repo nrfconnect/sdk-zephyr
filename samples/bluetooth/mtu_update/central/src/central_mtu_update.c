@@ -114,6 +114,7 @@ static uint8_t discover_func(struct bt_conn *conn, const struct bt_gatt_attr *at
 static void device_found(const bt_addr_le_t *addr, int8_t rssi, uint8_t type,
 			 struct net_buf_simple *ad)
 {
+	char addr_str[BT_ADDR_LE_STR_LEN];
 	int err;
 
 	if (default_conn) {
@@ -126,7 +127,8 @@ static void device_found(const bt_addr_le_t *addr, int8_t rssi, uint8_t type,
 		return;
 	}
 
-	printk("Device found: %s (RSSI %d)\n", bt_addr_le_str(addr), rssi);
+	bt_addr_le_to_str(addr, addr_str, sizeof(addr_str));
+	printk("Device found: %s (RSSI %d)\n", addr_str, rssi);
 
 	/* connect only to devices in close proximity */
 	if (rssi < -50) {
@@ -140,7 +142,7 @@ static void device_found(const bt_addr_le_t *addr, int8_t rssi, uint8_t type,
 	err = bt_conn_le_create(addr, BT_CONN_LE_CREATE_CONN,
 				BT_LE_CONN_PARAM_DEFAULT, &default_conn);
 	if (err) {
-		printk("Create conn to %s failed (%u)\n", bt_addr_le_str(addr), err);
+		printk("Create conn to %s failed (%u)\n", addr_str, err);
 		start_scan();
 	}
 }
@@ -187,9 +189,12 @@ static int mtu_exchange(struct bt_conn *conn)
 
 static void connected(struct bt_conn *conn, uint8_t err)
 {
+	char addr[BT_ADDR_LE_STR_LEN];
+
+	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+
 	if (err) {
-		printk("Failed to connect to %s %u %s\n", bt_conn_dst_str(conn),
-		       err, bt_hci_err_to_str(err));
+		printk("Failed to connect to %s %u %s\n", addr, err, bt_hci_err_to_str(err));
 
 		bt_conn_unref(default_conn);
 		default_conn = NULL;
@@ -198,7 +203,7 @@ static void connected(struct bt_conn *conn, uint8_t err)
 		return;
 	}
 
-	printk("Connected: %s\n", bt_conn_dst_str(conn));
+	printk("Connected: %s\n", addr);
 
 	(void)mtu_exchange(conn);
 
@@ -220,12 +225,15 @@ static void connected(struct bt_conn *conn, uint8_t err)
 
 static void disconnected(struct bt_conn *conn, uint8_t reason)
 {
+	char addr[BT_ADDR_LE_STR_LEN];
+
 	if (conn != default_conn) {
 		return;
 	}
 
-	printk("Disconnected: %s, reason 0x%02x %s\n", bt_conn_dst_str(conn),
-	       reason, bt_hci_err_to_str(reason));
+	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+
+	printk("Disconnected: %s, reason 0x%02x %s\n", addr, reason, bt_hci_err_to_str(reason));
 
 	bt_conn_unref(default_conn);
 	default_conn = NULL;
