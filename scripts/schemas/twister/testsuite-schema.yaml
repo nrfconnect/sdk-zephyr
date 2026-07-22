@@ -102,7 +102,8 @@ $defs:
             type: string
           type:
             type: string
-          fixture: {}
+          fixture:
+            type: string
           ordered:
             type: boolean
           pytest_root:
@@ -116,20 +117,6 @@ $defs:
           pytest_dut_scope:
             type: string
             enum: ["function", "class", "module", "package", "session"]
-          required_devices:
-            type: array
-            items:
-              type: object
-              properties:
-                platform:
-                  type: string
-                fixture:
-                  type: array
-                  items:
-                    type: string
-                application:
-                  type: string
-              additionalProperties: false
           ctest_args:
             type: array
             items:
