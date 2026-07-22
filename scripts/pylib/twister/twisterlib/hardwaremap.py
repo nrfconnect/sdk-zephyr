@@ -109,7 +109,6 @@ class HardwareMap:
         'NXP',
         'NXP Semiconductors',
         'Microchip Technology Inc.',
-        'Microchip Technology Incorporated',
         'FTDI',
         'Digilent',
         'Microsoft',
@@ -134,14 +133,6 @@ class HardwareMap:
         'dediprog': [
             'TTL232R-3V3',
             'MCP2200 USB Serial Port Emulator'
-        ],
-        'mplab_ipe': [
-            'MPLAB* PKoB 4',
-            'MPLAB* PICKit 5',
-            'MPLAB* PICKit Basic',
-            'MPLAB* SNAP ICD',
-            'MPLAB* ICD 5',
-            'MPLAB* ICE',
         ]
     }
 
@@ -349,9 +340,6 @@ class HardwareMap:
 
                 if d.product is None:
                     d.product = 'unknown'
-
-                if 'MPLAB' in d.product:
-                    d.product = 'MPLAB-TOOL'
 
                 s_dev = DUT(platform="unknown",
                                         id=d.serial_number,
