@@ -39,7 +39,6 @@ def test_runner_imports():
         'minichlink',
         'misc-flasher',
         'mpcli',
-        'mplab_ipe',
         'native',
         'nrfjprog',
         'nrfutil',
