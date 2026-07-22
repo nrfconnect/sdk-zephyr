@@ -79,7 +79,7 @@ enum stp_id {
 
 #define STP_VAR_DATA 0xff
 
-typedef bool (*stp_cb)(uint64_t data, uint64_t ts);
+typedef void (*stp_cb)(uint64_t data, uint64_t ts);
 
 struct stp_item {
 	const char *name;
@@ -107,157 +107,157 @@ static size_t ncnt;
 static size_t noff;
 static uint16_t curr_ch;
 
-static bool data4_cb(uint64_t data, uint64_t ts)
+static void data4_cb(uint64_t data, uint64_t ts)
 {
 	ARG_UNUSED(ts);
 	union mipi_stp_decoder_data d = {.data = data};
 
-	return cfg.cb(STP_DATA4, d, NULL, false);
+	cfg.cb(STP_DATA4, d, NULL, false);
 }
 
-static bool data8_cb(uint64_t data, uint64_t ts)
+static void data8_cb(uint64_t data, uint64_t ts)
 {
 	ARG_UNUSED(ts);
 	union mipi_stp_decoder_data d = {.data = data};
 
-	return cfg.cb(STP_DATA8, d, NULL, false);
+	cfg.cb(STP_DATA8, d, NULL, false);
 }
 
-static bool data16_cb(uint64_t data, uint64_t ts)
+static void data16_cb(uint64_t data, uint64_t ts)
 {
 	ARG_UNUSED(ts);
 	union mipi_stp_decoder_data d = {.data = data};
 
-	return cfg.cb(STP_DATA16, d, NULL, false);
+	cfg.cb(STP_DATA16, d, NULL, false);
 }
 
-static bool data32_cb(uint64_t data, uint64_t ts)
+static void data32_cb(uint64_t data, uint64_t ts)
 {
 	ARG_UNUSED(ts);
 	union mipi_stp_decoder_data d = {.data = data};
 
-	return cfg.cb(STP_DATA32, d, NULL, false);
+	cfg.cb(STP_DATA32, d, NULL, false);
 }
 
-static bool data64_cb(uint64_t data, uint64_t ts)
+static void data64_cb(uint64_t data, uint64_t ts)
 {
 	ARG_UNUSED(ts);
 	union mipi_stp_decoder_data d = {.data = data};
 
-	return cfg.cb(STP_DATA64, d, NULL, false);
+	cfg.cb(STP_DATA64, d, NULL, false);
 }
 
-static bool data4_m_cb(uint64_t data, uint64_t ts)
+static void data4_m_cb(uint64_t data, uint64_t ts)
 {
 	ARG_UNUSED(ts);
 	union mipi_stp_decoder_data d = {.data = data};
 
-	return cfg.cb(STP_DATA4, d, NULL, true);
+	cfg.cb(STP_DATA4, d, NULL, true);
 }
 
-static bool data8_m_cb(uint64_t data, uint64_t ts)
+static void data8_m_cb(uint64_t data, uint64_t ts)
 {
 	ARG_UNUSED(ts);
 	union mipi_stp_decoder_data d = {.data = data};
 
-	return cfg.cb(STP_DATA8, d, NULL, true);
+	cfg.cb(STP_DATA8, d, NULL, true);
 }
 
-static bool data16_m_cb(uint64_t data, uint64_t ts)
+static void data16_m_cb(uint64_t data, uint64_t ts)
 {
 	ARG_UNUSED(ts);
 	union mipi_stp_decoder_data d = {.data = data};
 
-	return cfg.cb(STP_DATA16, d, NULL, true);
+	cfg.cb(STP_DATA16, d, NULL, true);
 }
 
-static bool data32_m_cb(uint64_t data, uint64_t ts)
+static void data32_m_cb(uint64_t data, uint64_t ts)
 {
 	ARG_UNUSED(ts);
 	union mipi_stp_decoder_data d = {.data = data};
 
-	return cfg.cb(STP_DATA32, d, NULL, true);
+	cfg.cb(STP_DATA32, d, NULL, true);
 }
 
-static bool data64_m_cb(uint64_t data, uint64_t ts)
+static void data64_m_cb(uint64_t data, uint64_t ts)
 {
 	ARG_UNUSED(ts);
 	union mipi_stp_decoder_data d = {.data = data};
 
-	return cfg.cb(STP_DATA64, d, NULL, true);
+	cfg.cb(STP_DATA64, d, NULL, true);
 }
 
-static bool data4_ts_cb(uint64_t data, uint64_t ts)
+static void data4_ts_cb(uint64_t data, uint64_t ts)
 {
 	union mipi_stp_decoder_data d = {.data = data};
 
-	return cfg.cb(STP_DATA4, d, &ts, false);
+	cfg.cb(STP_DATA4, d, &ts, false);
 }
 
-static bool data8_ts_cb(uint64_t data, uint64_t ts)
+static void data8_ts_cb(uint64_t data, uint64_t ts)
 {
 	union mipi_stp_decoder_data d = {.data = data};
 
-	return cfg.cb(STP_DATA8, d, &ts, false);
+	cfg.cb(STP_DATA8, d, &ts, false);
 }
 
-static bool data16_ts_cb(uint64_t data, uint64_t ts)
+static void data16_ts_cb(uint64_t data, uint64_t ts)
 {
 	union mipi_stp_decoder_data d = {.data = data};
 
-	return cfg.cb(STP_DATA16, d, &ts, false);
+	cfg.cb(STP_DATA16, d, &ts, false);
 }
 
-static bool data32_ts_cb(uint64_t data, uint64_t ts)
+static void data32_ts_cb(uint64_t data, uint64_t ts)
 {
 	union mipi_stp_decoder_data d = {.data = data};
 
-	return cfg.cb(STP_DATA32, d, &ts, false);
+	cfg.cb(STP_DATA32, d, &ts, false);
 }
 
-static bool data64_ts_cb(uint64_t data, uint64_t ts)
+static void data64_ts_cb(uint64_t data, uint64_t ts)
 {
 	union mipi_stp_decoder_data d = {.data = data};
 
-	return cfg.cb(STP_DATA64, d, &ts, false);
+	cfg.cb(STP_DATA64, d, &ts, false);
 }
 
-static bool data4_mts_cb(uint64_t data, uint64_t ts)
+static void data4_mts_cb(uint64_t data, uint64_t ts)
 {
 	union mipi_stp_decoder_data d = {.data = data};
 
-	return cfg.cb(STP_DATA4, d, &ts, true);
+	cfg.cb(STP_DATA4, d, &ts, true);
 }
 
-static bool data8_mts_cb(uint64_t data, uint64_t ts)
+static void data8_mts_cb(uint64_t data, uint64_t ts)
 {
 	union mipi_stp_decoder_data d = {.data = data};
 
-	return cfg.cb(STP_DATA8, d, &ts, true);
+	cfg.cb(STP_DATA8, d, &ts, true);
 }
 
-static bool data16_mts_cb(uint64_t data, uint64_t ts)
+static void data16_mts_cb(uint64_t data, uint64_t ts)
 {
 	union mipi_stp_decoder_data d = {.data = data};
 
-	return cfg.cb(STP_DATA16, d, &ts, true);
+	cfg.cb(STP_DATA16, d, &ts, true);
 }
 
-static bool data32_mts_cb(uint64_t data, uint64_t ts)
+static void data32_mts_cb(uint64_t data, uint64_t ts)
 {
 	union mipi_stp_decoder_data d = {.data = data};
 
-	return cfg.cb(STP_DATA32, d, &ts, true);
+	cfg.cb(STP_DATA32, d, &ts, true);
 }
 
-static bool data64_mts_cb(uint64_t data, uint64_t ts)
+static void data64_mts_cb(uint64_t data, uint64_t ts)
 {
 	union mipi_stp_decoder_data d = {.data = data};
 
-	return cfg.cb(STP_DATA64, d, &ts, true);
+	cfg.cb(STP_DATA64, d, &ts, true);
 }
 
-static bool major_cb(uint64_t id, uint64_t ts)
+static void major_cb(uint64_t id, uint64_t ts)
 {
 	ARG_UNUSED(ts);
 	uint16_t m_id = (uint16_t)id;
@@ -265,10 +265,10 @@ static bool major_cb(uint64_t id, uint64_t ts)
 
 	curr_ch = 0;
 
-	return cfg.cb(STP_DECODER_MAJOR, data, NULL, false);
+	cfg.cb(STP_DECODER_MAJOR, data, NULL, false);
 }
 
-static bool channel16_cb(uint64_t id, uint64_t ts)
+static void channel16_cb(uint64_t id, uint64_t ts)
 {
 	uint16_t ch = (uint16_t)id;
 
@@ -277,9 +277,9 @@ static bool channel16_cb(uint64_t id, uint64_t ts)
 	ARG_UNUSED(ts);
 	union mipi_stp_decoder_data data = {.id = ch};
 
-	return cfg.cb(STP_DECODER_CHANNEL, data, NULL, false);
+	cfg.cb(STP_DECODER_CHANNEL, data, NULL, false);
 }
-static bool channel_cb(uint64_t id, uint64_t ts)
+static void channel_cb(uint64_t id, uint64_t ts)
 {
 	uint16_t ch = (uint16_t)id;
 
@@ -288,43 +288,43 @@ static bool channel_cb(uint64_t id, uint64_t ts)
 	ARG_UNUSED(ts);
 	union mipi_stp_decoder_data data = {.id = ch};
 
-	return cfg.cb(STP_DECODER_CHANNEL, data, NULL, false);
+	cfg.cb(STP_DECODER_CHANNEL, data, NULL, false);
 }
 
-static bool merror_cb(uint64_t err, uint64_t ts)
+static void merror_cb(uint64_t err, uint64_t ts)
 {
 	ARG_UNUSED(ts);
 	union mipi_stp_decoder_data data = {.err = (uint32_t)err};
 
-	return cfg.cb(STP_DECODER_MERROR, data, NULL, false);
+	cfg.cb(STP_DECODER_MERROR, data, NULL, false);
 }
 
-static bool gerror_cb(uint64_t err, uint64_t ts)
+static void gerror_cb(uint64_t err, uint64_t ts)
 {
 	ARG_UNUSED(ts);
 	union mipi_stp_decoder_data data = {.err = (uint32_t)err};
 
-	return cfg.cb(STP_DECODER_GERROR, data, NULL, false);
+	cfg.cb(STP_DECODER_GERROR, data, NULL, false);
 }
 
-static bool flag_cb(uint64_t data, uint64_t ts)
+static void flag_cb(uint64_t data, uint64_t ts)
 {
 	ARG_UNUSED(ts);
 	ARG_UNUSED(data);
 	union mipi_stp_decoder_data dummy = {.dummy = 0};
 
-	return cfg.cb(STP_DECODER_FLAG, dummy, NULL, false);
+	cfg.cb(STP_DECODER_FLAG, dummy, NULL, false);
 }
 
-static bool flag_ts_cb(uint64_t unused, uint64_t ts)
+static void flag_ts_cb(uint64_t unused, uint64_t ts)
 {
 	ARG_UNUSED(unused);
 	union mipi_stp_decoder_data data = {.dummy = 0};
 
-	return cfg.cb(STP_DECODER_FLAG, data, &ts, false);
+	cfg.cb(STP_DECODER_FLAG, data, &ts, false);
 }
 
-static bool version_cb(uint64_t version, uint64_t ts)
+static void version_cb(uint64_t version, uint64_t ts)
 {
 	ARG_UNUSED(ts);
 
@@ -332,53 +332,53 @@ static bool version_cb(uint64_t version, uint64_t ts)
 
 	union mipi_stp_decoder_data data = {.ver = version};
 
-	return cfg.cb(STP_DECODER_VERSION, data, NULL, false);
+	cfg.cb(STP_DECODER_VERSION, data, NULL, false);
 }
 
-static bool notsup_cb(uint64_t data, uint64_t ts)
+static void notsup_cb(uint64_t data, uint64_t ts)
 {
 	ARG_UNUSED(ts);
 	ARG_UNUSED(data);
 
 	union mipi_stp_decoder_data dummy = {.dummy = 0};
 
-	return cfg.cb(STP_DECODER_NOT_SUPPORTED, dummy, NULL, false);
+	cfg.cb(STP_DECODER_NOT_SUPPORTED, dummy, NULL, false);
 }
 
-static bool freq_cb(uint64_t freq, uint64_t ts)
+static void freq_cb(uint64_t freq, uint64_t ts)
 {
 	ARG_UNUSED(ts);
 
 	union mipi_stp_decoder_data data = {.freq = freq};
 
-	return cfg.cb(STP_DECODER_FREQ, data, NULL, false);
+	cfg.cb(STP_DECODER_FREQ, data, NULL, false);
 }
 
-static bool freq_ts_cb(uint64_t freq, uint64_t ts)
+static void freq_ts_cb(uint64_t freq, uint64_t ts)
 {
 	union mipi_stp_decoder_data data = {.freq = freq};
 
-	return cfg.cb(STP_DECODER_FREQ, data, &ts, false);
+	cfg.cb(STP_DECODER_FREQ, data, &ts, false);
 }
 
-static bool null_cb(uint64_t data, uint64_t ts)
+static void null_cb(uint64_t data, uint64_t ts)
 {
 	ARG_UNUSED(ts);
 	ARG_UNUSED(data);
 
 	union mipi_stp_decoder_data dummy = {.dummy = 0};
 
-	return cfg.cb(STP_DECODER_NULL, dummy, NULL, false);
+	cfg.cb(STP_DECODER_NULL, dummy, NULL, false);
 }
 
-static bool async_cb(uint64_t data, uint64_t ts)
+static void async_cb(uint64_t data, uint64_t ts)
 {
 	ARG_UNUSED(ts);
 	ARG_UNUSED(data);
 
 	union mipi_stp_decoder_data dummy = {.dummy = 0};
 
-	return cfg.cb(STP_DECODER_ASYNC, dummy, NULL, false);
+	cfg.cb(STP_DECODER_ASYNC, dummy, NULL, false);
 }
 
 static const struct stp_item items[] = {
@@ -672,7 +672,6 @@ int mipi_stp_decoder_decode(const uint8_t *data, size_t len)
 	uint64_t *data64 = (uint64_t *)data_buf;
 	uint64_t *ts64 = (uint64_t *)ts_buf;
 	size_t nlen = 2 * len;
-	bool valid;
 
 	do {
 		switch (state) {
@@ -686,8 +685,8 @@ int mipi_stp_decoder_decode(const uint8_t *data, size_t len)
 				curr_id = STP_INVALID;
 				ncnt = 0;
 
-				valid = items[STP_ASYNC].cb(0, 0);
-				state = valid ? STP_STATE_OP : STP_STATE_OUT_OF_SYNC;
+				items[STP_ASYNC].cb(0, 0);
+				state = STP_STATE_OP;
 			} else {
 				ncnt = 0;
 			}
@@ -705,9 +704,8 @@ int mipi_stp_decoder_decode(const uint8_t *data, size_t len)
 					state = STP_STATE_TS;
 				} else {
 					/* item without data and ts, notify. */
-					valid = items[curr_id].cb(0, 0);
+					items[curr_id].cb(0, 0);
 					curr_id = STP_INVALID;
-					state = valid ? STP_STATE_OP : STP_STATE_OUT_OF_SYNC;
 				}
 			}
 			break;
@@ -727,9 +725,9 @@ int mipi_stp_decoder_decode(const uint8_t *data, size_t len)
 					ntotal = 0;
 					state = STP_STATE_TS;
 				} else {
-					valid = items[curr_id].cb(*data64, 0);
+					items[curr_id].cb(*data64, 0);
 					curr_id = STP_INVALID;
-					state = valid ? STP_STATE_OP : STP_STATE_OUT_OF_SYNC;
+					state = STP_STATE_OP;
 					ntotal = 0;
 					ncnt = 0;
 				}
@@ -768,9 +766,9 @@ int mipi_stp_decoder_decode(const uint8_t *data, size_t len)
 				if (ncnt == ntotal) {
 					swap_n(ts_buf, ntotal);
 					prev_ts = base_ts | *ts64;
-					valid = items[curr_id].cb(*data64, prev_ts);
+					items[curr_id].cb(*data64, prev_ts);
 					curr_id = STP_INVALID;
-					state = valid ? STP_STATE_OP : STP_STATE_OUT_OF_SYNC;
+					state = STP_STATE_OP;
 					ntotal = 0;
 					ncnt = 0;
 				}
