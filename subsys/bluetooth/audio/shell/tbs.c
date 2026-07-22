@@ -47,10 +47,14 @@ static struct bt_tbs_cb tbs_cbs = {
 
 static int cmd_tbs_authorize(const struct shell *sh, size_t argc, char *argv[])
 {
+	char addr[BT_ADDR_LE_STR_LEN];
+
 	tbs_authorized_conn = default_conn;
 
-	shell_print(sh, "Connection with addr %s authorized",
-		    bt_conn_dst_str(tbs_authorized_conn));
+	(void)bt_addr_le_to_str(bt_conn_get_dst(tbs_authorized_conn),
+				addr, sizeof(addr));
+
+	shell_print(sh, "Connection with addr %s authorized", addr);
 
 	return 0;
 }

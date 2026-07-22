@@ -2431,6 +2431,7 @@ static void pa_sync_broadcast_sink(const struct bt_le_scan_recv_info *info)
 static void broadcast_scan_recv(const struct bt_le_scan_recv_info *info, struct net_buf_simple *ad)
 {
 	struct bt_broadcast_info sr_info = {0};
+	char addr_str[BT_ADDR_LE_STR_LEN];
 	bool identified_broadcast = false;
 
 	sr_info.broadcast_id = BT_BAP_INVALID_BROADCAST_ID;
@@ -2446,10 +2447,12 @@ static void broadcast_scan_recv(const struct bt_le_scan_recv_info *info, struct 
 		return;
 	}
 
+	bt_addr_le_to_str(info->addr, addr_str, sizeof(addr_str));
+
 	bt_shell_print("Found broadcaster with ID 0x%06X (%s) and addr %s and sid 0x%02X (scanning "
 		       "for 0x%06X (%s))",
-		       sr_info.broadcast_id, sr_info.broadcast_name, bt_addr_le_str(info->addr),
-		       info->sid, auto_scan.broadcast_info.broadcast_id,
+		       sr_info.broadcast_id, sr_info.broadcast_name, addr_str, info->sid,
+		       auto_scan.broadcast_info.broadcast_id,
 		       auto_scan.broadcast_info.broadcast_name);
 
 	if ((auto_scan.broadcast_info.broadcast_id == BT_BAP_INVALID_BROADCAST_ID) &&
@@ -2469,7 +2472,7 @@ static void broadcast_scan_recv(const struct bt_le_scan_recv_info *info, struct 
 		return;
 	}
 
-	bt_shell_print("Found matched broadcast with address %s%s", bt_addr_le_str(info->addr),
+	bt_shell_print("Found matched broadcast with address %s%s", addr_str,
 		       info->interval > 0U ? "" : " but is not syncable");
 
 	if (info->interval > 0U && identified_broadcast && auto_scan.broadcast_sink != NULL) {
