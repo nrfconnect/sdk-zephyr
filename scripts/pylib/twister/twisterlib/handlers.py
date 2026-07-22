@@ -6,7 +6,6 @@
 # Copyright (c) 2024 Arm Limited (or its affiliates). All rights reserved.
 #
 # SPDX-License-Identifier: Apache-2.0
-from __future__ import annotations
 
 import argparse
 import contextlib
@@ -25,7 +24,6 @@ import time
 from enum import Enum
 from pathlib import Path
 from queue import Empty, Queue
-from typing import TYPE_CHECKING
 
 import psutil
 from domains import Domains
@@ -35,9 +33,6 @@ from twisterlib.environment import strip_ansi_sequences
 from twisterlib.hardwaredata import CompoundHardwareData
 from twisterlib.platform import Platform
 from twisterlib.statuses import TwisterStatus
-
-if TYPE_CHECKING:
-    from twisterlib.testinstance import TestInstance
 
 try:
     import serial
@@ -81,7 +76,7 @@ class Handler:
         CRASH = "Crash"
         FLASH = "Flash Error"
         NONE = "None"
-    def __init__(self, instance: TestInstance, type_str: str, options: argparse.Namespace,
+    def __init__(self, instance, type_str: str, options: argparse.Namespace,
                  generator_cmd: str | None = None, suite_name_check: bool = True):
         """Constructor
 
