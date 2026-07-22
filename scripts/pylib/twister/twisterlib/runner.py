@@ -53,7 +53,7 @@ if sys.platform == 'linux':
 from domains import Domains
 from twisterlib.coverage import run_coverage_instance
 from twisterlib.environment import TwisterEnv
-from twisterlib.harness import Harness, HarnessImporter
+from twisterlib.harness import Ctest, HarnessImporter, Pytest
 from twisterlib.log_helper import log_command
 from twisterlib.platform import Platform
 from twisterlib.testinstance import TestInstance
@@ -1765,7 +1765,7 @@ class ProjectBuilder(FilterBuilder):
             if harness:
                 harness.instance = self.instance
                 harness.build()
-        except (ConfigurationError, BuildError) as error:
+        except ConfigurationError as error:
             self.instance.status = TwisterStatus.ERROR
             self.instance.reason = str(error)
             logger.error(self.instance.reason)
@@ -1789,7 +1789,7 @@ class ProjectBuilder(FilterBuilder):
             if self.options.extra_test_args and instance.platform.arch == "posix":
                 instance.handler.extra_test_args = self.options.extra_test_args
 
-            harness: Harness = HarnessImporter.get_harness(instance.testsuite.harness.capitalize())
+            harness = HarnessImporter.get_harness(instance.testsuite.harness.capitalize())
             try:
                 harness.configure(instance)
             except ConfigurationError as error:
@@ -1797,9 +1797,12 @@ class ProjectBuilder(FilterBuilder):
                 instance.reason = str(error)
                 logger.error(instance.reason)
                 return
-
-            # If the harness does not handle execution itself, delegate to the handler.
-            if not harness.run(instance.handler.get_test_timeout()):
+            #
+            if isinstance(harness, Pytest):
+                harness.pytest_run(instance.handler.get_test_timeout())
+            elif isinstance(harness, Ctest):
+                harness.ctest_run(instance.handler.get_test_timeout())
+            else:
                 instance.handler.handle(harness)
 
         sys.stdout.flush()
