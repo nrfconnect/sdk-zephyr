@@ -42,16 +42,7 @@ BUILD_ASSERT((WRITE_BLOCK_SIZE % MRAM_WORD_SIZE) == 0,
 BUILD_ASSERT((ERASE_BLOCK_SIZE % WRITE_BLOCK_SIZE) == 0,
 		 "erase-block-size expected to be a multiple of write-block-size");
 
-#ifdef CONFIG_MULTITHREADING
-static struct k_mutex nrf_mramc_mutex;
-#define SYNC_INIT()   k_mutex_init(&nrf_mramc_mutex)
-#define SYNC_LOCK()   k_mutex_lock(&nrf_mramc_mutex, K_FOREVER)
-#define SYNC_UNLOCK() k_mutex_unlock(&nrf_mramc_mutex)
-#else
-#define SYNC_INIT()
-#define SYNC_LOCK()
-#define SYNC_UNLOCK()
-#endif /* CONFIG_MULTITHREADING */
+struct k_mutex nrf_mramc_mutex;
 
 /**
  * @param[in] addr		 Address of mram memory.
@@ -282,7 +273,7 @@ static int nrf_mramc_write(const struct device *dev, off_t offset,
 
 	LOG_DBG("write: %x:%zu", addr, size);
 
-	SYNC_LOCK();
+	k_mutex_lock(&nrf_mramc_mutex, K_FOREVER);
 
 	for (uint32_t i = 0; i < size; i += MRAM_WORD_SIZE) {
 		/* Write full 16 bytes word for N iterations */
@@ -291,12 +282,12 @@ static int nrf_mramc_write(const struct device *dev, off_t offset,
 		nrf_mramc_set_wen(MRAMC_CONFIG_WEN_DISABLE);
 
 		if (ret) {
-			SYNC_UNLOCK();
+			k_mutex_unlock(&nrf_mramc_mutex);
 			return ret;
 		}
 	}
 
-	SYNC_UNLOCK();
+	k_mutex_unlock(&nrf_mramc_mutex);
 	return 0;
 }
 
@@ -318,7 +309,7 @@ static int nrf_mramc_erase(const struct device *dev, off_t offset, size_t size)
 
 	LOG_DBG("erase: %p:%zu", (void *)addr, size);
 
-	SYNC_LOCK();
+	k_mutex_lock(&nrf_mramc_mutex, K_FOREVER);
 
 	for (uint32_t i = 0; i < size; i += MRAM_WORD_SIZE) {
 		/* Erase full 16 bytes word for N iterations */
@@ -327,12 +318,12 @@ static int nrf_mramc_erase(const struct device *dev, off_t offset, size_t size)
 		nrf_mramc_set_wen(MRAMC_CONFIG_WEN_DISABLE);
 
 		if (ret) {
-			SYNC_UNLOCK();
+			k_mutex_unlock(&nrf_mramc_mutex);
 			return ret;
 		}
 	}
 
-	SYNC_UNLOCK();
+	k_mutex_unlock(&nrf_mramc_mutex);
 	return 0;
 }
 
@@ -384,7 +375,7 @@ static int mramc_sys_init(const struct device *dev)
 
 	int ret = 0;
 
-	SYNC_INIT();
+	k_mutex_init(&nrf_mramc_mutex);
 
 #if defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)
 	/* Initialization of MRAMC driver via secure processing environment */
