@@ -13,7 +13,7 @@ from twisterlib.hardwaremap import HardwareMap
 from twisterlib.testinstance import TestInstance
 from twisterlib.testplan import TestConfiguration, TestPlan
 
-from . import ZEPHYR_BASE
+from . import ZEPHYR_BASE  # pylint: disable=no-name-in-module
 
 pytest_plugins = ["pytester"]
 
