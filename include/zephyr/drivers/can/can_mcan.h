@@ -1065,7 +1065,6 @@ struct can_mcan_data {
 	struct k_mutex lock;
 	struct k_sem tx_sem;
 	struct k_mutex tx_mtx;
-	struct k_timer txbcf_timer;
 	void *custom;
 } __aligned(4);
 
