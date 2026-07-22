@@ -10,9 +10,9 @@
 #ifdef CONFIG_TIMESLICING
 
 /* nrf 51 has lower ram, so creating less number of threads */
-#if (DT_CHOSEN_SRAM_SIZE / 1024) <= 24
+#if CONFIG_SRAM_SIZE <= 24
 	#define NUM_THREAD 2
-#elif ((DT_CHOSEN_SRAM_SIZE / 1024) <= 32) \
+#elif (CONFIG_SRAM_SIZE <= 32) \
 	|| defined(CONFIG_SOC_EMSK_EM7D)
 	#define NUM_THREAD 3
 #else
