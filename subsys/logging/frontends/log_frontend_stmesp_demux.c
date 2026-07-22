@@ -374,7 +374,7 @@ int log_frontend_stmesp_demux_log0(uint16_t source_id, uint64_t *ts)
 	}
 
 	if (demux.curr_m_ch == M_CH_INVALID) {
-		return -EBADMSG;
+		return -EINVAL;
 	}
 
 	if (demux.curr != NULL) {
@@ -382,14 +382,14 @@ int log_frontend_stmesp_demux_log0(uint16_t source_id, uint64_t *ts)
 		 * mark as incompleted if not all data is received.
 		 */
 		log_frontend_stmesp_demux_packet_end();
-		return -EBADMSG;
+		return -EINVAL;
 	}
 
 	uint16_t ch = demux.curr_m_ch & C_ID_MASK;
 	uint16_t m = get_major_id(demux.curr_m_ch >> M_ID_OFF);
 
 	if (ch < CONFIG_LOG_FRONTEND_STMESP_TURBO_LOG_BASE) {
-		return -EBADMSG;
+		return -EINVAL;
 	}
 
 	store_turbo_log0(m, ch, ts, source_id);
@@ -464,17 +464,14 @@ int log_frontend_stmesp_demux_packet_start(uint32_t *data, uint64_t *ts)
 	int err;
 
 	if (demux.curr_m_ch == M_CH_INVALID) {
-		return -EBADMSG;
+		return -EINVAL;
 	}
 
 	if (demux.curr_m_ch == M_CH_HW_EVENT) {
-		if (data) {
-			/* HW event */
-			log_frontend_stmesp_demux_hw_event(ts, (uint8_t)*data);
-			return 1;
-		} else {
-			return -EBADMSG;
-		}
+		/* HW event */
+		log_frontend_stmesp_demux_hw_event(ts, (uint8_t)*data);
+
+		return 1;
 	}
 
 	uint16_t ch = demux.curr_m_ch & C_ID_MASK;
@@ -487,7 +484,7 @@ int log_frontend_stmesp_demux_packet_start(uint32_t *data, uint64_t *ts)
 
 		if (src->data_cnt >= 2) {
 			/* Unexpected packet. */
-			return -EBADMSG;
+			return -EINVAL;
 		}
 
 		src->m_id = m;
@@ -500,7 +497,7 @@ int log_frontend_stmesp_demux_packet_start(uint32_t *data, uint64_t *ts)
 		 * mark as incompleted if not all data is received.
 		 */
 		log_frontend_stmesp_demux_packet_end();
-		return -EBADMSG;
+		return -EINVAL;
 	}
 
 	if (ch >= CONFIG_LOG_FRONTEND_STMESP_TP_CHAN_BASE) {
@@ -512,12 +509,6 @@ int log_frontend_stmesp_demux_packet_start(uint32_t *data, uint64_t *ts)
 		}
 
 		return 1;
-	} else if (data == NULL) {
-		/* It may happen that FLAGTS is received but only because of postponing
-		 * of timestamp injection. In that case we can interpret is as a packet end.
-		 */
-		log_frontend_stmesp_demux_packet_end();
-		return 0;
 	}
 
 	union log_frontend_stmesp_demux_header hdr = {.raw = *data};
@@ -642,12 +633,10 @@ void log_frontend_stmesp_demux_reset(void)
 		entry->packet->content_invalid = 1;
 		mpsc_pbuf_commit(&demux.pbuf, p.generic);
 		demux.dropped++;
+		demux.curr_m_ch = M_CH_INVALID;
 
 		k_mem_slab_free(&demux.mslab, entry);
 	}
-	demux.curr_m_ch = M_CH_INVALID;
-	demux.curr = NULL;
-	skip = true;
 }
 
 bool log_frontend_stmesp_demux_is_idle(void)
