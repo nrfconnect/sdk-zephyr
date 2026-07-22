@@ -38,7 +38,7 @@ const struct nrf_clock_spec test_clk_specs_hsfll[] = {
 };
 #endif
 
-#if defined(CONFIG_TEST_FLL16M)
+#if CONFIG_BOARD_NRF54H20DK_NRF54H20_CPUAPP
 const struct nrf_clock_spec test_clk_specs_fll16m[] = {
 	{
 		.frequency = MHZ(16),
@@ -85,9 +85,7 @@ static const struct test_clk_context invalid_fll16m_test_clk_contexts[] = {
 		.clk_specs_size = ARRAY_SIZE(invalid_test_clk_specs_fll16m),
 	},
 };
-#endif
 
-#if defined(CONFIG_TEST_HSFLL_APP)
 static const struct test_clk_context cpuapp_hsfll_test_clk_contexts[] = {
 	{
 		.clk_dev = DEVICE_DT_GET(DT_NODELABEL(cpuapp_hsfll)),
@@ -95,9 +93,7 @@ static const struct test_clk_context cpuapp_hsfll_test_clk_contexts[] = {
 		.clk_specs_size = ARRAY_SIZE(test_clk_specs_hsfll),
 	},
 };
-#endif
-
-#if defined(CONFIG_TEST_HSFLL_RAD)
+#elif defined(CONFIG_BOARD_NRF54H20DK_NRF54H20_CPURAD)
 static const struct test_clk_context cpurad_hsfll_test_clk_contexts[] = {
 	{
 		.clk_dev = DEVICE_DT_GET(DT_NODELABEL(cpurad_hsfll)),
@@ -277,29 +273,22 @@ static void test_clock_control_request(const struct test_clk_context *clk_contex
 	}
 }
 
+#if CONFIG_BOARD_NRF54H20DK_NRF54H20_CPUAPP
 ZTEST(nrf2_clock_control, test_cpuapp_hsfll_control)
 {
-	Z_TEST_SKIP_IFNDEF(CONFIG_TEST_HSFLL_APP);
-#if defined(CONFIG_TEST_HSFLL_APP)
 	TC_PRINT("APPLICATION DOMAIN HSFLL test\n");
 	test_clock_control_request(cpuapp_hsfll_test_clk_contexts,
 				   ARRAY_SIZE(cpuapp_hsfll_test_clk_contexts));
-#endif
 }
 
 ZTEST(nrf2_clock_control, test_fll16m_control)
 {
-	Z_TEST_SKIP_IFNDEF(CONFIG_TEST_FLL16M);
-#if defined(CONFIG_TEST_FLL16M)
 	TC_PRINT("FLL16M test\n");
 	test_clock_control_request(fll16m_test_clk_contexts, ARRAY_SIZE(fll16m_test_clk_contexts));
-#endif
 }
 
 ZTEST(nrf2_clock_control, test_invalid_fll16m_clock_spec_response)
 {
-	Z_TEST_SKIP_IFNDEF(CONFIG_TEST_FLL16M);
-#if defined(CONFIG_TEST_FLL16M)
 	int ret = 0;
 	int res = 0;
 	struct onoff_client cli;
@@ -334,42 +323,36 @@ ZTEST(nrf2_clock_control, test_invalid_fll16m_clock_spec_response)
 			zassert_ok(res);
 		}
 	}
-#endif
 }
-
+#elif defined(CONFIG_BOARD_NRF54H20DK_NRF54H20_CPURAD)
 ZTEST(nrf2_clock_control, test_cpurad_hsfll_control)
 {
-	Z_TEST_SKIP_IFNDEF(CONFIG_TEST_HSFLL_RAD);
-#if defined(CONFIG_TEST_HSFLL_RAD)
 	TC_PRINT("RADIO DOMAIN HSFLL test\n");
 	test_clock_control_request(cpurad_hsfll_test_clk_contexts,
 				   ARRAY_SIZE(cpurad_hsfll_test_clk_contexts));
-#endif
 }
+#endif
 
+
+
+#if defined(CONFIG_CLOCK_CONTROL_NRF_HSFLL_GLOBAL)
 ZTEST(nrf2_clock_control, test_global_hsfll_control)
 {
-	Z_TEST_SKIP_IFNDEF(CONFIG_CLOCK_CONTROL_NRF_HSFLL_GLOBAL);
-#if defined(CONFIG_CLOCK_CONTROL_NRF_HSFLL_GLOBAL)
 	TC_PRINT("Global HSFLL test\n");
 	test_clock_control_request(global_hsfll_test_clk_contexts,
 				   ARRAY_SIZE(global_hsfll_test_clk_contexts));
-#endif
 }
+#endif
 
+#if defined(CONFIG_CLOCK_CONTROL_NRF_LFCLK)
 ZTEST(nrf2_clock_control, test_lfclk_control)
 {
-	Z_TEST_SKIP_IFNDEF(CONFIG_CLOCK_CONTROL_NRF_LFCLK);
-#if defined(CONFIG_CLOCK_CONTROL_NRF_LFCLK)
 	TC_PRINT("LFCLK test\n");
 	test_clock_control_request(lfclk_test_clk_contexts, ARRAY_SIZE(lfclk_test_clk_contexts));
-#endif
 }
 
 ZTEST(nrf2_clock_control, test_safe_request_cancellation)
 {
-	Z_TEST_SKIP_IFNDEF(CONFIG_CLOCK_CONTROL_NRF_LFCLK);
-#if defined(CONFIG_CLOCK_CONTROL_NRF_LFCLK)
 	int ret = 0;
 	int res = 0;
 	struct onoff_client cli;
@@ -391,22 +374,21 @@ ZTEST(nrf2_clock_control, test_safe_request_cancellation)
 	ret = nrf_clock_control_cancel_or_release(clk_dev, clk_spec, &cli);
 	TC_PRINT("Clock control safe cancellation return value: %d\n", ret);
 	zassert_between_inclusive(ret, ONOFF_STATE_ON, ONOFF_STATE_TO_ON);
-#endif
 }
+#endif
 
+#if defined(CONFIG_CLOCK_CONTROL_NRF_AUXPLL)
 ZTEST(nrf2_clock_control, test_auxpll_control)
 {
-	Z_TEST_SKIP_IFNDEF(CONFIG_CLOCK_CONTROL_NRF_AUXPLL);
-#if defined(CONFIG_CLOCK_CONTROL_NRF_AUXPLL)
 	TC_PRINT("AUXPLL control test\n");
 	test_clock_control_request(auxpll_test_clk_contexts,
 				   ARRAY_SIZE(auxpll_test_clk_contexts));
-#endif
 }
+#endif
 
 static void *setup(void)
 {
-#if defined(CONFIG_TEST_DVFS_INIT)
+#if defined(CONFIG_BOARD_NRF54H20DK_NRF54H20_CPUAPP)
 	const struct device *clk_dev = DEVICE_DT_GET(DT_NODELABEL(cpuapp_hsfll));
 	const struct nrf_clock_spec clk_spec = {
 		.frequency = MHZ(64),
