@@ -155,12 +155,6 @@ static void grtc_configuration(void)
 	nrf_spu_feature_secattr_set(NRF_SPU20, NRF_SPU_FEATURE_GRTC_INTERRUPT, 5, 0, 0);
 	nrf_spu_feature_secattr_set(NRF_SPU20, NRF_SPU_FEATURE_GRTC_SYSCOUNTER, 0, 0, 0);
 }
-
-static void ipct_configuration(void)
-{
-	/* Grant secure access to IPCT, since NS by default */
-	nrf_spu_periph_perm_secattr_set(NRF_SPU10, 13, true);
-}
 #endif /* CONFIG_TRUSTED_EXECUTION_NONSECURE */
 
 #if defined(CONFIG_SOC_NRF71_WIFI_BOOT)
@@ -189,7 +183,6 @@ void soc_early_init_hook(void)
 	/* Skip for tf-m, configuration exist in target_cfg_71.c */
 	mpc_configuration();
 	grtc_configuration();
-	ipct_configuration();
 #endif
 
 #if defined(CONFIG_SOC_NRF71_WIFI_BOOT)
