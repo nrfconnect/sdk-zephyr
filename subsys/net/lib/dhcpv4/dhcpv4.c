@@ -896,14 +896,10 @@ static int dhcpv4_parse_option_vendor(struct net_pkt *pkt, struct net_if *iface,
 	struct net_pkt_cursor backup;
 	uint8_t len;
 	uint8_t type;
-	int ret;
 
 	if (length < 3) {
 		NET_ERR("Vendor-specific option parsing, length too short");
-		ret = net_pkt_skip(pkt, length);
-		if (ret < 0) {
-			return ret;
-		}
+		net_pkt_skip(pkt, length);
 		return -EBADMSG;
 	}
 
@@ -926,10 +922,7 @@ static int dhcpv4_parse_option_vendor(struct net_pkt *pkt, struct net_if *iface,
 		length--;
 		if (length < len) {
 			NET_ERR("Vendor-specific option parsing, length too long");
-			ret = net_pkt_skip(pkt, length);
-			if (ret < 0) {
-				return ret;
-			}
+			net_pkt_skip(pkt, length);
 			return -EBADMSG;
 		}
 		net_pkt_cursor_backup(pkt, &backup);
@@ -947,10 +940,7 @@ static int dhcpv4_parse_option_vendor(struct net_pkt *pkt, struct net_if *iface,
 				net_pkt_cursor_restore(pkt, &backup);
 			}
 		}
-		ret = net_pkt_skip(pkt, len);
-		if (ret < 0) {
-			return ret;
-		}
+		net_pkt_skip(pkt, len);
 		length = length - len;
 		if (length <= 0) {
 			NET_DBG("Vendor-specific options_end (no code 255)");
@@ -2091,9 +2081,7 @@ bool net_dhcpv4_accept_unicast(struct net_pkt *pkt)
 	}
 
 	net_pkt_cursor_backup(pkt, &backup);
-	if (net_pkt_skip(pkt, net_pkt_ip_hdr_len(pkt)) < 0) {
-		goto out;
-	}
+	net_pkt_skip(pkt, net_pkt_ip_hdr_len(pkt));
 
 	/* Verify destination UDP port. */
 	udp_hdr = (struct net_udp_hdr *)net_pkt_get_data(pkt, &udp_access);

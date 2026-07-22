@@ -67,11 +67,7 @@ int ppp_parse_options(struct ppp_fsm *fsm, struct net_pkt *pkt,
 
 		net_pkt_cursor_restore(pkt, &cursor);
 
-		ret = net_pkt_skip(pkt, opt_val_len);
-		if (ret < 0) {
-			return ret;
-		}
-
+		net_pkt_skip(pkt, opt_val_len);
 		remaining -= opt_len;
 	}
 
