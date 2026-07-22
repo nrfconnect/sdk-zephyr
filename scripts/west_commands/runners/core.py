@@ -781,13 +781,9 @@ class ZephyrBinaryRunner(abc.ABC):
 
     @staticmethod
     def sram_address_from_build_conf(build_conf: BuildConfiguration):
-        '''return SRAM address.
+        '''return CONFIG_SRAM_BASE_ADDRESS.
         '''
-        if build_conf.getboolean('CONFIG_SRAM_DEPRECATED_KCONFIG_SET'):
-            return build_conf['CONFIG_SRAM_BASE_ADDRESS']
-        else:
-            sram_node = build_conf.edt.chosen_node('zephyr,sram')
-            return sram_node.regs[0].addr
+        return build_conf['CONFIG_SRAM_BASE_ADDRESS']
 
     def run(self, command: str, **kwargs):
         '''Runs command ('flash', 'debug', 'debugserver', 'attach').
