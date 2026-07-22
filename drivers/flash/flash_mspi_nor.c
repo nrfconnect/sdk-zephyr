@@ -16,12 +16,6 @@
 
 LOG_MODULE_REGISTER(flash_mspi_nor, CONFIG_FLASH_LOG_LEVEL);
 
-#if defined(CONFIG_FLASH_MSPI_NOR_ACTIVE_DWELL_MS)
-#define ACTIVE_DWELL_MS CONFIG_FLASH_MSPI_NOR_ACTIVE_DWELL_MS
-#else
-#define ACTIVE_DWELL_MS 0
-#endif
-
 #define XIP_DEV_CFG_MASK (MSPI_DEVICE_CONFIG_CMD_LEN | \
 			  MSPI_DEVICE_CONFIG_ADDR_LEN | \
 			  MSPI_DEVICE_CONFIG_READ_CMD | \
@@ -247,19 +241,7 @@ static int cmd_wrsr(const struct device *dev, uint8_t op_code,
 	return 0;
 }
 
-static void release_power(const struct device *dev)
-{
-	if (ACTIVE_DWELL_MS != 0 &&
-	    IS_ENABLED(CONFIG_PM_DEVICE_RUNTIME_ASYNC)) {
-		k_timeout_t delay = K_MSEC(ACTIVE_DWELL_MS);
-
-		(void)pm_device_runtime_put_async(dev, delay);
-	} else {
-		(void)pm_device_runtime_put(dev);
-	}
-}
-
-static int _acquire(const struct device *dev)
+static int acquire(const struct device *dev)
 {
 	const struct flash_mspi_nor_config *dev_config = dev->config;
 	struct flash_mspi_nor_data *dev_data = dev->data;
@@ -271,7 +253,7 @@ static int _acquire(const struct device *dev)
 
 	rc = pm_device_runtime_get(dev_config->bus);
 	if (rc < 0) {
-		LOG_ERR("pm_device_runtime_get() for bus failed: %d", rc);
+		LOG_ERR("pm_device_runtime_get() failed: %d", rc);
 	} else {
 		enum mspi_dev_cfg_mask mask;
 
@@ -306,25 +288,7 @@ static int _acquire(const struct device *dev)
 	return rc;
 }
 
-static int acquire(const struct device *dev)
-{
-	int rc;
-
-	rc = pm_device_runtime_get(dev);
-	if (rc < 0) {
-		LOG_ERR("pm_device_runtime_get() failed: %d", rc);
-		return rc;
-	}
-
-	rc = _acquire(dev);
-	if (rc < 0) {
-		release_power(dev);
-	}
-
-	return rc;
-}
-
-static void _release(const struct device *dev)
+static void release(const struct device *dev)
 {
 	const struct flash_mspi_nor_config *dev_config = dev->config;
 
@@ -338,13 +302,6 @@ static void _release(const struct device *dev)
 
 	k_sem_give(&dev_data->acquired);
 #endif
-}
-
-static void release(const struct device *dev)
-{
-	_release(dev);
-
-	release_power(dev);
 }
 
 static inline uint32_t dev_flash_size(const struct device *dev)
@@ -774,17 +731,17 @@ static int dev_pm_action_cb(const struct device *dev,
 	switch (action) {
 	case PM_DEVICE_ACTION_SUSPEND:
 #if defined(WITH_DPD)
-		_acquire(dev);
+		acquire(dev);
 		rc = enter_dpd(dev);
-		_release(dev);
+		release(dev);
 #endif
 		break;
 
 	case PM_DEVICE_ACTION_RESUME:
 #if defined(WITH_DPD)
-		_acquire(dev);
+		acquire(dev);
 		rc = exit_dpd(dev);
-		_release(dev);
+		release(dev);
 #endif
 		break;
 
