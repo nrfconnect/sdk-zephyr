@@ -6,6 +6,7 @@ add_library(mocks
   STATIC
     addr_internal.c
     att_internal.c
+    bt_str.c
     buf_view.c
     hci_core.c
     id.c
