@@ -31,13 +31,10 @@ extern "C" {
 #define LOG_FRONTEND_STMESP_DEMUX_LEVEL_BITS 3
 
 /** @brief Bits used to store total length. */
-#define LOG_FRONTEND_STMESP_DEMUX_TLENGTH_BITS 15
+#define LOG_FRONTEND_STMESP_DEMUX_TLENGTH_BITS 16
 
 /** @brief Bits used to store package length. */
 #define LOG_FRONTEND_STMESP_DEMUX_PLENGTH_BITS 10
-
-/** @brief Bits used to indicate if hexdump is present. */
-#define LOG_FRONTEND_STMESP_DEMUX_HAS_DATA_BITS 1
 
 /** @brief Maximum number of supported majors. */
 #define LOG_FRONTEND_STMESP_DEMUX_MAJOR_MAX BIT(LOG_FRONTEND_STMESP_DEMUX_MAJOR_BITS)
@@ -62,11 +59,8 @@ struct log_frontend_stmesp_demux_log_header {
 	/** Total length excluding this header. */
 	uint32_t total_len : LOG_FRONTEND_STMESP_DEMUX_TLENGTH_BITS;
 
-	/** Package data length. */
+	/** Hexdump data length. */
 	uint32_t package_len : LOG_FRONTEND_STMESP_DEMUX_PLENGTH_BITS;
-
-	/** Hexdump data present */
-	uint32_t has_data: LOG_FRONTEND_STMESP_DEMUX_HAS_DATA_BITS;
 };
 
 /** @brief Union for writing raw data to the logging message header. */
