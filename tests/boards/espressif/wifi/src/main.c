@@ -79,7 +79,12 @@ static void wifi_disconnect_result(struct net_mgmt_event_callback *cb)
 {
 	const struct wifi_status *status = (const struct wifi_status *)cb->info;
 
-	wifi_ctx.result = status->status;
+	if (status->disconn_reason == WIFI_REASON_DISCONN_SUCCESS ||
+	    status->disconn_reason == WIFI_REASON_DISCONN_USER_REQUEST) {
+		wifi_ctx.result = 0;
+	} else {
+		wifi_ctx.result = status->status;
+	}
 
 	if (!wifi_ctx.connecting) {
 		if (wifi_ctx.result) {
@@ -327,7 +332,7 @@ ZTEST(wifi, test_3_disconnect)
 	int ret;
 
 	ret = wifi_disconnect();
-	zassert_equal(ret, 0, "Disconect request failed");
+	zassert_equal(ret, 0, "Disconnect request failed");
 
 	zassert_equal(k_sem_take(&wifi_event, K_SECONDS(CONFIG_WIFI_DISCONNECT_TIMEOUT)), 0,
 		      "Wifi disconnect timed out");

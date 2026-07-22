@@ -509,7 +509,6 @@ int zsock_accept_ctx(struct net_context *parent, struct net_sockaddr *addr,
 		     net_socklen_t *addrlen)
 {
 	struct net_context *ctx;
-	struct net_pkt *last_pkt;
 	int fd, ret;
 
 	if (net_context_get_type(parent) == NET_SOCK_RAW) {
@@ -549,29 +548,6 @@ int zsock_accept_ctx(struct net_context *parent, struct net_sockaddr *addr,
 		net_context_put(ctx);
 		return -1;
 	}
-
-	/* Check if the connection is already disconnected */
-	last_pkt = k_fifo_peek_tail(&ctx->recv_q);
-	if (last_pkt) {
-		if (net_pkt_eof(last_pkt)) {
-			sock_set_eof(ctx);
-			zvfs_free_fd(fd);
-			zsock_flush_queue(ctx);
-			net_context_put(ctx);
-			errno = ECONNABORTED;
-			return -1;
-		}
-	}
-
-	if (net_context_is_closing(ctx)) {
-		errno = ECONNABORTED;
-		zvfs_free_fd(fd);
-		zsock_flush_queue(ctx);
-		net_context_put(ctx);
-		return -1;
-	}
-
-	net_context_set_accepting(ctx, false);
 
 	ret = sock_get_stream_src_addr(ctx, addr, addrlen);
 	if (ret < 0) {
@@ -1016,9 +992,10 @@ static int insert_pktinfo(struct net_msghdr *msg, int level, int type,
 			  void *pktinfo, size_t pktinfo_len)
 {
 	struct net_cmsghdr *cmsg;
+	size_t cmsg_space = NET_CMSG_SPACE(pktinfo_len);
 
-	if (msg->msg_controllen < pktinfo_len) {
-		return -EINVAL;
+	if (msg->msg_controllen < cmsg_space) {
+		return -ENOMEM;
 	}
 
 	for (cmsg = NET_CMSG_FIRSTHDR(msg); cmsg != NULL; cmsg = NET_CMSG_NXTHDR(msg, cmsg)) {
@@ -1029,6 +1006,12 @@ static int insert_pktinfo(struct net_msghdr *msg, int level, int type,
 
 	if (cmsg == NULL) {
 		return -EINVAL;
+	}
+
+	/* Ensure the full element fits at the selected location, not just a header. */
+	if (cmsg_space > (size_t)((uint8_t *)msg->msg_control + msg->msg_controllen -
+				  (uint8_t *)cmsg)) {
+		return -ENOMEM;
 	}
 
 	cmsg->cmsg_len = NET_CMSG_LEN(pktinfo_len);
@@ -1160,7 +1143,7 @@ static int update_msg_controllen(struct net_msghdr *msg)
 		if (cmsg->cmsg_len == 0) {
 			break;
 		}
-		cmsg_space += cmsg->cmsg_len;
+		cmsg_space += NET_ALIGN_H(cmsg->cmsg_len);
 	}
 	msg->msg_controllen = cmsg_space;
 
@@ -1442,6 +1425,27 @@ static int zsock_fionread_ctx(struct net_context *ctx)
 	return MIN(ret, INT_MAX);
 }
 
+static int zsock_fionwrite_ctx(struct net_context *ctx)
+{
+	int outq_bytes;
+	int ret;
+
+	if (net_context_get_proto(ctx) != NET_IPPROTO_TCP) {
+		return -EOPNOTSUPP;
+	}
+
+	if (net_context_get_state(ctx) == NET_CONTEXT_LISTENING) {
+		return -EINVAL;
+	}
+
+	ret = net_tcp_get_outq(ctx, &outq_bytes);
+	if (ret < 0) {
+		return ret;
+	}
+
+	return outq_bytes;
+}
+
 static ssize_t zsock_recv_stream_timed(struct net_context *ctx, struct net_msghdr *msg,
 				       uint8_t *buf, size_t max_len,
 				       int flags, k_timeout_t timeout)
@@ -1462,12 +1466,30 @@ static ssize_t zsock_recv_stream_timed(struct net_context *ctx, struct net_msghd
 
 	for (end = sys_timepoint_calc(timeout); max_len > 0; timeout = sys_timepoint_timeout(end)) {
 
-		if (sock_is_error(ctx)) {
-			return -POINTER_TO_INT(ctx->user_data);
-		}
+		/* Drain any buffered data before reporting a pending error or
+		 * EOF. This ensures data received before the connection was
+		 * closed (for example just before a peer RST) is delivered to
+		 * the application prior to returning the error. If some data
+		 * was already received in this call (for example with
+		 * MSG_WAITALL), return it now and let the next recv() report
+		 * the pending error or EOF.
+		 */
+		if (k_fifo_is_empty(&ctx->recv_q)) {
+			if (sock_is_error(ctx)) {
+				if (recv_len > 0) {
+					break;
+				}
 
-		if (sock_is_eof(ctx)) {
-			return 0;
+				return -POINTER_TO_INT(ctx->user_data);
+			}
+
+			if (sock_is_eof(ctx)) {
+				if (recv_len > 0) {
+					break;
+				}
+
+				return 0;
+			}
 		}
 
 		if (!K_TIMEOUT_EQ(timeout, K_NO_WAIT)) {
@@ -1961,6 +1983,20 @@ int zsock_getsockopt_ctx(struct net_context *ctx, int level, int optname,
 			}
 			break;
 
+		case ZSOCK_SO_LINGER:
+			if (IS_ENABLED(CONFIG_NET_CONTEXT_LINGER)) {
+				ret = net_context_get_option(ctx,
+							     NET_OPT_LINGER,
+							     optval, optlen);
+				if (ret < 0) {
+					errno = -ret;
+					return -1;
+				}
+
+				return 0;
+			}
+			break;
+
 		case ZSOCK_SO_KEEPALIVE:
 			if (IS_ENABLED(CONFIG_NET_TCP_KEEPALIVE) &&
 			    net_context_get_proto(ctx) == NET_IPPROTO_TCP) {
@@ -2000,7 +2036,12 @@ int zsock_getsockopt_ctx(struct net_context *ctx, int level, int optname,
 		switch (optname) {
 		case ZSOCK_TCP_NODELAY:
 			ret = net_tcp_get_option(ctx, TCP_OPT_NODELAY, optval, optlen);
-			return ret;
+			if (ret < 0) {
+				errno = -ret;
+				return -1;
+			}
+
+			return 0;
 
 		case ZSOCK_TCP_KEEPIDLE:
 			__fallthrough;
@@ -2088,6 +2129,21 @@ int zsock_getsockopt_ctx(struct net_context *ctx, int level, int optname,
 
 			break;
 
+		case ZSOCK_IP_DONTFRAG:
+			if (IS_ENABLED(CONFIG_NET_IPV4)) {
+				ret = net_context_get_option(ctx,
+							     NET_OPT_DONT_FRAGMENT,
+							     optval, optlen);
+				if (ret < 0) {
+					errno  = -ret;
+					return -1;
+				}
+
+				return 0;
+			}
+
+			break;
+
 		case ZSOCK_IP_LOCAL_PORT_RANGE:
 			if (IS_ENABLED(CONFIG_NET_CONTEXT_CLAMP_PORT_RANGE)) {
 				ret = net_context_get_option(ctx,
@@ -2123,6 +2179,21 @@ int zsock_getsockopt_ctx(struct net_context *ctx, int level, int optname,
 		case ZSOCK_IPV6_MTU:
 			if (IS_ENABLED(CONFIG_NET_IPV6)) {
 				ret = net_context_get_option(ctx, NET_OPT_MTU,
+							     optval, optlen);
+				if (ret < 0) {
+					errno  = -ret;
+					return -1;
+				}
+
+				return 0;
+			}
+
+			break;
+
+		case ZSOCK_IPV6_DONTFRAG:
+			if (IS_ENABLED(CONFIG_NET_IPV6)) {
+				ret = net_context_get_option(ctx,
+							     NET_OPT_DONT_FRAGMENT,
 							     optval, optlen);
 				if (ret < 0) {
 					errno  = -ret;
@@ -2588,7 +2659,21 @@ int zsock_setsockopt_ctx(struct net_context *ctx, int level, int optname,
 		}
 
 		case ZSOCK_SO_LINGER:
-			/* ignored. for compatibility purposes only */
+			if (IS_ENABLED(CONFIG_NET_CONTEXT_LINGER)) {
+				ret = net_context_set_option(ctx,
+							     NET_OPT_LINGER,
+							     optval, optlen);
+				if (ret < 0) {
+					errno = -ret;
+					return -1;
+				}
+
+				return 0;
+			}
+
+			/* Without linger support, accept the option for
+			 * compatibility purposes only.
+			 */
 			return 0;
 
 		case ZSOCK_SO_KEEPALIVE:
@@ -2631,7 +2716,12 @@ int zsock_setsockopt_ctx(struct net_context *ctx, int level, int optname,
 		case ZSOCK_TCP_NODELAY:
 			ret = net_tcp_set_option(ctx,
 						 TCP_OPT_NODELAY, optval, optlen);
-			return ret;
+			if (ret < 0) {
+				errno = -ret;
+				return -1;
+			}
+
+			return 0;
 
 		case ZSOCK_TCP_KEEPIDLE:
 			__fallthrough;
@@ -2733,6 +2823,21 @@ int zsock_setsockopt_ctx(struct net_context *ctx, int level, int optname,
 
 			return 0;
 
+		case ZSOCK_IP_DONTFRAG:
+			if (IS_ENABLED(CONFIG_NET_IPV4)) {
+				ret = net_context_set_option(ctx,
+							     NET_OPT_DONT_FRAGMENT,
+							     optval, optlen);
+				if (ret < 0) {
+					errno  = -ret;
+					return -1;
+				}
+
+				return 0;
+			}
+
+			break;
+
 		case ZSOCK_IP_ADD_MEMBERSHIP:
 			if (IS_ENABLED(CONFIG_NET_IPV4)) {
 				return ipv4_multicast_group(ctx, optval,
@@ -2784,6 +2889,21 @@ int zsock_setsockopt_ctx(struct net_context *ctx, int level, int optname,
 		case ZSOCK_IPV6_MTU:
 			if (IS_ENABLED(CONFIG_NET_IPV6)) {
 				ret = net_context_set_option(ctx, NET_OPT_MTU,
+							     optval, optlen);
+				if (ret < 0) {
+					errno  = -ret;
+					return -1;
+				}
+
+				return 0;
+			}
+
+			break;
+
+		case ZSOCK_IPV6_DONTFRAG:
+			if (IS_ENABLED(CONFIG_NET_IPV6)) {
+				ret = net_context_set_option(ctx,
+							     NET_OPT_DONT_FRAGMENT,
 							     optval, optlen);
 				if (ret < 0) {
 					errno  = -ret;
@@ -3135,6 +3255,19 @@ static int sock_ioctl_vmeth(void *obj, unsigned int request, va_list args)
 		int *avail = va_arg(args, int *);
 
 		*avail = zsock_fionread_ctx(obj);
+		return 0;
+	}
+
+	case ZFD_IOCTL_FIONWRITE: {
+		int *avail = va_arg(args, int *);
+		int outq_bytes = zsock_fionwrite_ctx(obj);
+
+		if (outq_bytes < 0) {
+			errno = -outq_bytes;
+			return -1;
+		}
+
+		*avail = outq_bytes;
 		return 0;
 	}
 

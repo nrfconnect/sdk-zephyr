@@ -26,14 +26,11 @@
  * The state must be seeded so that it is not everywhere zero.
  */
 
-#include <zephyr/init.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/entropy.h>
 #include <zephyr/kernel.h>
 #include <string.h>
 
-static const struct device *const entropy_driver =
-	DEVICE_DT_GET(DT_CHOSEN(zephyr_entropy));
 static uint32_t state[4];
 static bool initialized;
 
@@ -45,6 +42,7 @@ static inline uint32_t rotl(const uint32_t x, int k)
 static void xoshiro128_init_state(void)
 {
 	int rc;
+	const struct device *const entropy_driver = entropy_get_default_device();
 
 	/* This is not thread safe but it doesn't matter as we will just end
 	 * up with a mix of random bytes from both threads.

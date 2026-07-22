@@ -25,14 +25,14 @@ static void test_main(void)
 
 	/* Initialize media player */
 	err = media_proxy_pl_init();
-	if (err) {
+	if (err != 0) {
 		FAIL("Initializing MPL failed (err %d)", err);
 		return;
 	}
 
 	/* Initialize Bluetooth, get connected */
 	err = bt_enable(NULL);
-	if (err) {
+	if (err != 0) {
 		FAIL("Bluetooth init failed (err %d)\n", err);
 		return;
 	}
@@ -50,7 +50,10 @@ static void test_main(void)
 		if (err != 0) {
 			FAIL("Failed to start advertising set (err %d)\n", err);
 
-			bt_le_ext_adv_delete(ext_adv);
+			err = bt_le_ext_adv_delete(ext_adv);
+			if (err != 0) {
+				FAIL("Failed to delete extended advertising set (err %d)\n", err);
+			}
 
 			return;
 		}

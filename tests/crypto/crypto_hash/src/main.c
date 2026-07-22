@@ -27,11 +27,13 @@
 #define CRYPTO_DEV_COMPAT sifli_sf32lb_crypto
 #elif DT_HAS_COMPAT_STATUS_OKAY(bflb_sec_eng_sha)
 #define CRYPTO_DEV_COMPAT bflb_sec_eng_sha
+#elif CONFIG_CRYPTO_INFINEON_MXCRYPTOLITE
+#define CRYPTO_DEV_COMPAT infineon_mxcryptolite_crypto
 #else
 #error "You need to enable one crypto device"
 #endif
 
-/* Following test are part of mbedTLS */
+/* Following tests are part of Mbed TLS */
 
 uint8_t test1[] = {};
 uint8_t test2[] = {0xbd};

@@ -18,7 +18,10 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(flash_ite_it51xxx, CONFIG_FLASH_LOG_LEVEL);
 
-#define SOC_NV_FLASH_NODE  DT_INST(0, soc_nv_flash)
+#include "flash_priv.h"
+
+#define SOC_NV_FLASH_NODE SOC_NV_FLASH_CHILD_NODE(0)
+
 #define FLASH_SIZE         DT_REG_SIZE(SOC_NV_FLASH_NODE)
 #define FLASH_READ_MAX_SZ  KB(1)
 #define FLASH_WRITE_MAX_SZ KB(1)
@@ -283,7 +286,8 @@ static int m1k_flash_erase(const struct device *dev, off_t offset, size_t len)
 	flash_set_m1k_pe_lba(dev, offset);
 
 	/* It's the upper bound address of M1K-ERASE */
-	flash_set_m1k_erase_uba(dev, offset + FLASH_ERASE_BLK_SZ);
+	/* UBA points to the last 4KB block of the erase region. */
+	flash_set_m1k_erase_uba(dev, offset + len - FLASH_ERASE_BLK_SZ);
 
 	m1kflhctrl7_cmd = sys_read8(SMFI_M1KFLHCTRL7) & ~GENMASK(7, 6);
 	/* Erase the flash within an address range */
@@ -499,15 +503,9 @@ static int flash_it51xxx_erase(const struct device *dev, off_t offset, size_t le
 
 	k_sem_take(&data->sem, K_FOREVER);
 
-	while (len > 0) {
-		ret = m1k_flash_erase(dev, offset, len);
-		if (ret != 0) {
-			LOG_ERR("%s: failed at offset=%#lx", __func__, offset);
-			break;
-		}
-
-		offset += FLASH_ERASE_BLK_SZ;
-		len -= FLASH_ERASE_BLK_SZ;
+	ret = m1k_flash_erase(dev, offset, len);
+	if (ret != 0) {
+		LOG_ERR("%s: failed at offset=%#lx", __func__, offset);
 	}
 
 	k_sem_give(&data->sem);

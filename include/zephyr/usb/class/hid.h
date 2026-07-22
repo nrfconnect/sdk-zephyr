@@ -173,7 +173,7 @@ extern "C" {
 #define HID_USAGE_SENSORS_EVENT_SENSOR_STATE			0x201
 /** HID Sensors Friendly Name Property Usage ID */
 #define HID_USAGE_SENSORS_PROPERTY_FRIENDLY_NAME		0x301
-/** HID Sensors Enviromental Temperature Data Usage ID */
+/** HID Sensors Environmental Temperature Data Usage ID */
 #define HID_USAGE_SENSORS_DATA_ENVIRONMENTAL_TEMPERATURE	0x434
 /** HID Sensors Timestamp Property Usage ID */
 #define HID_USAGE_SENSORS_PROPERTY_TIMESTAMP			0x529
@@ -667,6 +667,8 @@ enum hid_kbd_code {
 	HID_KEY_KP_8		= 96,
 	HID_KEY_KP_9		= 97,
 	HID_KEY_KP_0		= 98,
+	HID_KEY_KPDOT		= 99,
+	HID_KEY_MENU		= 101,
 };
 
 /**

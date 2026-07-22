@@ -67,14 +67,8 @@ enum net_context_state {
 /** Remote address set */
 #define NET_CONTEXT_REMOTE_ADDR_SET  BIT(8)
 
-/** Is the socket accepting connections */
-#define NET_CONTEXT_ACCEPTING_SOCK  BIT(9)
-
-/** Is the socket closing / closed */
-#define NET_CONTEXT_CLOSING_SOCK  BIT(10)
-
 /** Context is bound to a specific interface */
-#define NET_CONTEXT_BOUND_TO_IFACE BIT(11)
+#define NET_CONTEXT_BOUND_TO_IFACE BIT(9)
 
 struct net_context;
 
@@ -273,6 +267,14 @@ __net_socket struct net_context {
 	struct k_sem recv_data_wait;
 #endif /* CONFIG_NET_CONTEXT_SYNC_RECV */
 
+#if defined(CONFIG_NET_CONTEXT_LINGER)
+	/**
+	 * Semaphore used to wait for the TCP connection to be closed by the
+	 * stack when SO_LINGER is enabled with a non-zero timeout.
+	 */
+	struct k_sem linger_sem;
+#endif /* CONFIG_NET_CONTEXT_LINGER */
+
 #if defined(CONFIG_NET_SOCKETS)
 	/** BSD socket private data */
 	void *socket_data;
@@ -401,12 +403,22 @@ __net_socket struct net_context {
 			bool ipv6_mcast_loop;  /**< IPv6 multicast loop */
 			bool ipv4_mcast_loop;  /**< IPv4 multicast loop */
 		};
+
+		/** Disable local IP fragmentation for packets sent by this context. */
+		bool dont_fragment;
 #endif /* CONFIG_NET_IPV6 || CONFIG_NET_IPV4 */
 
 #if defined(CONFIG_NET_CONTEXT_TIMESTAMPING)
 		/** Enable RX, TX or both timestamps of packets send through sockets. */
 		uint8_t timestamping;
 #endif
+#if defined(CONFIG_NET_CONTEXT_LINGER)
+		/** Socket SO_LINGER option. When enabled (l_onoff != 0) with a
+		 * zero timeout (l_linger == 0), close() aborts the connection
+		 * with a RST instead of a graceful FIN close.
+		 */
+		struct net_linger linger;
+#endif /* CONFIG_NET_CONTEXT_LINGER */
 	} options;
 
 	/** Protocol (UDP, TCP or IEEE 802.3 protocol value) */
@@ -463,70 +475,6 @@ static inline bool net_context_is_bound_to_iface(struct net_context *context)
 	NET_ASSERT(context);
 
 	return context->flags & NET_CONTEXT_BOUND_TO_IFACE;
-}
-
-/**
- * @brief Is this context is accepting data now.
- *
- * @param context Network context.
- *
- * @return True if the context is accepting connections, False otherwise.
- */
-static inline bool net_context_is_accepting(struct net_context *context)
-{
-	NET_ASSERT(context);
-
-	return context->flags & NET_CONTEXT_ACCEPTING_SOCK;
-}
-
-/**
- * @brief Set this context to accept data now.
- *
- * @param context Network context.
- * @param accepting True if accepting, False if not
- */
-static inline void net_context_set_accepting(struct net_context *context,
-					     bool accepting)
-{
-	NET_ASSERT(context);
-
-	if (accepting) {
-		context->flags |= NET_CONTEXT_ACCEPTING_SOCK;
-	} else {
-		context->flags &= (uint16_t)~NET_CONTEXT_ACCEPTING_SOCK;
-	}
-}
-
-/**
- * @brief Is this context closing.
- *
- * @param context Network context.
- *
- * @return True if the context is closing, False otherwise.
- */
-static inline bool net_context_is_closing(struct net_context *context)
-{
-	NET_ASSERT(context);
-
-	return context->flags & NET_CONTEXT_CLOSING_SOCK;
-}
-
-/**
- * @brief Set this context to closing.
- *
- * @param context Network context.
- * @param closing True if closing, False if not
- */
-static inline void net_context_set_closing(struct net_context *context,
-					   bool closing)
-{
-	NET_ASSERT(context);
-
-	if (closing) {
-		context->flags |= NET_CONTEXT_CLOSING_SOCK;
-	} else {
-		context->flags &= (uint16_t)~NET_CONTEXT_CLOSING_SOCK;
-	}
 }
 
 /** @cond INTERNAL_HIDDEN */
@@ -1088,6 +1036,23 @@ int net_context_ref(struct net_context *context);
 int net_context_unref(struct net_context *context);
 
 /**
+ * @brief Signal that the connection backing a context has been closed by the
+ * transport, so a close() blocked on SO_LINGER can resume.
+ *
+ * @internal This is called by the TCP stack from tcp_conn_close().
+ *
+ * @param context The context whose connection has been closed
+ */
+static inline void net_context_signal_linger(struct net_context *context)
+{
+#if defined(CONFIG_NET_CONTEXT_LINGER)
+	k_sem_give(&context->linger_sem);
+#else
+	ARG_UNUSED(context);
+#endif /* CONFIG_NET_CONTEXT_LINGER */
+}
+
+/**
  * @brief Create IPv4 packet in provided net_pkt from context
  *
  * @param context Network context for a connection
@@ -1296,6 +1261,8 @@ int net_context_sendto(struct net_context *context,
  * @details This function has similar semantics as Posix sendmsg() call.
  * For unconnected socket, the msg_name field in net_msghdr must be set. For
  * connected socket the msg_name should be set to NULL, and msg_namelen to 0.
+ * For UDP sockets, msg_control may also carry per-datagram ancillary data such
+ * as @ref ZSOCK_IP_DONTFRAG or @ref ZSOCK_IPV6_DONTFRAG.
  * After the network buffer is sent, a caller-supplied callback is called.
  * Note that the callback might be called after this function has returned.
  *
@@ -1405,6 +1372,8 @@ enum net_context_option {
 	NET_OPT_IPV6_MCAST_LOOP	  = 22, /**< IPV6 multicast loop */
 	NET_OPT_IPV4_MCAST_LOOP	  = 23, /**< IPV4 multicast loop */
 	NET_OPT_RECV_HOPLIMIT     = 24, /**< Receive hop limit information */
+	NET_OPT_DONT_FRAGMENT     = 25, /**< Disable local IP fragmentation */
+	NET_OPT_LINGER            = 26, /**< Socket linger (SO_LINGER) */
 };
 
 /**

@@ -49,7 +49,6 @@ LOG_MODULE_REGISTER(uart_ns16550, CONFIG_UART_LOG_LEVEL);
 #define UART_NS16550_DMAS_ENABLED DT_ANY_INST_HAS_PROP_STATUS_OKAY(dmas)
 
 #if DT_ANY_INST_ON_BUS_STATUS_OKAY(pcie)
-BUILD_ASSERT(IS_ENABLED(CONFIG_PCIE), "NS16550(s) in DT need CONFIG_PCIE");
 #include <zephyr/drivers/pcie/pcie.h>
 #endif
 
@@ -1360,10 +1359,8 @@ static int uart_ns16550_irq_is_pending(const struct device *dev)
  * @brief Update cached contents of IIR
  *
  * @param dev UART device struct
- *
- * @return Always 1
  */
-static int uart_ns16550_irq_update(const struct device *dev)
+static void uart_ns16550_irq_update(const struct device *dev)
 {
 	struct uart_ns16550_dev_data *data = dev->data;
 	const struct uart_ns16550_dev_config * const dev_cfg = dev->config;
@@ -1372,8 +1369,6 @@ static int uart_ns16550_irq_update(const struct device *dev)
 	IIRC(dev) = ns16550_inbyte(dev_cfg, IIR(dev));
 
 	k_spin_unlock(&data->lock, key);
-
-	return 1;
 }
 
 /**
@@ -1936,8 +1931,8 @@ static DEVICE_API(uart, uart_ns16550_driver_api) = {
 };
 
 #define UART_NS16550_IRQ_FLAGS(n) \
-	COND_CODE_1(DT_INST_IRQ_HAS_CELL(n, sense),                           \
-		    (DT_INST_IRQ(n, sense)),                                  \
+	COND_CODE_1(DT_INST_IRQ_HAS_CELL(n, flags),                           \
+		    (DT_INST_IRQ(n, flags)),                                  \
 		    (0))
 
 /* IO-port or MMIO based UART */
@@ -1957,8 +1952,6 @@ static DEVICE_API(uart, uart_ns16550_driver_api) = {
 	{                                                                     \
 		BUILD_ASSERT(DT_INST_IRQN(n) == PCIE_IRQ_DETECT,              \
 			     "Only runtime IRQ configuration is supported");  \
-		BUILD_ASSERT(IS_ENABLED(CONFIG_DYNAMIC_INTERRUPTS),           \
-			     "NS16550 PCIe requires dynamic interrupts");     \
 		const struct uart_ns16550_dev_config *dev_cfg = dev->config;  \
 		unsigned int irq = pcie_alloc_irq(dev_cfg->pcie->bdf);        \
 		if (irq == PCIE_CONF_INTR_IRQ_NONE) {                         \

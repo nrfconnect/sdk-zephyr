@@ -25,10 +25,12 @@
 #include <zephyr/bluetooth/uuid.h>
 #include <zephyr/kernel.h>
 #include <zephyr/net_buf.h>
+#include <zephyr/sys/__assert.h>
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/sys/printk.h>
 #include <zephyr/sys/util.h>
 #include <zephyr/sys/util_macro.h>
+#include <zephyr/toolchain.h>
 
 #include "bap_common.h"
 #include "bap_stream_rx.h"
@@ -36,7 +38,6 @@
 #include "common.h"
 
 #if defined(CONFIG_BT_PBP)
-#define SEM_TIMEOUT K_SECONDS(30)
 
 extern enum bst_result_t bst_result;
 
@@ -81,11 +82,17 @@ static struct bt_le_scan_cb broadcast_scan_cb = {
 static void base_recv_cb(struct bt_bap_broadcast_sink *sink, const struct bt_bap_base *base,
 			 size_t base_size)
 {
+	ARG_UNUSED(sink);
+	ARG_UNUSED(base);
+	ARG_UNUSED(base_size);
+
 	k_sem_give(&sem_base_received);
 }
 
 static void syncable_cb(struct bt_bap_broadcast_sink *sink, const struct bt_iso_biginfo *biginfo)
 {
+	ARG_UNUSED(biginfo);
+
 	printk("Broadcast sink %p is now syncable\n", sink);
 	k_sem_give(&sem_syncable);
 }
@@ -118,6 +125,8 @@ static bool pa_decode_base(struct bt_data *data, void *user_data)
 	uint32_t base_bis_index_bitfield = 0U;
 	int err;
 
+	ARG_UNUSED(user_data);
+
 	/* Base is NULL if the data does not contain a valid BASE */
 	if (base == NULL) {
 		return true;
@@ -138,12 +147,18 @@ static void broadcast_pa_recv(struct bt_le_per_adv_sync *sync,
 			const struct bt_le_per_adv_sync_recv_info *info,
 			struct net_buf_simple *buf)
 {
+	ARG_UNUSED(sync);
+	ARG_UNUSED(info);
+
 	bt_data_parse(buf, pa_decode_base, NULL);
 }
 
 static void broadcast_pa_synced(struct bt_le_per_adv_sync *sync,
 			struct bt_le_per_adv_sync_synced_info *info)
 {
+	ARG_UNUSED(sync);
+	ARG_UNUSED(info);
+
 	printk("PA synced\n");
 	k_sem_give(&sem_pa_synced);
 }
@@ -186,7 +201,7 @@ static int reset(void)
 
 	if (broadcast_sink != NULL) {
 		err = bt_bap_broadcast_sink_delete(broadcast_sink);
-		if (err) {
+		if (err != 0) {
 			printk("Deleting broadcast sink failed (err %d)\n", err);
 
 			return err;
@@ -209,7 +224,7 @@ static int init(void)
 	int err;
 
 	err = bt_enable(NULL);
-	if (err) {
+	if (err != 0) {
 		FAIL("Bluetooth enable failed (err %d)\n", err);
 
 		return err;
@@ -218,7 +233,7 @@ static int init(void)
 	printk("Bluetooth initialized\n");
 
 	err = bt_pacs_register(&pacs_param);
-	if (err) {
+	if (err != 0) {
 		FAIL("Could not register PACS (err %d)\n", err);
 		return err;
 	}
@@ -227,7 +242,7 @@ static int init(void)
 	bt_le_per_adv_sync_cb_register(&broadcast_sync_cb);
 
 	err = bt_pacs_cap_register(BT_AUDIO_DIR_SINK, &cap);
-	if (err) {
+	if (err != 0) {
 		printk("Capability register failed (err %d)\n", err);
 
 		return err;
@@ -270,6 +285,8 @@ static bool scan_check_and_sync_broadcast(struct bt_data *data, void *user_data)
 	struct bt_uuid_16 adv_uuid;
 	uint8_t *tmp_meta;
 	int ret;
+
+	ARG_UNUSED(user_data);
 
 	if (data->type != BT_DATA_SVC_DATA16) {
 		return true;
@@ -359,26 +376,20 @@ static void test_main(void)
 		/* Start scanning */
 		printk("Starting scan\n");
 		err = bt_le_scan_start(BT_LE_SCAN_PASSIVE, NULL);
-		if (err) {
+		if (err != 0) {
 			printk("Scan start failed (err %d)\n", err);
 			break;
 		}
 
 		/* Wait for PA sync */
 		printk("Waiting for PA Sync\n");
-		err = k_sem_take(&sem_pa_synced, SEM_TIMEOUT);
-		if (err != 0) {
-			printk("sem_pa_synced timed out\n");
-			break;
-		}
+		err = k_sem_take(&sem_pa_synced, K_FOREVER);
+		__ASSERT_NO_MSG(err == 0);
 
 		/* Wait for BASE decode */
 		printk("Waiting for BASE\n");
-		err = k_sem_take(&sem_base_received, SEM_TIMEOUT);
-		if (err != 0) {
-			printk("sem_base_received timed out\n");
-			break;
-		}
+		err = k_sem_take(&sem_base_received, K_FOREVER);
+		__ASSERT_NO_MSG(err == 0);
 
 		/* Create broadcast sink */
 		printk("Creating broadcast sink\n");
@@ -389,11 +400,8 @@ static void test_main(void)
 		}
 
 		printk("Waiting for syncable\n");
-		err = k_sem_take(&sem_syncable, SEM_TIMEOUT);
-		if (err != 0) {
-			printk("sem_syncable timed out\n");
-			break;
-		}
+		err = k_sem_take(&sem_syncable, K_FOREVER);
+		__ASSERT_NO_MSG(err == 0);
 
 		/* Sync to broadcast source */
 		printk("Syncing broadcast sink\n");
@@ -411,7 +419,8 @@ static void test_main(void)
 
 		/* Wait for the stream to end */
 		printk("Waiting for sync lost\n");
-		k_sem_take(&sem_pa_sync_lost, SEM_TIMEOUT);
+		err = k_sem_take(&sem_pa_sync_lost, K_FOREVER);
+		__ASSERT_NO_MSG(err == 0);
 
 		count++;
 	}

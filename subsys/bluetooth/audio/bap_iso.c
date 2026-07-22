@@ -39,7 +39,7 @@ struct bt_bap_iso *bt_bap_iso_new(void)
 {
 	struct bt_bap_iso *iso = NULL;
 
-	for (size_t i = 0; i < ARRAY_SIZE(iso_pool); i++) {
+	for (size_t i = 0U; i < ARRAY_SIZE(iso_pool); i++) {
 		if (atomic_cas(&iso_pool[i].ref, 0, 1)) {
 			iso = &iso_pool[i];
 			break;
@@ -90,7 +90,7 @@ void bt_bap_iso_unref(struct bt_bap_iso *iso)
 
 void bt_bap_iso_foreach(bt_bap_iso_func_t func, void *user_data)
 {
-	for (size_t i = 0; i < ARRAY_SIZE(iso_pool); i++) {
+	for (size_t i = 0U; i < ARRAY_SIZE(iso_pool); i++) {
 		struct bt_bap_iso *iso = bt_bap_iso_ref(&iso_pool[i]);
 		bool iter;
 
@@ -174,7 +174,7 @@ static struct bt_bap_iso_dir *bap_iso_get_iso_dir(bool unicast_client, struct bt
 
 void bt_bap_setup_iso_data_path(struct bt_bap_stream *stream)
 {
-	struct bt_audio_codec_cfg *codec_cfg = stream->codec_cfg;
+	const struct bt_audio_codec_cfg *codec_cfg = stream->codec_cfg;
 	struct bt_bap_ep *ep = stream->ep;
 	struct bt_bap_iso *bap_iso = ep->iso;
 	const bool is_unicast_client =

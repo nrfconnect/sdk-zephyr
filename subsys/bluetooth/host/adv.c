@@ -365,6 +365,15 @@ int bt_le_adv_set_enable(struct bt_le_ext_adv *adv, bool enable)
 	return bt_le_adv_set_enable_legacy(adv, enable);
 }
 
+static uint32_t adv_interval_max_get(void)
+{
+	if (IS_ENABLED(CONFIG_BT_EXT_ADV) && BT_DEV_FEAT_LE_EXT_ADV(bt_dev.le.features)) {
+		return BT_LE_EXT_ADV_INTERVAL_MAX;
+	}
+
+	return BT_LE_ADV_INTERVAL_MAX;
+}
+
 static bool valid_adv_ext_param(const struct bt_le_adv_param *param)
 {
 	if (IS_ENABLED(CONFIG_BT_EXT_ADV) &&
@@ -433,7 +442,7 @@ static bool valid_adv_ext_param(const struct bt_le_adv_param *param)
 	    !param->peer) {
 		if (param->interval_min > param->interval_max ||
 		    param->interval_min < 0x0020 ||
-		    param->interval_max > 0x4000) {
+		    param->interval_max > adv_interval_max_get()) {
 			return false;
 		}
 	}
@@ -1039,6 +1048,13 @@ static int le_ext_adv_param_set(struct bt_le_ext_adv *adv,
 
 	adv->options = param->options;
 
+	if ((param->options & BT_LE_ADV_OPT_TX_POWER) != 0U) {
+		if (!IN_RANGE(param->tx_power, BT_HCI_LE_ADV_TX_POWER_MIN,
+			      BT_HCI_LE_ADV_TX_POWER_MAX)) {
+			return -EINVAL;
+		}
+	}
+
 	err = bt_id_set_adv_own_addr(adv, param->options, dir_adv,
 				     &own_addr_type);
 	if (err) {
@@ -1074,7 +1090,8 @@ static int le_ext_adv_param_set(struct bt_le_ext_adv *adv,
 	cp->prim_channel_map = get_adv_channel_map(param->options);
 	cp->own_addr_type = own_addr_type;
 	cp->filter_policy = get_filter_policy(param->options);
-	cp->tx_power = BT_HCI_LE_ADV_TX_POWER_NO_PREF;
+	cp->tx_power = (param->options & BT_LE_ADV_OPT_TX_POWER) != 0U ?
+		       param->tx_power : BT_HCI_LE_ADV_TX_POWER_NO_PREF;
 	cp->prim_adv_phy = BT_HCI_LE_PHY_1M;
 
 	if ((param->options & BT_LE_ADV_OPT_EXT_ADV) &&
@@ -1165,7 +1182,7 @@ static int le_ext_adv_param_set(struct bt_le_ext_adv *adv,
 	adv->tx_power = rp->tx_power;
 #endif /* defined(CONFIG_BT_EXT_ADV) */
 
-	net_buf_unref(rsp);
+	net_buf_drop(&rsp);
 
 	atomic_set_bit(adv->flags, BT_ADV_PARAMS_SET);
 
@@ -1192,7 +1209,7 @@ static int le_ext_adv_param_set(struct bt_le_ext_adv *adv,
 	return 0;
 }
 
-int bt_le_adv_start_ext(struct bt_le_ext_adv *adv,
+static int adv_start_ext(struct bt_le_ext_adv *adv,
 			const struct bt_le_adv_param *param,
 			const struct bt_data *ad, size_t ad_len,
 			const struct bt_data *sd, size_t sd_len)
@@ -1215,6 +1232,10 @@ int bt_le_adv_start_ext(struct bt_le_ext_adv *adv,
 
 	if (atomic_test_bit(adv->flags, BT_ADV_ENABLED)) {
 		return -EALREADY;
+	}
+
+	if (IS_ENABLED(CONFIG_BT_SMP) && atomic_test_bit(bt_dev.flags, BT_DEV_ID_PENDING)) {
+		bt_id_pending_keys_update();
 	}
 
 	adv->id = param->id;
@@ -1291,7 +1312,7 @@ int bt_le_adv_start(const struct bt_le_adv_param *param,
 
 	if (IS_ENABLED(CONFIG_BT_EXT_ADV) &&
 	    BT_DEV_FEAT_LE_EXT_ADV(bt_dev.le.features)) {
-		err = bt_le_adv_start_ext(adv, param, ad, ad_len, sd, sd_len);
+		err = adv_start_ext(adv, param, ad, ad_len, sd, sd_len);
 	} else {
 		err = adv_start_legacy(adv, param, ad, ad_len, sd, sd_len);
 	}
@@ -1816,6 +1837,41 @@ int bt_le_per_adv_set_data(const struct bt_le_ext_adv *adv,
 	}
 
 	return hci_set_per_adv_data(adv, ad, ad_len);
+}
+
+int bt_le_per_adv_update_did(const struct bt_le_ext_adv *adv)
+{
+	struct bt_hci_cp_le_set_per_adv_data *cp;
+	struct net_buf *buf;
+
+	if (!BT_FEAT_LE_PER_ADV_ADI_SUPP(bt_dev.le.features)) {
+		return -ENOTSUP;
+	}
+
+	if (adv == NULL) {
+		return -EINVAL;
+	}
+
+	if (!atomic_test_bit(adv->flags, BT_PER_ADV_ENABLED)) {
+		return -EINVAL;
+	}
+
+	if (!atomic_test_bit(adv->flags, BT_PER_ADV_INCLUDE_ADI)) {
+		return -EINVAL;
+	}
+
+	buf = bt_hci_cmd_alloc(K_FOREVER);
+	if (buf == NULL) {
+		return -ENOBUFS;
+	}
+
+	cp = net_buf_add(buf, sizeof(*cp));
+	(void)memset(cp, 0, sizeof(*cp));
+
+	cp->handle = adv->handle;
+	cp->op = BT_HCI_LE_EXT_ADV_OP_UNCHANGED_DATA;
+
+	return bt_hci_cmd_send_sync(BT_HCI_OP_LE_SET_PER_ADV_DATA, buf, NULL);
 }
 
 int bt_le_per_adv_set_subevent_data(const struct bt_le_ext_adv *adv, uint8_t num_subevents,

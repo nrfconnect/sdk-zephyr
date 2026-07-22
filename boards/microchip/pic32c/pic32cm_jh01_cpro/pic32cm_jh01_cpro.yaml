@@ -12,10 +12,14 @@ ram: 64
 supported:
   - adc
   - clock_control
+  - counter
+  - dac
   - dma
   - gpio
   - i2c
   - pinctrl
+  - pwm
   - reset
   - uart
+  - watchdog
 vendor: microchip

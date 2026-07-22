@@ -155,11 +155,40 @@ static int ocpp_connect_to_cs(struct ocpp_info *ctx)
 		zsock_close(ui->tcpsock);
 	}
 
+#if defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS)
+	ui->tcpsock = zsock_socket(ui->csi.sa_family, NET_SOCK_STREAM, NET_IPPROTO_TLS_1_3);
+	if (ui->tcpsock < 0) {
+		ret = -errno;
+		LOG_ERR("Failed to create TLS socket: %d", ret);
+		return ret;
+	}
+
+	ret = zsock_setsockopt(ui->tcpsock, SOL_TLS, TLS_SEC_TAG_LIST, ui->csi.creds.sec_tag_list,
+			       ui->csi.creds.sec_tag_list_size);
+	if (ret < 0) {
+		ret = -errno;
+		LOG_ERR("Failed to set TLS_SEC_TAG_LIST: %d", ret);
+		zsock_close(ui->tcpsock);
+		ui->tcpsock = -1;
+		return ret;
+	}
+
+	ret = zsock_setsockopt(ui->tcpsock, SOL_TLS, TLS_HOSTNAME, ui->csi.creds.tls_hostname,
+			       ui->csi.creds.tls_hostname_size);
+	if (ret < 0) {
+		ret = -errno;
+		LOG_ERR("Failed to set %s: %d", ui->csi.creds.tls_hostname, ret);
+		zsock_close(ui->tcpsock);
+		ui->tcpsock = -1;
+		return ret;
+	}
+#else
 	ui->tcpsock = zsock_socket(ui->csi.sa_family, NET_SOCK_STREAM,
 				   NET_IPPROTO_TCP);
 	if (ui->tcpsock < 0) {
 		return -errno;
 	}
+#endif
 
 	ret = zsock_connect(ui->tcpsock, addr, addr_size);
 	if (ret < 0 && errno != EALREADY && errno != EISCONN) {
@@ -328,9 +357,16 @@ static int ocpp_process_server_msg(struct ocpp_info *ctx)
 
 	if (is_rsp) {
 		buf = strtok_r(uid, "-", &tmp);
+		/* strtok_r returns NULL when no '-' is present; atoi(NULL) is UB. */
+		if (buf == NULL) {
+			return -EINVAL;
+		}
 		sh = (struct ocpp_session *)(uintptr_t)atoi(buf);
 
 		buf = strtok_r(NULL, "-", &tmp);
+		if (buf == NULL) {
+			return -EINVAL;
+		}
 		pdu = atoi(buf);
 
 		if (!ocpp_session_is_valid(sh)) {
@@ -564,6 +600,12 @@ int ocpp_upstream_init(struct ocpp_info *ctx, struct ocpp_cs_info *csi)
 	ui->csi.cs_ip = strdup(csi->cs_ip);
 	ui->csi.port = csi->port;
 	ui->csi.sa_family = csi->sa_family;
+#if defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS)
+	ui->csi.creds.sec_tag_list = csi->creds.sec_tag_list;
+	ui->csi.creds.sec_tag_list_size = csi->creds.sec_tag_list_size;
+	ui->csi.creds.tls_hostname = csi->creds.tls_hostname;
+	ui->csi.creds.tls_hostname_size = csi->creds.tls_hostname_size;
+#endif
 	ui->tcpsock = -1;
 
 	k_mutex_init(&ui->ws_sndlock);

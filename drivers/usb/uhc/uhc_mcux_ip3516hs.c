@@ -27,8 +27,8 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_DECLARE(uhc_mcux);
 
-K_MEM_SLAB_DEFINE_STATIC(mcux_uhc_transfer_pool, sizeof(usb_host_transfer_t),
-			 USB_HOST_CONFIG_MAX_TRANSFERS, sizeof(void *));
+K_MEM_SLAB_DEFINE_STATIC_TYPE(mcux_uhc_transfer_pool, usb_host_transfer_t,
+			      USB_HOST_CONFIG_MAX_TRANSFERS);
 
 #define PRV_DATA_HANDLE(_handle) CONTAINER_OF(_handle, struct uhc_mcux_data, mcux_host)
 
@@ -243,7 +243,7 @@ static int uhc_mcux_driver_preinit(const struct device *dev)
 	return 0;
 }
 
-static const struct uhc_api mcux_uhc_api = {
+static DEVICE_API(uhc, mcux_uhc_api) = {
 	.lock = uhc_mcux_lock,
 	.unlock = uhc_mcux_unlock,
 	.init = uhc_mcux_init,
