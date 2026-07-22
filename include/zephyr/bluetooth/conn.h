@@ -1577,15 +1577,11 @@ int bt_conn_le_read_min_conn_interval(uint16_t *min_interval_us);
 
 /** @brief Set Default Connection Rate Parameters.
  *
- *  Configure the range of Connection Rate values that this device will
- *  accept from a Peripheral initiating a Connection Rate Update procedure.
+ *  Set default connection rate parameters to be used for future connections.
+ *  This command does not affect any existing connection.
+ *  Parameters set for specific connection will always have precedence.
  *
- *  The configured bounds:
- *   - Apply only to connections established after this call.
- *   - Are overridden on a given connection by any
- *     @ref bt_conn_le_conn_rate_request on that connection.
- *
- *  @kconfig_dep{CONFIG_BT_SHORTER_CONNECTION_INTERVALS,CONFIG_BT_CENTRAL}
+ *  @kconfig_dep{CONFIG_BT_SHORTER_CONNECTION_INTERVALS}
  *
  *  @param params Connection rate parameters.
  *
