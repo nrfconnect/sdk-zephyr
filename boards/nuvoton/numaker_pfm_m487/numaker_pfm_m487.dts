@@ -19,7 +19,6 @@
 		led2 = &green_led;
 		sw0 = &sw2;
 		sw1 = &sw3;
-		watchdog0 = &wdt;
 	};
 
 	chosen {
