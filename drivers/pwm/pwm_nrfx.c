@@ -115,10 +115,9 @@ static bool pwm_period_check_and_set(const struct device *dev,
 
 	/* If any other channel is driven by the PWM peripheral, the period
 	 * that is currently set cannot be changed, as this would influence
-	 * the output for that channel, unless previous period was set to 0
-	 * for 100% duty cycle.
+	 * the output for that channel.
 	 */
-	if (((data->pwm_needed & ~BIT(channel)) != 0) && (data->period_cycles != 0)) {
+	if ((data->pwm_needed & ~BIT(channel)) != 0) {
 		LOG_ERR("Incompatible period.");
 		return false;
 	}
