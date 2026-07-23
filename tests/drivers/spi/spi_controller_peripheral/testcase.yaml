@@ -48,6 +48,38 @@ tests:
     integration_platforms:
       - nrf52840dk/nrf52840
 
+  drivers.spi.spi_mode0.incorrect_sck_state:
+    extra_configs:
+      - CONFIG_TESTED_SPI_MODE=0
+      - CONFIG_TEST_INCORRECT_SCK_STATE=y
+    extra_args: EXTRA_DTC_OVERLAY_FILE="250khz.overlay"
+    integration_platforms:
+      - nrf52840dk/nrf52840
+
+  drivers.spi.spi_mode1.incorrect_sck_state:
+    extra_configs:
+      - CONFIG_TESTED_SPI_MODE=1
+      - CONFIG_TEST_INCORRECT_SCK_STATE=y
+    extra_args: EXTRA_DTC_OVERLAY_FILE="500khz.overlay"
+    integration_platforms:
+      - nrf52840dk/nrf52840
+
+  drivers.spi.spi_mode2.incorrect_sck_state:
+    extra_configs:
+      - CONFIG_TESTED_SPI_MODE=2
+      - CONFIG_TEST_INCORRECT_SCK_STATE=y
+    extra_args: EXTRA_DTC_OVERLAY_FILE="1mhz.overlay"
+    integration_platforms:
+      - nrf52840dk/nrf52840
+
+  drivers.spi.spi_mode3.incorrect_sck_state:
+    extra_configs:
+      - CONFIG_TESTED_SPI_MODE=3
+      - CONFIG_TEST_INCORRECT_SCK_STATE=y
+    extra_args: EXTRA_DTC_OVERLAY_FILE="2mhz.overlay"
+    integration_platforms:
+      - nrf52840dk/nrf52840
+
   drivers.spi.spi_1M333333Hz:
     extra_configs:
       - CONFIG_TESTED_SPI_MODE=0
@@ -79,6 +111,20 @@ tests:
     extra_args: EXTRA_DTC_OVERLAY_FILE="8mhz.overlay"
     integration_platforms:
       - nrf52840dk/nrf52840
+
+  drivers.spi.spi_half_duplex:
+    extra_args: EXTRA_DTC_OVERLAY_FILE="half-duplex.overlay"
+    platform_exclude:
+      - nrf52840dk/nrf52840
+      - nrf5340dk/nrf5340/cpuapp
+      - nrf54h20dk/nrf54h20/cpurad
+      - nrf54h20dk/nrf54h20/cpuppr
+      - nrf54l15dk/nrf54l15/cpuapp
+      - nrf54l15dk/nrf54l15/cpuapp/ns
+      - nrf54lm20dk/nrf54lm20a/cpuapp
+      - nrf54lm20dk/nrf54lm20b/cpuapp
+      - nrf7120dk/nrf7120/cpuapp
+      - ophelia4ev/nrf54l15/cpuapp
 
   drivers.spi.spi_fast:
     extra_args: DTC_OVERLAY_FILE="boards/nrf54h20dk_nrf54h20_cpuapp_fast.overlay"
