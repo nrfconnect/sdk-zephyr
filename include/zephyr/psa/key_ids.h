@@ -1,8 +1,8 @@
 /* Copyright (c) 2025 Nordic Semiconductor
  * SPDX-License-Identifier: Apache-2.0
  */
-#ifndef ZEPHYR_PSA_KEY_IDS_H_
-#define ZEPHYR_PSA_KEY_IDS_H_
+#ifndef ZEPHYR_INCLUDE_PSA_KEY_IDS_H_
+#define ZEPHYR_INCLUDE_PSA_KEY_IDS_H_
 
 /**
  * @file zephyr/psa/key_ids.h
@@ -44,8 +44,12 @@ typedef uint32_t psa_key_id_t;
 #define ZEPHYR_PSA_WIFI_CREDENTIALS_KEY_ID_RANGE_BEGIN (psa_key_id_t)0x20010000
 #define ZEPHYR_PSA_WIFI_CREDENTIALS_KEY_ID_RANGE_SIZE  0x100 /* 256 */
 
+/** PSA key ID range to be used by FIDO2. */
+#define ZEPHYR_PSA_FIDO2_KEY_ID_RANGE_BEGIN (psa_key_id_t)0x20011000
+#define ZEPHYR_PSA_FIDO2_KEY_ID_RANGE_SIZE  0x1000 /**< 4 Ki */
+
 /** PSA key ID range to be used by the end-user application. */
 #define ZEPHYR_PSA_APPLICATION_KEY_ID_RANGE_BEGIN (psa_key_id_t)0x30000000
 #define ZEPHYR_PSA_APPLICATION_KEY_ID_RANGE_SIZE  0x100000 /* 1 Mi */
 
-#endif /* ZEPHYR_PSA_KEY_IDS_H_ */
+#endif /* ZEPHYR_INCLUDE_PSA_KEY_IDS_H_ */

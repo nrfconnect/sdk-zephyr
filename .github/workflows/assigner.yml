@@ -25,10 +25,11 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       issues: write        # to add assignees to issues
+      pull-requests: write # posting comments when new users being added.
 
     steps:
     - name: Check out source code
-      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       with:
         fetch-depth: 0
         persist-credentials: false
@@ -84,5 +85,6 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.ZB_PR_ASSIGNER_GITHUB_TOKEN }}
       run: |
-        python  ./scripts/ci/check_maintainer_changes.py  \
-          --repo zephyrproject-rtos/zephyr MAINTAINERS.yml pr_MAINTAINERS.yml
+        python3 ./scripts/ci/check_maintainer_changes.py \
+          --repo zephyrproject-rtos/${{ github.event.repository.name }} \
+          MAINTAINERS.yml pr_MAINTAINERS.yml

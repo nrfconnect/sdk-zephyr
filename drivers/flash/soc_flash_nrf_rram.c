@@ -16,6 +16,7 @@
 #include <hal/nrf_rramc.h>
 
 #include <zephyr/../../drivers/flash/soc_flash_nrf.h>
+#include <soc_secure.h>
 
 /* Note that it is supported to compile this driver for both secure
  * and non-secure images, but non-secure images cannot call
@@ -55,7 +56,6 @@ LOG_MODULE_REGISTER(flash_nrf_rram, CONFIG_FLASH_LOG_LEVEL);
 #define ERASE_VALUE              0xFF
 
 #if CONFIG_TRUSTED_EXECUTION_NONSECURE
-#include <soc_secure.h>
 #if USE_PARTITION_MANAGER
 #include <pm_config.h>
 #endif /* USE_PARTITION_MANAGER */
@@ -405,8 +405,11 @@ static int nrf_rram_read(const struct device *dev, off_t addr, void *data, size_
 #endif
 #endif /* CONFIG_TRUSTED_EXECUTION_NONSECURE */
 
-	memcpy(data, (void *)addr, len);
+	if (soc_secure_flash_range_is_secure((uintptr_t)addr, len)) {
+		return soc_secure_mem_read(data, (void *)addr, len);
+	}
 
+	memcpy(data, (void *)addr, len);
 	return 0;
 }
 

@@ -632,10 +632,6 @@ static int it51xxx_i3cm_i2c_api_transfer(const struct device *dev, struct i2c_ms
 		return -EINVAL;
 	}
 
-	if (num_msgs == 0) {
-		return 0;
-	}
-
 	for (uint8_t i = 0; i < num_msgs; i++) {
 		if (!msgs[i].buf) {
 			return -EINVAL;
@@ -929,10 +925,6 @@ static int it51xxx_i3cm_transfer(const struct device *dev, struct i3c_device_des
 		return -EINVAL;
 	}
 
-	if (num_msgs == 0) {
-		return 0;
-	}
-
 	for (uint8_t i = 0; i < num_msgs; i++) {
 		if (!msgs[i].buf) {
 			return -EINVAL;
@@ -1189,7 +1181,8 @@ static int it51xxx_i3cm_init(const struct device *dev)
 	data->ibi_hj_response = true;
 #endif
 
-	if (cfg->common.dev_list.num_i3c > 0) {
+	if (cfg->common.dev_list.num_i3c > 0 &&
+	    !(cfg->common.flags & I3C_CONTROLLER_FLAG_DISABLE_BUS_INIT)) {
 		ret = i3c_bus_init(dev, &cfg->common.dev_list);
 		if (ret != 0) {
 			/* Perhaps the target device is offline. Avoid returning
@@ -1662,6 +1655,7 @@ static DEVICE_API(i3c, it51xxx_i3cm_api) = {
 		.common.dev_list.num_i3c = ARRAY_SIZE(it51xxx_i3cm_device_array_##n),              \
 		.common.dev_list.i2c = it51xxx_i3cm_i2c_device_array_##n,                          \
 		.common.dev_list.num_i2c = ARRAY_SIZE(it51xxx_i3cm_i2c_device_array_##n),          \
+		.common.flags = I3C_CONTROLLER_CONFIG_FLAGS_DT_INST(n),                            \
 		.pcfg = PINCTRL_DT_INST_DEV_CONFIG_GET(n),                                         \
 		.io_channel = DT_INST_PROP(n, io_channel),                                         \
 		.clocks.i3c_pp_duty_cycle = DT_INST_PROP_OR(n, i3c_pp_duty_cycle, 0),              \

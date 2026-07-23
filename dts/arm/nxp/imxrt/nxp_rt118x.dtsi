@@ -111,6 +111,19 @@
 		reg = <0x4450000 0x4000>;
 		#clock-cells = <3>;
 
+		/*
+		 * ARM PLL is an integer PLL, with an input clock
+		 * of 24MHz. The PLL features a loop divider and
+		 * post divider. The output frequency is calculated
+		 * as Fout = 24MHz * loop-div / (2 * post-div)
+		 */
+		arm_pll: clock {
+			compatible = "nxp,imxrt118x-arm-pll";
+			#clock-cells = <0>;
+			loop-div = <132>;
+			post-div = <2>;
+		};
+
 		lpo: lpo32k {
 			compatible = "fixed-clock";
 			clock-frequency = <DT_FREQ_K(32)>;
@@ -352,6 +365,29 @@
 		status = "disabled";
 	};
 
+	mecc1: mecc@42920000 {
+		compatible = "nxp,mecc";
+		reg = <0x42920000 0x1000>;
+		interrupts = <91 0>;
+		/* OCRAM1 first 16K access is blocked by TRDC.
+		 * in order to enable the normal operation of the mecc function,
+		 * it is necessary to initialize the memory by the CPU in the
+		 * MECC driver. Therefore, reserved it for mecc1 node.
+		 */
+		memory-start-address = <0x20484000>;
+		memory-end-address = <0x204fffff>;
+		status = "disabled";
+	};
+
+	mecc2: mecc@42930000 {
+		compatible = "nxp,mecc";
+		reg = <0x42930000 0x1000>;
+		interrupts = <92 0>;
+		memory-start-address = <0x20500000>;
+		memory-end-address = <0x2053ffff>;
+		status = "disabled";
+	};
+
 	gpt1: timer@46c0000 {
 		compatible = "nxp,imx-gpt";
 		reg = <0x46c0000 0x4000>;
@@ -434,6 +470,19 @@
 		voltage-reference = <2>;
 		status = "disabled";
 		#io-channel-cells = <1>;
+	};
+
+	vref: vref@42e30000 {
+		compatible = "nxp,vref";
+		regulator-name = "mimxrt118x-vref";
+		reg = <0x42e30000 0x30>;
+		status = "disabled";
+		#nxp,reference-cells = <1>;
+		nxp,buffer-startup-delay-us = <400>;
+		nxp,bandgap-startup-time-us = <400>;
+		nxp,current-compensation-en;
+		nxp,internal-voltage-regulator-en;
+		nxp,chop-oscillator-en;
 	};
 
 	qtmr1: timer@2690000 {
@@ -815,6 +864,20 @@
 		status = "disabled";
 	};
 
+	sys_ctr: counter@44290000 {
+		compatible = "nxp,sysctr";
+		reg = <0x44290000 0x1000>,
+		      <0x442b0000 0x1000>,
+		      <0x442a0000 0x1000>;
+		reg-names = "control", "read", "compare";
+		interrupts = <74 0>;
+		clocks = <&ccm IMX_CCM_SYSCTR_BASE_CLK 0x0 0>,
+			 <&ccm IMX_CCM_SYSCTR_SLOW_CLK 0x0 0>;
+		clock-names = "base", "slow";
+		clock-frequency = <DT_FREQ_M(24)>;
+		status = "disabled";
+	};
+
 	lpit1: lpit@442f0000 {
 		compatible = "nxp,lpit";
 		reg = <0x442f0000 0x1000>;
@@ -950,6 +1013,20 @@
 		prescale-glitch-filter-bypass;
 		clk-source = <0>;
 		resolution = <32>;
+		status = "disabled";
+	};
+
+	tstmr1: timer@442c0000 {
+		compatible = "nxp,tstmr";
+		reg = <0x442c0000 0x8>;
+		clock-frequency = <DT_FREQ_M(1)>;
+		status = "disabled";
+	};
+
+	tstmr2: timer@42480000 {
+		compatible = "nxp,tstmr";
+		reg = <0x42480000 0x8>;
+		clock-frequency = <DT_FREQ_M(1)>;
 		status = "disabled";
 	};
 
@@ -1647,6 +1724,7 @@
 		reg = <0x0 DT_SIZE_K(512)>;
 		#address-cells = <1>;
 		#size-cells = <1>;
+		ranges;
 
 		ocram1_available: memory@4000 {
 			/* OCRAM1 first 16K access is blocked by TRDC */

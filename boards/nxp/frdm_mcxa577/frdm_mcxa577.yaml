@@ -15,13 +15,19 @@ toolchain:
   - gnuarmemb
 supported:
   - gpio
+  - arduino_gpio
   - uart
   - counter
   - adc
   - i2c
+  - i3c
   - spi
   - dma
   - watchdog
   - flash
   - netif:eth
+  - edac
+  - can
+  - dac
+  - rtc
 vendor: nxp

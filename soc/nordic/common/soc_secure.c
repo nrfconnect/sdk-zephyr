@@ -60,4 +60,4 @@ int soc_secure_mem_read(void *dst, void *src, size_t len)
 	return -EINVAL;
 }
 
-#endif /* CONFIG_TFM_USE_NS_APP */
+#endif /* !CONFIG_TFM_USE_NS_APP */

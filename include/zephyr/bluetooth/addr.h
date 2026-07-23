@@ -139,6 +139,18 @@ static inline void bt_addr_le_copy(bt_addr_le_t *dst, const bt_addr_le_t *src)
 	memcpy(dst, src, sizeof(*dst));
 }
 
+/** @brief Copy Bluetooth LE device address from Bluetooth device address and type.
+ *
+ *  @param dst Bluetooth LE device address destination buffer.
+ *  @param src Bluetooth device address source buffer.
+ *  @param src_type Bluetooth device address source type.
+ */
+static inline void bt_addr_le_copy_addr(bt_addr_le_t *dst, const bt_addr_t *src, uint8_t src_type)
+{
+	bt_addr_copy(&dst->a, src);
+	dst->type = src_type;
+}
+
 /** Check if a Bluetooth LE random address is resolvable private address. */
 #define BT_ADDR_IS_RPA(a)     (((a)->val[5] & 0xc0) == 0x40)
 /** Check if a Bluetooth LE random address is a non-resolvable private address.
@@ -325,6 +337,31 @@ int bt_addr_from_str(const char *str, bt_addr_t *addr);
  *  @return Zero on success or (negative) error code otherwise.
  */
 int bt_addr_le_from_str(const char *str, const char *type, bt_addr_le_t *addr);
+
+/** @brief Resolve a Bluetooth LE Resolvable Private Address (RPA) to its identity address.
+ *
+ *  This function attempts to resolve a RPA to its corresponding identity
+ *  address (public or random static) using the host Identity Resolving Key
+ *  (IRK) database.
+ *
+ *  @kconfig_dep{CONFIG_BT_PRIVACY}
+ *
+ *  @param[in]  id            Local identity whose IRK database is used.
+ *                            Must be less than @kconfig{CONFIG_BT_ID_MAX}.
+ *  @param[in]  addr          The RPA to resolve.
+ *  @param[out] resolved_addr On success, contains the resolved identity address.
+ *                            This will be either a public address
+ *                            (@ref BT_ADDR_LE_PUBLIC) or random static address
+ *                            (@ref BT_ADDR_LE_RANDOM).
+ *
+ *  @retval 0 Success. The address has been resolved.
+ *            @p resolved_addr contains the identity address.
+ *  @retval -ENOENT @p addr is an RPA but no matching IRK was found in the database.
+ *                  The address could not be resolved.
+ *  @retval -EINVAL Invalid arguments: @p addr or @p resolved_addr is NULL,
+ *                  @p id is invalid, or @p addr is not an RPA.
+ */
+int bt_addr_le_rpa_resolve(uint8_t id, const bt_addr_le_t *addr, bt_addr_le_t *resolved_addr);
 
 /**
  * @}

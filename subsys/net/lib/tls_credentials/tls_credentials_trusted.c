@@ -39,7 +39,7 @@ static struct tls_credential credentials[CRED_MAX_SLOTS];
 static psa_storage_uid_t credentials_toc[CRED_MAX_SLOTS];
 
 /* A mutex for protecting access to the credentials array. */
-static struct k_mutex credential_lock;
+static K_MUTEX_DEFINE(credential_lock);
 
 /* Whether the Table Of Content has been successfully loaded from storage.
  * The backend is loaded lazily on first access (under credential_lock).

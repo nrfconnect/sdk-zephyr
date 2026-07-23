@@ -27,13 +27,15 @@ else()
 endif()
 
 # This is used to pass some extra build parameters to the TF-M build.
-macro(add_tfm_build_params)
-  foreach(param ${ARGN})
-    set_property(TARGET zephyr_property_target
-                 APPEND PROPERTY TFM_CMAKE_OPTIONS
-                 ${param}
-    )
-  endforeach()
+macro(add_tfm_build_params_if_def kconfig)
+  if(${kconfig})
+    foreach(param ${ARGN})
+      set_property(TARGET zephyr_property_target
+                  APPEND PROPERTY TFM_CMAKE_OPTIONS
+                  ${param}
+      )
+    endforeach()
+  endif()
 endmacro()
 
 macro(add_inc_and_src_if_def)
@@ -64,14 +66,21 @@ macro(def_if_def kconfig build_flag)
   endif()
 endmacro()
 
-add_tfm_build_params(
-  -DTEST_S=ON
-  -DTEST_NS=ON
-  -DTFM_S_REG_TEST=ON
-  -DTFM_NS_REG_TEST=ON
+add_tfm_build_params_if_def(TRUE
   -DCONFIG_TFM_TEST_DIR="${ZEPHYR_TF_M_TESTS_MODULE_DIR}/tests_reg/test/secure_regression"
   -DCONFIG_TFM_TEST_CONFIG_FILE="${ZEPHYR_TF_M_TESTS_MODULE_DIR}/tests_reg/test/config/config.cmake"
 )
+
+add_tfm_build_params_if_def(CONFIG_TFM_REGRESSION_S
+  -DTEST_S=ON
+  -DTFM_S_REG_TEST=ON
+)
+
+add_tfm_build_params_if_def(CONFIG_TFM_REGRESSION_NS
+  -DTEST_NS=ON
+  -DTFM_NS_REG_TEST=ON
+)
+
 
 target_sources(app PRIVATE
   ${CMAKE_CURRENT_LIST_DIR}/src/main.c
@@ -120,10 +129,8 @@ def_if_def(CONFIG_TFM_PARTITION_CRYPTO                  TFM_CRYPTO_TEST_SINGLE_P
 def_if_def(CONFIG_PSA_WANT_ALG_CBC_NO_PADDING           TFM_CRYPTO_TEST_ALG_CBC)
 def_if_def(CONFIG_PSA_WANT_ALG_CCM                      TFM_CRYPTO_TEST_ALG_CCM)
 def_if_def(CONFIG_PSA_WANT_ALG_CFB                      TFM_CRYPTO_TEST_ALG_CFB)
-def_if_def(CONFIG_PSA_WANT_ALG_CFB                      TFM_CRYPTO_TEST_ALG_CFB)
 def_if_def(CONFIG_PSA_WANT_ALG_ECB_NO_PADDING           TFM_CRYPTO_TEST_ALG_ECB)
 def_if_def(CONFIG_PSA_WANT_ALG_CTR                      TFM_CRYPTO_TEST_ALG_CTR)
-def_if_def(CONFIG_PSA_WANT_ALG_OFB                      TFM_CRYPTO_TEST_ALG_OFB)
 def_if_def(CONFIG_PSA_WANT_ALG_OFB                      TFM_CRYPTO_TEST_ALG_OFB)
 def_if_def(CONFIG_PSA_WANT_ALG_GCM                      TFM_CRYPTO_TEST_ALG_GCM)
 def_if_def(CONFIG_PSA_WANT_ALG_SHA_224                  TFM_CRYPTO_TEST_ALG_SHA_224)
@@ -337,3 +344,10 @@ add_inc_and_src_if_def(
 )
 def_if_def(CONFIG_TFM_SFN                                 TEST_NS_SFN_BACKEND)
 def_if_def(CONFIG_TFM_SFN                                 TEST_S_SFN_BACKEND)
+
+add_inc_and_src_if_def(
+  KCONFIG
+    CONFIG_TFM_PROFILE_TYPE_SMALL
+  SRC
+    ${TFM_TEST_REG_TEST_PATH}/secure_fw/suites/spm/common/suites/mmiovec_test.c
+)

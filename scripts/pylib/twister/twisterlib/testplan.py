@@ -317,17 +317,8 @@ class TestPlan:
             self._shuffle_instances()
 
     def generate_subset(self, subset, sets):
-        # Test instances are sorted depending on the context. For CI runs
-        # the execution order is: "plat1-testA, plat1-testB, ...,
-        # plat1-testZ, plat2-testA, ...". For hardware tests
-        # (device_testing), were multiple physical platforms can run the tests
-        # in parallel, it is more efficient to run in the order:
-        # "plat1-testA, plat2-testA, ..., plat1-testB, plat2-testB, ..."
-        if self.options.device_testing:
-            self.instances = OrderedDict(sorted(self.instances.items(),
-                                key=lambda x: x[0][x[0].find("/") + 1:]))
-        else:
-            self.instances = OrderedDict(sorted(self.instances.items()))
+        self.instances = OrderedDict(sorted(self.instances.items(),
+                                key=lambda x: (x[1].testsuite.name, x[0])))
 
         if self.options.shuffle_tests:
             if sets > 1 and self.options.shuffle_tests_seed is None:
@@ -477,9 +468,14 @@ class TestPlan:
         arch_roots = self.env.arch_roots
 
         for platform in generate_platforms(board_roots, soc_roots, arch_roots):
+            self.platforms.append(platform)
+
+            # Platforms with `twister: false` are kept in the platform list so
+            # that references to them in test definitions still resolve (and
+            # twister does not abort on unidentified platforms), but they are
+            # never assigned tests nor used as default platforms.
             if not platform.twister:
                 continue
-            self.platforms.append(platform)
 
             if not self.test_config.override_default_platforms:
                 if platform.default:
@@ -821,7 +817,8 @@ class TestPlan:
                                             self.options.enable_asan,
                                             self.options.enable_ubsan,
                                             self.options.enable_coverage,
-                                            self.options.coverage_platform
+                                            self.options.coverage_platform,
+                                            self.options.coverage_per_test
                                             )
                     instance_list.append(instance)
                 self.add_instances(instance_list)
@@ -975,6 +972,10 @@ class TestPlan:
                         missing_required_snippet = this_snippet
                         break
 
+            # Platforms with `twister: false` are listed only so test
+            # references to them resolve; they are never assigned tests.
+            platform_scope = [plat for plat in platform_scope if plat.twister]
+
             # list of instances per testsuite, aka configurations.
             instance_list = []
             for itoolchain, plat in itertools.product(
@@ -991,6 +992,8 @@ class TestPlan:
                         toolchain = 'host/llvm'
                     else:
                         toolchain = 'host/gnu'
+                elif plat.preferred_toolchain:
+                    toolchain = plat.preferred_toolchain
                 else:
                     toolchain = "zephyr" if not self.env.toolchain else self.env.toolchain
 
@@ -1113,7 +1116,12 @@ class TestPlan:
 
                 if ts.harness:
                     sim = plat.simulator_by_name(self.options.sim_name)
-                    if ts.harness == 'robot' and not (sim and sim.name == 'renode'):
+                    robot_targets = [
+                        'renode',
+                        'native',
+                        'qemu'
+                    ]
+                    if ts.harness == 'robot' and not (sim and sim.name in robot_targets):
                         instance.add_filter(
                             "No robot support for the selected platform",
                             Filters.SKIP
@@ -1299,7 +1307,8 @@ class TestPlan:
                                 self.options.enable_asan,
                                 self.options.enable_ubsan,
                                 self.options.enable_coverage,
-                                self.options.coverage_platform)
+                                self.options.coverage_platform,
+                                self.options.coverage_per_test)
 
         self.selected_platforms = set(p.platform.name for p in self.instances.values())
 

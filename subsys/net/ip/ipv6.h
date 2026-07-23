@@ -279,10 +279,10 @@ void net_ipv6_nbr_unlock(void);
  */
 #if defined(CONFIG_NET_IPV6_NBR_CACHE) && defined(CONFIG_NET_NATIVE_IPV6)
 struct net_nbr *net_ipv6_nbr_lookup(struct net_if *iface,
-				    struct net_in6_addr *addr);
+				    const struct net_in6_addr *addr);
 #else
 static inline struct net_nbr *net_ipv6_nbr_lookup(struct net_if *iface,
-						  struct net_in6_addr *addr)
+						  const struct net_in6_addr *addr)
 {
 	return NULL;
 }
@@ -366,6 +366,26 @@ bool net_ipv6_nbr_rm(struct net_if *iface, struct net_in6_addr *addr);
 static inline bool net_ipv6_nbr_rm(struct net_if *iface, struct net_in6_addr *addr)
 {
 	return true;
+}
+#endif
+
+/**
+ * @brief Remove all non-static IPv6 neighbor cache entries of an interface.
+ *
+ * Called when the interface link goes down so that cached neighbor entries,
+ * whose reachability is no longer valid, are re-resolved once the link is
+ * back. Re-resolution emits a Neighbor Solicitation carrying our link-layer
+ * address, letting peers relearn this node. This is the IPv6 counterpart of
+ * clearing the ARP cache on link down.
+ *
+ * @param iface Network interface.
+ */
+#if defined(CONFIG_NET_IPV6_NBR_CACHE) && defined(CONFIG_NET_NATIVE_IPV6)
+void net_ipv6_nbr_clear_cache(struct net_if *iface);
+#else
+static inline void net_ipv6_nbr_clear_cache(struct net_if *iface)
+{
+	ARG_UNUSED(iface);
 }
 #endif
 

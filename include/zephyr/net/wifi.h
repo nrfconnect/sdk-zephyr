@@ -117,10 +117,12 @@ enum wifi_security_type {
 	WIFI_SECURITY_TYPE_WEP_OPEN,
 	/** WEP security with Shared Key authentication. */
 	WIFI_SECURITY_TYPE_WEP_SHARED,
+	/** Opportunistic Wireless Encryption (OWE) security. */
+	WIFI_SECURITY_TYPE_OWE,
 
 	/** @cond INTERNAL_HIDDEN */
 	__WIFI_SECURITY_TYPE_AFTER_LAST,
-	WIFI_SECURITY_TYPE_MAX = __WIFI_SECURITY_TYPE_AFTER_LAST - 1,
+	WIFI_SECURITY_TYPE_MAX = WIFI_SECURITY_TYPE_OWE,
 	WIFI_SECURITY_TYPE_UNKNOWN
 	/** @endcond */
 };
@@ -226,7 +228,7 @@ struct wifi_eap_cipher_config {
 	char *pairwise_cipher;
 	/** Group management cipher string. */
 	char *group_mgmt_cipher;
-	/** Used to confiure TLS features. */
+	/** Used to configure TLS features. */
 	char *tls_flags;
 };
 
@@ -322,6 +324,8 @@ const char *wifi_bandwidth_txt(enum wifi_frequency_bandwidths bandwidth);
 #define WIFI_PSK_MAX_LEN 64
 /** Maximum WEP key length (WEP-104: 26 hex chars) */
 #define WIFI_WEP_KEY_MAX_LEN 26
+/** Length of the PBKDF2 key */
+#define WIFI_PSK_PBKDF2_KEY_LEN 32
 /** Max SAW password length */
 #define WIFI_SAE_PSWD_MAX_LEN 128
 /** MAC address length */
@@ -667,9 +671,14 @@ const char *wifi_ps_wakeup_mode_txt(enum wifi_ps_wakeup_mode ps_wakeup_mode);
  * @brief Wi-Fi power save exit strategy
  */
 enum wifi_ps_exit_strategy {
-	/** PS-Poll frame based */
+	/** Custom algorithm: the driver/firmware decides how to exit power save
+	 *  based on traffic, e.g. by sending a PS-Poll, fully exiting power save,
+	 *  or a mix of both.
+	 */
 	WIFI_PS_EXIT_CUSTOM_ALGO = 0,
-	/** QoS NULL frame based */
+	/** Exit power save on every TIM, typically by sending a QoS NULL (or any
+	 *  data) frame to retrieve the buffered traffic.
+	 */
 	WIFI_PS_EXIT_EVERY_TIM,
 
 /** @cond INTERNAL_HIDDEN */

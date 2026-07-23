@@ -18,7 +18,7 @@ struct driver_data {
 #if CONFIG_MULTITHREADING
 	struct k_sem wake_sem;
 #else
-	atomic_t wake_atom;
+	volatile bool wake_flag;
 #endif
 };
 
@@ -85,7 +85,7 @@ static void spim_wake_handler(const struct device *dev)
 #if CONFIG_MULTITHREADING
 	k_sem_give(&dev_data->wake_sem);
 #else
-	atomic_set(&dev_data->wake_atom, 1);
+	dev_data->wake_flag = true;
 #endif
 }
 
@@ -138,7 +138,7 @@ static int transceive(const struct device *dev,
 #if CONFIG_MULTITHREADING
 	k_sem_reset(&dev_data->wake_sem);
 #else
-	atomic_set(&dev_data->wake_atom, 0);
+	dev_data->wake_flag = false;
 #endif
 
 	spi_nrfx_spim_common_wake_start(dev, spim_wake_handler);
@@ -146,7 +146,7 @@ static int transceive(const struct device *dev,
 #if CONFIG_MULTITHREADING
 	k_sem_take(&dev_data->wake_sem, K_FOREVER);
 #else
-	while (atomic_get(&dev_data->wake_atom) == 0) {
+	while (dev_data->wake_flag == false) {
 	}
 #endif
 

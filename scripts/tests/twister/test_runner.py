@@ -514,8 +514,10 @@ TESTDATA_3 = [
         'other', [], True,
         True, ['dummy', 'west', 'options'], True,
         None, True,
-        os.path.join('domain', 'build', 'dir', 'zephyr', '.config'),
-        os.path.join('domain', 'build', 'dir', 'zephyr', 'edt.pickle'),
+        os.path.join('build', 'dir', 'domain', 'build', 'dir', 'zephyr',
+                     '.config'),
+        os.path.join('build', 'dir', 'domain', 'build', 'dir', 'zephyr',
+                     'edt.pickle'),
         {'CONFIG_FOO': 'no'},
         {'dummy cache elem': 1},
         {'ARCH': 'dummy arch', 'PLATFORM': 'other', 'env_dummy': True,
@@ -659,7 +661,10 @@ def test_filterbuilder_parse_generated(
 ):
     def mock_domains_from_file(*args, **kwargs):
         dom = mock.Mock()
-        dom.build_dir = os.path.join('domain', 'build', 'dir')
+        if sysbuild:
+            dom.build_dir = os.path.join('domain', 'build', 'dir')
+        else:
+            dom.build_dir = 'domain/build/dir'
         res = mock.Mock(get_default_domain=mock.Mock(return_value=dom))
         return res
 
@@ -1069,7 +1074,7 @@ TESTDATA_6 = [
         mock.ANY,
         ['build test: dummy instance name',
          'Determine test cases for test instance: dummy instance name'],
-        {'op': 'gather_metrics', 'test': mock.ANY},
+        {'op': 'post_build', 'test': mock.ANY},
         mock.ANY,
         mock.ANY,
         0,
@@ -1114,7 +1119,7 @@ TESTDATA_6 = [
         mock.ANY,
         ['build test: dummy instance name',
          'Determine test cases for test instance: dummy instance name'],
-        {'op': 'gather_metrics', 'test': mock.ANY},
+        {'op': 'post_build', 'test': mock.ANY},
         mock.ANY,
         mock.ANY,
         0,
@@ -1513,6 +1518,7 @@ def test_projectbuilder_process(
     pb.options.prep_artifacts_for_testing = options_prep_artifacts
     pb.options.runtime_artifact_cleanup = options_runtime_artifacts
     pb.options.cmake_only = options_cmake_only
+    pb.options.post_build_checks = True
     pb.options.outdir = tmp_path
     pb.options.log_file = None
     pb.options.log_level = "DEBUG"
@@ -1549,6 +1555,46 @@ def test_projectbuilder_process(
 
     if expected_missing:
         pb.instance.add_missing_case_status.assert_called_with(*expected_missing)
+
+
+@pytest.mark.parametrize(
+    'post_build_checks',
+    [True, False],
+    ids=['enabled', 'disabled']
+)
+def test_projectbuilder_process_post_build_transition(
+    mocked_jobserver, tmp_path, post_build_checks
+):
+    """A successful build always transitions to 'post_build', regardless of
+    whether the optional post-build checks are enabled. The post_build stage
+    itself decides whether to run those checks.
+    """
+    instance_mock = mock.Mock()
+    instance_mock.name = 'dummy instance name'
+    instance_mock.status = 'success'
+    instance_mock.testsuite.harness = 'test'
+    env_mock = mock.Mock()
+
+    pb = ProjectBuilder(instance_mock, env_mock, mocked_jobserver)
+    pb.options = mock.Mock()
+    pb.options.post_build_checks = post_build_checks
+    pb.options.outdir = tmp_path
+    pb.options.log_file = None
+    pb.options.log_level = "DEBUG"
+
+    pb.build = mock.Mock(return_value={'returncode': 0})
+    pb.determine_testcases = mock.Mock()
+
+    processing_queue_mock = mock.Mock()
+    lock_mock = mock.Mock(
+        __enter__=mock.Mock(return_value=(mock.Mock(), mock.Mock())),
+        __exit__=mock.Mock(return_value=None)
+    )
+    results_mock = mock.Mock()
+
+    pb.process(processing_queue_mock, mock.Mock(), {'op': 'build'}, lock_mock, results_mock)
+
+    processing_queue_mock.append.assert_called_with({'op': 'post_build', 'test': mock.ANY})
 
 
 TESTDATA_7 = [
@@ -1762,7 +1808,63 @@ def test_projectbuilder_cleanup_device_testing_artifacts(
 
     pb.cleanup_artifacts.assert_called_once_with(
         [os.path.join('zephyr', 'file.bin'),
-         os.path.join('zephyr', 'runners.yaml')]
+         os.path.join('zephyr', 'runners.yaml'),
+         os.path.join('zephyr', 'edt.pickle')]
+    )
+    pb._sanitize_files.assert_called_once()
+
+
+def test_projectbuilder_cleanup_device_testing_artifacts_sysbuild(
+    caplog,
+    mocked_jobserver
+):
+    bins = [os.path.join('zephyr', 'file.bin')]
+
+    instance_mock = mock.Mock()
+    instance_mock.sysbuild = True
+    instance_mock.domains = mock.Mock()
+    domain_main = mock.Mock()
+    domain_main.name = 'main'
+    domain_ipc_radio = mock.Mock()
+    domain_ipc_radio.name = 'ipc_radio'
+    instance_mock.domains.get_domains.return_value = [
+        domain_main,
+        domain_ipc_radio,
+    ]
+    build_dir = os.path.join('build', 'dir')
+    instance_mock.build_dir = build_dir
+    env_mock = mock.Mock()
+
+    pb = ProjectBuilder(instance_mock, env_mock, mocked_jobserver)
+    pb._get_binaries = mock.Mock(return_value=bins)
+    pb.cleanup_artifacts = mock.Mock()
+    pb._sanitize_files = mock.Mock()
+
+    pb.cleanup_device_testing_artifacts()
+
+    assert f'Cleaning up for Device Testing {build_dir}' in caplog.text
+
+    pb.cleanup_artifacts.assert_called_once_with(
+        [
+            os.path.join('zephyr', 'file.bin'),
+            os.path.join('zephyr', 'runners.yaml'),
+            os.path.join('zephyr', 'edt.pickle'),
+            'domains.yaml',
+            os.path.join('main', 'build.ninja'),
+            os.path.join('main', 'CMakeCache.txt'),
+            os.path.join('main', 'CMakeFiles', 'rules.ninja'),
+            os.path.join('main', 'Makefile'),
+            os.path.join('main', 'zephyr', '.config'),
+            os.path.join('main', 'zephyr', 'runners.yaml'),
+            os.path.join('main', 'zephyr', 'edt.pickle'),
+            os.path.join('ipc_radio', 'build.ninja'),
+            os.path.join('ipc_radio', 'CMakeCache.txt'),
+            os.path.join('ipc_radio', 'CMakeFiles', 'rules.ninja'),
+            os.path.join('ipc_radio', 'Makefile'),
+            os.path.join('ipc_radio', 'zephyr', '.config'),
+            os.path.join('ipc_radio', 'zephyr', 'runners.yaml'),
+            os.path.join('ipc_radio', 'zephyr', 'edt.pickle'),
+        ]
     )
     pb._sanitize_files.assert_called_once()
 
@@ -1874,6 +1976,7 @@ def test_projectbuilder_get_binaries_from_runners(
 
 def test_projectbuilder_sanitize_files(mocked_jobserver):
     instance_mock = mock.Mock()
+    instance_mock.sysbuild = False
     env_mock = mock.Mock()
 
     pb = ProjectBuilder(instance_mock, env_mock, mocked_jobserver)
@@ -1882,43 +1985,96 @@ def test_projectbuilder_sanitize_files(mocked_jobserver):
 
     pb._sanitize_files()
 
-    pb._sanitize_runners_file.assert_called_once()
-    pb._sanitize_zephyr_base_from_files.assert_called_once()
+    pb._sanitize_runners_file.assert_called_once_with()
+    pb._sanitize_zephyr_base_from_files.assert_called_once_with()
+
+
+
+def test_projectbuilder_sanitize_files_sysbuild(mocked_jobserver):
+    instance_mock = mock.Mock()
+    instance_mock.sysbuild = True
+    instance_mock.domains = mock.Mock()
+    domain_main = mock.Mock()
+    domain_main.name = 'main'
+    domain_ipc_radio = mock.Mock()
+    domain_ipc_radio.name = 'ipc_radio'
+    instance_mock.domains.get_domains.return_value = [
+        domain_main,
+        domain_ipc_radio,
+    ]
+    env_mock = mock.Mock()
+
+    pb = ProjectBuilder(instance_mock, env_mock, mocked_jobserver)
+    pb._sanitize_runners_file = mock.Mock()
+    pb._sanitize_zephyr_base_from_files = mock.Mock()
+
+    pb._sanitize_files()
+
+    assert pb._sanitize_runners_file.call_args_list == [
+        mock.call(),
+        mock.call('main'),
+        mock.call('ipc_radio'),
+    ]
+    assert pb._sanitize_zephyr_base_from_files.call_args_list == [
+        mock.call(),
+        mock.call('main'),
+        mock.call('ipc_radio'),
+    ]
 
 
 
 TESTDATA_11 = [
-    (None, None),
-    ('dummy: []', None),
+    (None, None, None),
+    ('no-config', None, None),
     (
-"""
-config:
-  elf_file: relative/path/dummy.elf
-  hex_file: /absolute/path/build_dir/zephyr/dummy.hex
-""",
-"""
+        os.path.abspath(os.path.join(os.sep, 'absolute', 'path', 'build_dir', 'zephyr', 'dummy.hex')),
+        """
 config:
   elf_file: relative/path/dummy.elf
   hex_file: dummy.hex
-"""
+""",
+        None,
+    ),
+    (
+        os.path.abspath(
+            os.path.join(os.sep, 'absolute', 'path', 'build_dir', 'ipc_radio', 'zephyr', 'dummy.hex')
+        ),
+        """
+config:
+  elf_file: relative/path/dummy.elf
+  hex_file: dummy.hex
+""",
+        'ipc_radio',
     ),
 ]
 
 @pytest.mark.parametrize(
-    'runners_text, expected_write_text',
+    'binary_path, expected_write_text, domain',
     TESTDATA_11,
-    ids=['no file', 'no config', 'valid']
+    ids=['no file', 'no config', 'valid', 'valid domain']
 )
 def test_projectbuilder_sanitize_runners_file(
     mocked_jobserver,
-    runners_text,
-    expected_write_text
+    binary_path,
+    expected_write_text,
+    domain,
 ):
+    if binary_path is None:
+        runners_text = None
+    elif binary_path == 'no-config':
+        runners_text = 'dummy: []'
+    else:
+        runners_text = f"""
+config:
+  elf_file: relative/path/dummy.elf
+  hex_file: {binary_path}
+"""
+
     def mock_exists(fname):
         return runners_text is not None
 
     instance_mock = mock.Mock()
-    instance_mock.build_dir = '/absolute/path/build_dir'
+    instance_mock.build_dir = os.path.abspath(os.path.join(os.sep, 'absolute', 'path', 'build_dir'))
     env_mock = mock.Mock()
 
     pb = ProjectBuilder(instance_mock, env_mock, mocked_jobserver)
@@ -1926,7 +2082,7 @@ def test_projectbuilder_sanitize_runners_file(
     with mock.patch('os.path.exists', mock_exists), \
          mock.patch('builtins.open',
                     mock.mock_open(read_data=runners_text)) as f:
-        pb._sanitize_runners_file()
+        pb._sanitize_runners_file(domain or '')
 
     if expected_write_text is not None:
         f().write.assert_called_with(expected_write_text)
@@ -2245,6 +2401,109 @@ def test_projectbuilder_build(mocked_jobserver):
     assert res == {'dummy': 'dummy'}
 
 
+def test_projectbuilder_check_no_nested_git_repos(mocked_jobserver, tmp_path):
+    instance_mock = mock.Mock()
+    instance_mock.build_dir = str(tmp_path)
+    env_mock = mock.Mock()
+
+    pb = ProjectBuilder(instance_mock, env_mock, mocked_jobserver)
+
+    # Clean build directory: no nested git repository.
+    assert pb.check_no_nested_git_repos() is None
+
+    # A '.git' directory cloned somewhere under the build directory must fail.
+    nested = tmp_path / 'subproject'
+    (nested / '.git').mkdir(parents=True)
+    reason = pb.check_no_nested_git_repos()
+    assert reason is not None
+    assert os.path.join('subproject', '.git') in reason
+
+
+def test_projectbuilder_check_no_nested_git_repos_gitfile(mocked_jobserver, tmp_path):
+    instance_mock = mock.Mock()
+    instance_mock.build_dir = str(tmp_path)
+    env_mock = mock.Mock()
+
+    pb = ProjectBuilder(instance_mock, env_mock, mocked_jobserver)
+
+    # A '.git' file (e.g. a git submodule/worktree pointer) must also fail.
+    (tmp_path / '.git').write_text('gitdir: /elsewhere')
+    reason = pb.check_no_nested_git_repos()
+    assert reason is not None
+    assert '.git' in reason
+
+
+def test_projectbuilder_post_build_pass(mocked_jobserver):
+    instance_mock = mock.Mock()
+    env_mock = mock.Mock()
+
+    pb = ProjectBuilder(instance_mock, env_mock, mocked_jobserver)
+    pb.options.post_build_checks = True
+    pb._simulator_unavailable_reason = mock.Mock(return_value=None)
+    pb.check_no_nested_git_repos = mock.Mock(return_value=None)
+
+    assert pb.post_build() == {'returncode': 0}
+
+
+def test_projectbuilder_post_build_fail(mocked_jobserver):
+    instance_mock = mock.Mock()
+    instance_mock.name = 'dummy instance name'
+    env_mock = mock.Mock()
+
+    pb = ProjectBuilder(instance_mock, env_mock, mocked_jobserver)
+    pb.options.post_build_checks = True
+    pb._simulator_unavailable_reason = mock.Mock(return_value=None)
+    pb.check_no_nested_git_repos = mock.Mock(
+        return_value='cloned repo found', __name__='check_no_nested_git_repos'
+    )
+
+    res = pb.post_build()
+    assert res['returncode'] == 1
+    assert res['reason'] == 'cloned repo found'
+
+
+def test_projectbuilder_post_build_checks_skipped(mocked_jobserver):
+    """When --post-build-checks is not set, the optional checks are skipped
+    but post_build still succeeds (and other processing still runs).
+    """
+    instance_mock = mock.Mock()
+    env_mock = mock.Mock()
+
+    pb = ProjectBuilder(instance_mock, env_mock, mocked_jobserver)
+    pb.options.post_build_checks = False
+    pb._simulator_unavailable_reason = mock.Mock(return_value=None)
+    pb.check_no_nested_git_repos = mock.Mock(
+        return_value='cloned repo found', __name__='check_no_nested_git_repos'
+    )
+
+    assert pb.post_build() == {'returncode': 0}
+    pb.check_no_nested_git_repos.assert_not_called()
+
+
+def test_projectbuilder_post_build_simulator_unavailable(mocked_jobserver):
+    """A runnable instance whose configure-time simulator binary is missing is
+    marked as not run during post_build, without failing the build.
+    """
+    instance_mock = mock.Mock()
+    instance_mock.name = 'dummy instance name'
+    instance_mock.run = True
+    env_mock = mock.Mock()
+
+    pb = ProjectBuilder(instance_mock, env_mock, mocked_jobserver)
+    pb.options.post_build_checks = False
+    pb._simulator_unavailable_reason = mock.Mock(
+        return_value='armfvp simulator binary not found'
+    )
+
+    assert pb.post_build() == {'returncode': 0}
+    assert instance_mock.run is False
+    assert instance_mock.status == TwisterStatus.NOTRUN
+    assert instance_mock.reason == 'armfvp simulator binary not found'
+    instance_mock.add_missing_case_status.assert_called_once_with(
+        TwisterStatus.NOTRUN, 'armfvp simulator binary not found'
+    )
+
+
 TESTDATA_14 = [
     (
         True,
@@ -2357,6 +2616,90 @@ def test_projectbuilder_run(
 
     if expect_handle:
         pb.instance.handler.handle.assert_called_once_with(harness_mock)
+
+
+TESTDATA_SIM_UNAVAILABLE = [
+    # No simulator selected for the platform.
+    (None, None, None),
+    # Simulator that does not resolve its binary at configure time.
+    ('qemu', None, None),
+    # Arm FVP binary found at configure time.
+    ('armfvp', '/opt/fvp/FVP_Base', None),
+    # Arm FVP binary not found at configure time.
+    ('armfvp', 'ARMFVP-NOTFOUND', 'armfvp simulator binary not found'),
+    # Arm FVP cache variable missing entirely.
+    ('armfvp', 'missing', 'armfvp simulator binary not found'),
+]
+
+
+@pytest.mark.parametrize(
+    'sim_name, armfvp_value, expected_reason',
+    TESTDATA_SIM_UNAVAILABLE,
+    ids=['no sim', 'non-configure sim', 'fvp found', 'fvp not found', 'fvp missing']
+)
+def test_projectbuilder_simulator_unavailable_reason(
+    mocked_jobserver,
+    tmp_path,
+    sim_name,
+    armfvp_value,
+    expected_reason
+):
+    instance_mock = mock.Mock()
+    instance_mock.build_dir = str(tmp_path)
+    instance_mock.sysbuild = False
+    if sim_name is None:
+        instance_mock.platform.simulator_by_name = mock.Mock(return_value=None)
+    else:
+        simulator_mock = mock.Mock()
+        simulator_mock.name = sim_name
+        instance_mock.platform.simulator_by_name = mock.Mock(return_value=simulator_mock)
+
+    if armfvp_value == 'missing':
+        # CMakeCache exists but has no ARMFVP entry.
+        with open(os.path.join(str(tmp_path), 'CMakeCache.txt'), 'w') as f:
+            f.write('SOME_OTHER_VAR:STRING=value\n')
+    elif armfvp_value is not None:
+        with open(os.path.join(str(tmp_path), 'CMakeCache.txt'), 'w') as f:
+            f.write(f'ARMFVP:FILEPATH={armfvp_value}\n')
+
+    env_mock = mock.Mock()
+    pb = ProjectBuilder(instance_mock, env_mock, mocked_jobserver)
+    pb.options = mock.Mock()
+    pb.options.sim_name = sim_name
+
+    assert pb._simulator_unavailable_reason() == expected_reason
+
+
+def test_projectbuilder_simulator_unavailable_reason_sysbuild(
+    mocked_jobserver, tmp_path
+):
+    """For sysbuild builds, the simulator variable is read from the default
+    domain's CMakeCache, not the top-level build directory.
+    """
+    domain_build = tmp_path / 'my_app'
+    domain_build.mkdir()
+    with open(os.path.join(str(domain_build), 'CMakeCache.txt'), 'w') as f:
+        f.write('ARMFVP:FILEPATH=ARMFVP-NOTFOUND\n')
+    # A stray top-level cache with the binary present must be ignored.
+    with open(os.path.join(str(tmp_path), 'CMakeCache.txt'), 'w') as f:
+        f.write('ARMFVP:FILEPATH=/opt/fvp/FVP_Base\n')
+
+    instance_mock = mock.Mock()
+    instance_mock.build_dir = str(tmp_path)
+    instance_mock.sysbuild = True
+    simulator_mock = mock.Mock()
+    simulator_mock.name = 'armfvp'
+    instance_mock.platform.simulator_by_name = mock.Mock(return_value=simulator_mock)
+
+    env_mock = mock.Mock()
+    pb = ProjectBuilder(instance_mock, env_mock, mocked_jobserver)
+    pb.options = mock.Mock()
+    pb.options.sim_name = 'armfvp'
+
+    domains_mock = mock.Mock()
+    domains_mock.get_default_domain.return_value.build_dir = 'my_app'
+    with mock.patch('twisterlib.runner.Domains.from_file', return_value=domains_mock):
+        assert pb._simulator_unavailable_reason() == 'armfvp simulator binary not found'
 
 
 TESTDATA_15 = [

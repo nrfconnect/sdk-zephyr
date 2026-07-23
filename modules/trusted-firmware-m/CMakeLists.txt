@@ -240,7 +240,7 @@ if(CONFIG_BUILD_WITH_TFM)
       )
   endif()
 
-  if(CONFIG_TFM_ZEPHYR_4_0_TO_4_2_COMPATIBILITY)
+  if(CONFIG_TFM_ZEPHYR_4_2_COMPATIBILITY)
     list(APPEND TFM_CMAKE_ARGS -DPROFILE_DEFINITION_LARGE=ON)
   endif()
 
@@ -275,19 +275,6 @@ if(CONFIG_BUILD_WITH_TFM)
     list(APPEND TFM_CMAKE_ARGS
       -DSTM32_FLASH_LAYOUT_BEGIN_OFFSET=${CONFIG_TFM_STM32_FLASH_LAYOUT_BEGIN_OFFSET}
     )
-  endif()
-
-  if(CONFIG_SOC_SERIES_PSE84)
-    include(${ZEPHYR_BASE}/soc/infineon/edge/pse84/pse84_metadata.cmake)
-    list(APPEND TFM_CMAKE_ARGS -DIFX_EPC=epc2)
-  endif()
-
-  # By default TF-M installs TF-PSA-Crypto include files in the build directory,
-  # but this will duplicate what's already provided by the TF-PSA-Crypto library
-  # itself. Disable this, unless CONFIG_TFM_USE_NS_APP is set because in that
-  # case the NS app is built in a completely different way than what Zephyr does.
-  if(NOT CONFIG_TFM_USE_NS_APP)
-    list(APPEND TFM_CMAKE_ARGS -DTFM_INSTALL_TF_PSA_CRYPTO_HEADERS=OFF)
   endif()
 
   # By default TF-M installs TF-PSA-Crypto include files in the build directory,

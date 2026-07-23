@@ -60,6 +60,7 @@
 	aliases {
 		led0 = &green_led;
 		led1 = &red_led;
+		rtc = &rtc;
 		sw0 = &user_button;
 		die-temp0 = &die_temp;
 	};
@@ -268,5 +269,9 @@
 	pinctrl-0 = <&usart1_tx_pb6 &usart1_rx_pb7>;
 	pinctrl-names = "default";
 	current-speed = <115200>;
+	status = "okay";
+};
+
+zephyr_jpegenc: &jpeg {
 	status = "okay";
 };

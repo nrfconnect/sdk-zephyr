@@ -61,11 +61,14 @@ CLOCK_STM32_SYSCLK_SRC_
 CMD_CACHE  # Defined in U-Boot, mentioned in docs
 CMU
 COMPILER_RT_RTLIB
+CPU_V7  # U-Boot boards/luckfox/pico_ultra
 CRC  # Used in TI CC13x2 / CC26x2 SDK comment
 DEEP_SLEEP  # #defined by RV32M1 in ext/
 DESCRIPTION
 DT_HAS_  # example from doc/build/dts/dt-vs-kconfig.rst
+EFI_LOADER  # U-Boot boards/luckfox/pico_ultra
 ERR
+ERRNO_STR  # U-Boot boards/luckfox/pico_ultra
 ESP_DIF_LIBRARY  # Referenced in CMake comment
 EXPERIMENTAL
 EXTRA_FIRMWARE_DIR  # Linux, in boards/xtensa/intel_adsp_cavs25/doc
@@ -123,6 +126,7 @@ NRF_WIFI_FW_BIN  # Directly passed from CMakeLists.txt
 OPT
 OPT_0
 PEDO_THS_MIN
+PROBE  # SOF probe feature, defined in SOF's Kconfig, used in soc/amd/acp_7_x headers
 PSA_H  # This is used in config-psa.h as guard for the header file
 REG1
 REG2
@@ -133,15 +137,19 @@ SHIFT
 SINGLE_APPLICATION_SLOT  # Used in sysbuild for MCUboot configuration
 SINGLE_APPLICATION_SLOT_RAM_LOAD  # Used in sysbuild for MCUboot configuration
 SOC_SDKNG_UNSUPPORTED  # Used in modules/hal_nxp/mcux/CMakeLists.txt
+RL_API_HAS_ZEROCOPY  # Provided by RPMSG-Lite integration Kconfig (hal_nxp)
+RL_USE_STATIC_API  # Provided by RPMSG-Lite integration Kconfig (hal_nxp)
 SOC_SERIES_  # Used as regex in scripts/utils/board_v1_to_v2.py
 SOC_WATCH  # Issue 13749
 SOME_BOOL
 SOME_INT
 SOME_OTHER_BOOL
 SOME_STRING
+SPL_GZIP  # U-Boot, boards/luckfox/pico_ultra
 SRAM2  # Referenced in a comment in samples/application_development
 STACK_SIZE  # Used as an example in the Kconfig docs
 STD_CPP  # Referenced in CMake comment
+SYMBOL # used as an example in ci scripts
 TEST1
 TFM_SPM_BACKEND_IPC  # Used in TFM sample dummy partition - belongs to TFM
 TFM_SPM_BACKEND_SFN  # Used in TFM sample dummy partition - belongs to TFM
@@ -160,5 +168,6 @@ USE_STDC_
 WHATEVER
 ZEPHYR_TRY_MASS_ERASE  # MCUBoot setting described in sysbuild documentation
 ZTEST_FAIL_TEST_  # regex in tests/ztest/fail/CMakeLists.txt
+ZVFS_EVENTFD_ADD_SIZE_  # Used as an option matching prefix
 ZVFS_OPEN_ADD_SIZE_  # Used as an option matching prefix
 # zephyr-keep-sorted-stop

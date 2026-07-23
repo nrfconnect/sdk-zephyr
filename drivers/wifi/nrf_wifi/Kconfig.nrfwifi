@@ -636,10 +636,10 @@ if NETWORKING
 # Note: These will take effect only if the symbol is not defined already
 # (i.e., the original symbol is processed after "drivers/Kconfig")
 config NET_TX_STACK_SIZE
-	default 4096
+	default 4096 if !NRF70_SCAN_ONLY
 
 config NET_RX_STACK_SIZE
-	default 4096
+	default 4096 if !NRF70_SCAN_ONLY
 
 config NET_TC_TX_COUNT
 	default 1
@@ -882,6 +882,7 @@ config NRF_WIFI_MGMT_BUFF_OFFLOAD
 config NRF_WIFI_FEAT_KEEPALIVE
 	bool "Wi-Fi keepalive feature for connection maintenance"
 	depends on NRF70_STA_MODE
+	default y
 	help
 	  Enable the Wi-Fi keepalive feature to keep the connection alive by sending
 	  keepalive packets to the AP. This feature is primarily intended to interoperate with APs
@@ -950,7 +951,7 @@ config NRF_WIFI_DISPLAY_SCAN_ABORT_ON_BSS_LIMIT
 if NETWORKING
 config NRF_WIFI_ZERO_COPY_TX
 	bool "Zero copy Transmit path"
-	select NET_L2_ETHERNET_RESERVE_HEADER
+	select NET_L2_ETHERNET_EXTRA_TX_PKT_HEADROOM
 	# 54L has lower RAM
 	default y if SOC_SERIES_NRF54L
 	help

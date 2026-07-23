@@ -324,25 +324,21 @@
 			status = "disabled";
 		};
 
-		eth0: ethernet@5800a000 {
+		eth0: mac0: ethernet@5800a000 {
+			compatible = "st,stm32mp13-ethernet", "st,stm32h7-ethernet",
+				     "st,stm32-ethernet";
 			reg = <0x5800a000 0x2000>;
-			compatible = "st,stm32-ethernet-controller";
 			clock-names = "stm-eth", "mac-clk", "mac-clk-tx", "mac-clk-rx", "eth-ker";
 			clocks = <&rcc STM32_CLOCK(AHB6, 7)>,
 				 <&rcc STM32_CLOCK(AHB6, 8)>,
 				 <&rcc STM32_CLOCK(AHB6, 9)>,
 				 <&rcc STM32_CLOCK(AHB6, 10)>,
 				 <&rcc STM32_SRC_PLL4_Q ETH1_SEL(0)>;
+			interrupts = <GIC_SPI 62 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>,
+				     <GIC_SPI 63 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>;
+			status = "disabled";
 
-			mac: ethernet {
-				compatible = "st,stm32mp13-ethernet", "st,stm32h7-ethernet",
-					     "st,stm32-ethernet";
-				interrupts = <GIC_SPI 62 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>,
-					     <GIC_SPI 63 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>;
-				status = "disabled";
-			};
-
-			mdio: mdio {
+			mdio0: mdio {
 				compatible = "st,stm32-mdio";
 				#address-cells = <1>;
 				#size-cells = <0>;
@@ -355,6 +351,16 @@
 			reg = <0x58009000 0x1000>;
 			clocks = <&rcc STM32_CLOCK(AHB6, 20)>;
 			resets = <&rctl STM32_RESET(AHB6, 20)>;
+			status = "disabled";
+		};
+
+		rtc: rtc@5c004000 {
+			compatible = "st,stm32-rtc";
+			reg = <0x5c004000 0x400>;
+			interrupts = <GIC_SPI 3 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>;
+			clocks = <&rcc STM32_CLOCK(APB5, 8)>;
+			alarms-count = <2>;
+			alrm-exti-line = <19>;
 			status = "disabled";
 		};
 	};
@@ -390,6 +396,20 @@
 		clk_hsi: clk-hsi {
 			#clock-cells = <0>;
 			compatible = "fixed-clock";
+			status = "disabled";
+		};
+
+		clk_lse: clk-lse {
+			#clock-cells = <0>;
+			compatible = "fixed-clock";
+			clock-frequency = <32768>;
+			status = "disabled";
+		};
+
+		clk_lsi: clk-lsi {
+			#clock-cells = <0>;
+			compatible = "fixed-clock";
+			clock-frequency = <DT_FREQ_K(32)>;
 			status = "disabled";
 		};
 
