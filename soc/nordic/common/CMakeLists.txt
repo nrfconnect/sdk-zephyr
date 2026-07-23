@@ -27,9 +27,11 @@ if(CONFIG_HAS_NORDIC_DMM)
   zephyr_library_sources(dmm.c)
 endif()
 
-if(CONFIG_NRFX_GPPI AND NOT CONFIG_NRFX_GPPI_V1)
+if(CONFIG_NRFX_GPPI)
   zephyr_library_sources(gppi_init.c)
   zephyr_library_sources_ifdef(CONFIG_NRFX_GPPI_SD2PPI_GLOBAL nrfx_gppi_sd2ppi_global.c)
+  zephyr_library_sources_ifdef(CONFIG_GPPI_EXT_ALLOCATOR gppi_ext_allocator.c)
+  zephyr_library_sources_ifdef(CONFIG_GPPI_EXT_ALLOCATOR_CLI gppi_ext_allocator_cli.c)
 endif()
 
 if(CONFIG_TFM_PARTITION_PLATFORM)
