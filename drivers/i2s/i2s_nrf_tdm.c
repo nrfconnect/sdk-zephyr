@@ -459,6 +459,16 @@ static int tdm_nrf_configure(const struct device *dev, enum i2s_dir dir,
 	uint32_t chan_mask = 0;
 	uint8_t extra_channels = 0;
 	uint8_t max_num_of_channels = NRFX_TDM_NUM_OF_CHANNELS;
+#if NRF_TDM_HAS_CONFIG_FSYNC_DURATION_ENUM
+	i2s_fmt_t data_format = tdm_cfg->format & I2S_FMT_DATA_FORMAT_MASK;
+	const nrf_tdm_fsync_duration_t fsync_duration =
+		(data_format == I2S_FMT_DATA_FORMAT_PCM_SHORT ||
+		 data_format == I2S_FMT_DATA_FORMAT_PCM_LONG)
+			? NRF_TDM_FSYNC_DURATION_SCK
+			: NRF_TDM_FSYNC_DURATION_CHANNEL;
+#else
+	const nrf_tdm_fsync_duration_t fsync_duration = tdm_cfg->word_size;
+#endif
 
 	if (drv_data->state != I2S_STATE_READY) {
 		LOG_ERR("Cannot configure in state: %d", drv_data->state);
@@ -510,7 +520,7 @@ static int tdm_nrf_configure(const struct device *dev, enum i2s_dir dir,
 		nrfx_cfg.alignment = NRF_TDM_ALIGN_LEFT;
 		nrfx_cfg.fsync_polarity = NRF_TDM_POLARITY_NEGEDGE;
 		nrfx_cfg.sck_polarity = NRF_TDM_POLARITY_POSEDGE;
-		nrfx_cfg.fsync_duration = NRF_TDM_FSYNC_DURATION_CHANNEL;
+		nrfx_cfg.fsync_duration = fsync_duration;
 		nrfx_cfg.channel_delay = NRF_TDM_CHANNEL_DELAY_1CK;
 		max_num_of_channels = 2;
 		break;
@@ -518,7 +528,7 @@ static int tdm_nrf_configure(const struct device *dev, enum i2s_dir dir,
 		nrfx_cfg.alignment = NRF_TDM_ALIGN_LEFT;
 		nrfx_cfg.fsync_polarity = NRF_TDM_POLARITY_POSEDGE;
 		nrfx_cfg.sck_polarity = NRF_TDM_POLARITY_POSEDGE;
-		nrfx_cfg.fsync_duration = NRF_TDM_FSYNC_DURATION_CHANNEL;
+		nrfx_cfg.fsync_duration = fsync_duration;
 		nrfx_cfg.channel_delay = NRF_TDM_CHANNEL_DELAY_NONE;
 		max_num_of_channels = 2;
 		break;
@@ -526,7 +536,7 @@ static int tdm_nrf_configure(const struct device *dev, enum i2s_dir dir,
 		nrfx_cfg.alignment = NRF_TDM_ALIGN_RIGHT;
 		nrfx_cfg.fsync_polarity = NRF_TDM_POLARITY_POSEDGE;
 		nrfx_cfg.sck_polarity = NRF_TDM_POLARITY_POSEDGE;
-		nrfx_cfg.fsync_duration = NRF_TDM_FSYNC_DURATION_CHANNEL;
+		nrfx_cfg.fsync_duration = fsync_duration;
 		nrfx_cfg.channel_delay = NRF_TDM_CHANNEL_DELAY_NONE;
 		max_num_of_channels = 2;
 		break;
@@ -534,14 +544,14 @@ static int tdm_nrf_configure(const struct device *dev, enum i2s_dir dir,
 		nrfx_cfg.alignment = NRF_TDM_ALIGN_LEFT;
 		nrfx_cfg.fsync_polarity = NRF_TDM_POLARITY_NEGEDGE;
 		nrfx_cfg.sck_polarity = NRF_TDM_POLARITY_NEGEDGE;
-		nrfx_cfg.fsync_duration = NRF_TDM_FSYNC_DURATION_SCK;
+		nrfx_cfg.fsync_duration = fsync_duration;
 		nrfx_cfg.channel_delay = NRF_TDM_CHANNEL_DELAY_NONE;
 		break;
 	case I2S_FMT_DATA_FORMAT_PCM_LONG:
 		nrfx_cfg.alignment = NRF_TDM_ALIGN_LEFT;
 		nrfx_cfg.fsync_polarity = NRF_TDM_POLARITY_POSEDGE;
 		nrfx_cfg.sck_polarity = NRF_TDM_POLARITY_NEGEDGE;
-		nrfx_cfg.fsync_duration = NRF_TDM_FSYNC_DURATION_SCK;
+		nrfx_cfg.fsync_duration = fsync_duration;
 		nrfx_cfg.channel_delay = NRF_TDM_CHANNEL_DELAY_NONE;
 		break;
 	default:
