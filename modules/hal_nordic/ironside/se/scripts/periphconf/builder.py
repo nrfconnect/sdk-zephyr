@@ -1048,6 +1048,7 @@ class NrfFun(int, enum.Enum):
     TPIU_DATA1 = 81
     TPIU_DATA2 = 82
     TPIU_DATA3 = 83
+    VPR_VIO = 84
 
     # Value used to ignore the function field and only check (port, pin)
     IGNORE = -1
