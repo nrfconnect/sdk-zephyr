@@ -20,6 +20,8 @@ file(MAKE_DIRECTORY ${PROJECT_BINARY_DIR}/kconfig/include/config)
 
 set_ifndef(KCONFIG_NAMESPACE "CONFIG")
 
+set_ifndef(KCONFIG_STRICT_USER_CONFIG ON)
+
 set_ifndef(KCONFIG_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/Kconfig)
 set(KCONFIG_BOARD_DIR ${KCONFIG_BINARY_DIR}/boards)
 file(MAKE_DIRECTORY ${KCONFIG_BINARY_DIR})
@@ -328,6 +330,21 @@ foreach(f ${merge_config_files})
 endforeach()
 set(merge_config_files ${merge_config_files_with_absolute_paths})
 
+# User-provided configuration fragments (prj.conf, sysbuild.conf, CLI, etc.)
+# used for strict assignment checking. Board/shield defaults are excluded.
+set(KCONFIG_USER_CONFIG_FILES "")
+foreach(user_conf IN LISTS CONF_FILE_AS_LIST EXTRA_CONF_FILE_AS_LIST config_files)
+  if(IS_ABSOLUTE ${user_conf})
+    set(user_conf_path ${user_conf})
+  else()
+    set(user_conf_path ${APPLICATION_CONFIG_DIR}/${user_conf})
+  endif()
+  list(APPEND KCONFIG_USER_CONFIG_FILES ${user_conf_path})
+endforeach()
+if(EXTRA_KCONFIG_OPTIONS_FILE)
+  list(APPEND KCONFIG_USER_CONFIG_FILES ${EXTRA_KCONFIG_OPTIONS_FILE})
+endif()
+
 foreach(f ${merge_config_files})
   if(NOT EXISTS ${f} OR IS_DIRECTORY ${f})
     message(FATAL_ERROR "File not found: ${f}")
@@ -397,6 +414,28 @@ if(DEFINED FORCED_CONF_FILE)
   list(APPEND input_configs_flags --forced-input-configs)
 endif()
 
+set(kconfig_strict_args)
+set(kconfig_strict_user_config_files "")
+zephyr_get(KCONFIG_STRICT_USER_CONFIG SYSBUILD GLOBAL)
+if(KCONFIG_STRICT_USER_CONFIG)
+  list(APPEND kconfig_strict_user_config_files ${KCONFIG_USER_CONFIG_FILES})
+elseif(EXTRA_KCONFIG_OPTIONS_FILE AND EXISTS ${EXTRA_KCONFIG_OPTIONS_FILE})
+  file(READ ${EXTRA_KCONFIG_OPTIONS_FILE} extra_kconfig_options_content)
+  string(STRIP "${extra_kconfig_options_content}" extra_kconfig_options_content)
+  if(extra_kconfig_options_content)
+    set(KCONFIG_STRICT_USER_CONFIG ON)
+    list(APPEND kconfig_strict_user_config_files ${EXTRA_KCONFIG_OPTIONS_FILE})
+  endif()
+endif()
+if(KCONFIG_STRICT_USER_CONFIG)
+  list(APPEND kconfig_strict_args --strict-user-configs)
+  foreach(user_conf ${kconfig_strict_user_config_files})
+    if(EXISTS ${user_conf})
+      list(APPEND kconfig_strict_args --user-config-files ${user_conf})
+    endif()
+  endforeach()
+endif()
+
 cmake_path(GET AUTOCONF_H PARENT_PATH autoconf_h_path)
 if(NOT EXISTS ${autoconf_h_path})
   file(MAKE_DIRECTORY ${autoconf_h_path})
@@ -410,6 +449,7 @@ execute_process(
   ${ZEPHYR_BASE}/scripts/kconfig/kconfig.py
   --zephyr-base=${ZEPHYR_BASE}
   ${input_configs_flags}
+  ${kconfig_strict_args}
   ${KCONFIG_ROOT}
   ${DOTCONFIG}
   ${AUTOCONF_H}

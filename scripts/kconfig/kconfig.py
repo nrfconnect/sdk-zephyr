@@ -70,10 +70,25 @@ def main():
         # a warning shall be issued.
         kconf.warn_assign_redun = False
 
+    user_config_files = normalize_user_config_files(args.user_config_files)
+    regular_configs = args.configs_in
+    forced_configs = []
+    if args.forced_input_configs:
+        forced_configs = [args.configs_in[-1]]
+        regular_configs = args.configs_in[:-1]
+
     # Load files
-    print(kconf.load_config(args.configs_in[0]))
-    for config in args.configs_in[1:]:
+    print(kconf.load_config(regular_configs[0]))
+    for config in regular_configs[1:]:
         # replace=False creates a merged configuration
+        print(kconf.load_config(config, replace=False))
+
+    user_assignments = None
+    if args.handwritten_input_configs and args.strict_user_configs and \
+       user_config_files:
+        user_assignments = snapshot_user_assignments(kconf, user_config_files)
+
+    for config in forced_configs:
         print(kconf.load_config(config, replace=False))
 
     if args.handwritten_input_configs:
@@ -88,14 +103,20 @@ def main():
         # Print warnings for symbols that didn't get the assigned value. Only
         # do this for handwritten input too, to avoid likely unhelpful warnings
         # when using an old configuration and updating Kconfig files.
-        check_assigned_sym_values(kconf)
-        check_assigned_choice_values(kconf)
+        if user_assignments is not None:
+            check_user_assignments(kconf, user_assignments,
+                                   args.strict_user_configs)
+        else:
+            check_assigned_sym_values(kconf, args.strict_user_configs,
+                                      user_config_files)
+            check_assigned_choice_values(kconf, args.strict_user_configs,
+                                         user_config_files)
 
     if kconf.syms.get('WARN_DEPRECATED', kconf.y).tri_value == 2:
-        check_deprecated(kconf)
+        check_deprecated(kconf, args.strict_user_configs)
 
     if kconf.syms.get('WARN_EXPERIMENTAL', kconf.y).tri_value == 2:
-        check_experimental(kconf)
+        check_experimental(kconf, args.strict_user_configs)
 
     check_not_secure(kconf)
 
@@ -107,7 +128,11 @@ def main():
     # fast.
     kconf.write_config(os.devnull)
 
-    warn_only = r"warning:.*set more than once."
+    warn_only = (
+        r"warning:.*set more than once."
+        r"|Deprecated symbol .* is enabled\."
+        r"|Experimental symbol .* is enabled\."
+    )
 
     if kconf.warnings:
         if args.forced_input_configs:
@@ -158,7 +183,100 @@ user-configurable (has no prompt). It gets its value indirectly from other
 symbols. """ + SYM_INFO_HINT.format(sym))
 
 
-def check_assigned_sym_values(kconf):
+def normalize_user_config_files(filenames):
+    # Realpath user-provided configuration fragments for stable matching.
+    return {os.path.realpath(f) for f in filenames if f}
+
+
+def is_user_config_loc(loc, user_config_files):
+    if not user_config_files:
+        return True
+    if loc is None:
+        return False
+    return os.path.realpath(loc[0]) in user_config_files
+
+
+def snapshot_user_assignments(kconf, user_config_files):
+    # Record assignments from user-provided fragments before any forced
+    # configuration is merged in.
+    assignments = {}
+
+    for sym in kconf.unique_defined_syms:
+        if sym.user_value is None:
+            continue
+
+        if not is_user_config_loc(sym.user_loc, user_config_files):
+            continue
+
+        user_value = sym.user_value
+        if sym.type in (BOOL, TRISTATE):
+            user_value = TRI_TO_STR[user_value]
+
+        assignments[sym.name] = (user_value, sym.user_loc, sym)
+
+    return assignments
+
+
+def check_user_assignments(kconf, user_assignments, strict=False):
+    for sym in kconf.unique_defined_syms:
+        if sym.name not in user_assignments:
+            continue
+
+        if sym.choice:
+            continue
+
+        user_value, _loc, _sym = user_assignments[sym.name]
+
+        if user_value != sym.str_value:
+            msg = f"{sym.name_and_loc} was assigned the value '{user_value}'" \
+                  f" but got the value '{sym.str_value}'. "
+
+            mdeps = missing_deps_for_value(sym, user_value)
+            if mdeps:
+                expr_strs = []
+                for expr in mdeps:
+                    estr = expr_str(expr)
+                    if isinstance(expr, tuple):
+                        estr = f"({estr})"
+                    expr_strs.append(f"{estr} "
+                                     f"(={TRI_TO_STR[expr_value(expr)]})")
+
+                msg += "Check these unsatisfied dependencies: " + \
+                    ", ".join(expr_strs) + ". "
+
+            report_config_issue(msg + SYM_INFO_HINT.format(sym),
+                                effective_strict(kconf, sym, strict))
+
+    for choice in kconf.unique_choices:
+        user_selected = None
+        for sym in choice.syms:
+            if sym.name not in user_assignments:
+                continue
+
+            user_value, _loc, _sym = user_assignments[sym.name]
+            if user_value == "y":
+                user_selected = sym
+                break
+
+        if user_selected and user_selected is not choice.selection:
+            report_config_issue(f"""\
+The choice symbol {user_selected.name_and_loc} was selected (set =y),
+but {choice.selection.name_and_loc if choice.selection else "no symbol"} ended
+up as the choice selection. """ + SYM_INFO_HINT.format(user_selected),
+                                  effective_strict(kconf, user_selected, strict))
+
+
+def missing_deps_for_value(sym, user_value):
+    if sym.type in (BOOL, TRISTATE):
+        user_tri = {'n': 0, 'm': 1, 'y': 2}[user_value]
+        deps = split_expr(sym.direct_dep, AND)
+        return [dep for dep in deps if expr_value(dep) < user_tri]
+
+    deps = split_expr(sym.direct_dep, AND)
+    return [dep for dep in deps if expr_value(dep) == 0]
+
+
+def check_assigned_sym_values(kconf, strict=False, user_config_files=frozenset()):
     # Verifies that the values assigned to symbols "took" (matches the value
     # the symbols actually got), printing warnings otherwise. Choice symbols
     # are checked separately, in check_assigned_choice_values().
@@ -169,6 +287,10 @@ def check_assigned_sym_values(kconf):
 
         user_value = sym.user_value
         if user_value is None:
+            continue
+
+        if user_config_files and not is_user_config_loc(sym.user_loc,
+                                                        user_config_files):
             continue
 
         # Tristate values are represented as 0, 1, 2. Having them as "n", "m",
@@ -197,7 +319,8 @@ def check_assigned_sym_values(kconf):
                 msg += "Check these unsatisfied dependencies: " + \
                     ", ".join(expr_strs) + ". "
 
-            warn(msg + SYM_INFO_HINT.format(sym))
+            report_config_issue(msg + SYM_INFO_HINT.format(sym),
+                                effective_strict(kconf, sym, strict))
 
 
 def missing_deps(sym):
@@ -225,7 +348,7 @@ def missing_deps(sym):
     return [dep for dep in deps if expr_value(dep) == 0]
 
 
-def check_assigned_choice_values(kconf):
+def check_assigned_choice_values(kconf, strict=False, user_config_files=frozenset()):
     # Verifies that any choice symbols that were selected (by setting them to
     # y) ended up as the selection, printing warnings otherwise.
     #
@@ -241,11 +364,16 @@ def check_assigned_choice_values(kconf):
     for choice in kconf.unique_choices:
         if choice.user_selection and \
            choice.user_selection is not choice.selection:
+            if user_config_files and not is_user_config_loc(
+                    choice.user_selection.user_loc, user_config_files):
+                continue
 
-            warn(f"""\
+            report_config_issue(f"""\
 The choice symbol {choice.user_selection.name_and_loc} was selected (set =y),
 but {choice.selection.name_and_loc if choice.selection else "no symbol"} ended
-up as the choice selection. """ + SYM_INFO_HINT.format(choice.user_selection))
+up as the choice selection. """ + SYM_INFO_HINT.format(choice.user_selection),
+                                  effective_strict(kconf, choice.user_selection,
+                                                   strict))
 
 
 # Hint on where to find symbol information. Used like
@@ -258,26 +386,52 @@ Practices sections of the manual might be helpful too.\
 """
 
 
-def check_deprecated(kconf):
+def is_deprecated_or_experimental(kconf, sym):
+    # Symbols marked with 'select DEPRECATED' or 'select EXPERIMENTAL'.
+    for flag in ('DEPRECATED', 'EXPERIMENTAL'):
+        flag_sym = kconf.syms.get(flag)
+        if flag_sym is None or flag_sym.rev_dep is kconf.n:
+            continue
+
+        for selector in split_expr(flag_sym.rev_dep, OR):
+            parts = split_expr(selector, AND)
+            if parts and parts[0] is sym:
+                return True
+
+    return False
+
+
+def effective_strict(kconf, sym, strict):
+    if not strict or sym is None:
+        return False
+
+    return not is_deprecated_or_experimental(kconf, sym)
+
+
+def check_deprecated(kconf, strict=False):
     deprecated = kconf.syms.get('DEPRECATED')
     dep_expr = kconf.n if deprecated is None else deprecated.rev_dep
 
     if dep_expr is not kconf.n:
         selectors = [s for s in split_expr(dep_expr, OR) if expr_value(s) == 2]
         for selector in selectors:
-            selector_name = split_expr(selector, AND)[0].name
-            warn(f'Deprecated symbol {selector_name} is enabled.')
+            selector_sym = split_expr(selector, AND)[0]
+            report_config_issue(
+                f'Deprecated symbol {selector_sym.name} is enabled.',
+                effective_strict(kconf, selector_sym, strict))
 
 
-def check_experimental(kconf):
+def check_experimental(kconf, strict=False):
     experimental = kconf.syms.get('EXPERIMENTAL')
     dep_expr = kconf.n if experimental is None else experimental.rev_dep
 
     if dep_expr is not kconf.n:
         selectors = [s for s in split_expr(dep_expr, OR) if expr_value(s) == 2]
         for selector in selectors:
-            selector_name = split_expr(selector, AND)[0].name
-            warn(f'Experimental symbol {selector_name} is enabled.')
+            selector_sym = split_expr(selector, AND)[0]
+            report_config_issue(
+                f'Experimental symbol {selector_sym.name} is enabled.',
+                effective_strict(kconf, selector_sym, strict))
 
 def check_not_secure(kconf):
     not_secure = kconf.syms.get('NOT_SECURE')
@@ -364,6 +518,16 @@ def parse_args():
                              "set specific configuration settings to a "
                              "pre-defined value and thereby remove any user "
                              " adjustments.")
+    parser.add_argument("--strict-user-configs",
+                        action="store_true",
+                        help="Treat rejected user configuration assignments "
+                             "as errors instead of warnings")
+    parser.add_argument("--user-config-files",
+                        action="append",
+                        default=[],
+                        help="Configuration fragment to treat as user-provided "
+                             "when checking assignments. May be given multiple "
+                             "times.")
     parser.add_argument("--zephyr-base",
                         help="Path to current Zephyr installation")
     parser.add_argument("kconfig_file",
@@ -388,6 +552,13 @@ def warn(msg):
     # surrounding text (this usually gets printed as part of spammy CMake
     # output)
     print("\n" + textwrap.fill("warning: " + msg, 100) + "\n", file=sys.stderr)
+
+
+def report_config_issue(msg, strict=False):
+    if strict:
+        err(msg)
+    else:
+        warn(msg)
 
 
 def err(msg):
