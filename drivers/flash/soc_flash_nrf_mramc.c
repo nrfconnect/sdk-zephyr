@@ -12,6 +12,7 @@
 
 #if defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)
 #include "tfm_ioctl_core_api.h"
+#include <soc_secure.h>
 #else
 #include <nrfx_mramc.h>
 #endif
@@ -180,6 +181,12 @@ static int nrf_mramc_read(const struct device *dev, off_t offset, void *data, si
 	/* Buffer read number of bytes and store in data pointer.
 	 */
 #if defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)
+#if DT_NODE_EXISTS(DT_NODELABEL(slot0_ns_partition))
+	if ((uintptr_t)addr < DT_REG_ADDR(DT_NODELABEL(slot0_ns_partition))) {
+		LOG_DBG("read secure mem: %x:%zu", addr, len);
+		return soc_secure_mem_read(data, (void *)addr, len);
+	}
+#endif
 	memcpy(data, (void *)addr, len);
 #else
 	nrfx_mramc_buffer_read(data, addr, len);
