@@ -29,8 +29,6 @@ LOG_MODULE_DECLARE(net_zperf, CONFIG_NET_ZPERF_LOG_LEVEL);
 #define SOCK_ID_IPV6_LISTEN 1
 #define SOCK_ID_MAX         (CONFIG_NET_ZPERF_MAX_SESSIONS + 2)
 
-#define TCP_RECEIVER_BUF_SIZE 1500
-
 static zperf_callback tcp_session_cb;
 static void *tcp_user_data;
 static bool tcp_server_running;
@@ -124,9 +122,10 @@ static void tcp_receiver_cleanup(void)
 
 static int tcp_recv_data(struct net_socket_service_event *pev)
 {
-	static uint8_t buf[TCP_RECEIVER_BUF_SIZE];
+	static uint8_t buf[CONFIG_NET_ZPERF_TCP_RECEIVER_BUF_SIZE];
 	int i, ret = 0;
-	int family, sock, sock_error;
+	int family, sock, sock_error = 0;
+	int default_error = EIO;
 	struct net_sockaddr addr_incoming_conn;
 	net_socklen_t optlen = sizeof(int);
 	net_socklen_t addrlen = sizeof(struct net_sockaddr);
@@ -137,14 +136,53 @@ static int tcp_recv_data(struct net_socket_service_event *pev)
 
 	if ((pev->event.revents & ZSOCK_POLLERR) ||
 	    (pev->event.revents & ZSOCK_POLLNVAL)) {
+		if (pev->event.revents & ZSOCK_POLLNVAL) {
+			default_error = EBADF;
+		}
+
 		(void)zsock_getsockopt(pev->event.fd, ZSOCK_SOL_SOCKET,
 				       ZSOCK_SO_DOMAIN, &family, &optlen);
-		(void)zsock_getsockopt(pev->event.fd, ZSOCK_SOL_SOCKET,
-				       ZSOCK_SO_ERROR, &sock_error, &optlen);
+		if (zsock_getsockopt(pev->event.fd, ZSOCK_SOL_SOCKET,
+				     ZSOCK_SO_ERROR, &sock_error, &optlen) < 0 ||
+		    sock_error == 0) {
+			sock_error = default_error;
+		}
+
 		NET_ERR("TCP receiver IPv%d socket error (%d)",
 			family == NET_AF_INET ? 4 : 6, sock_error);
 		ret = -sock_error;
 		goto error;
+	}
+
+	/* POLLHUP means the peer closed the connection (TCP FIN). Treat it as
+	 * EOF on the accepted data socket so that zperf can finalize the
+	 * session and report results normally. POLLHUP on a listen socket is
+	 * unexpected and should be ignored here (it will be caught by POLLERR).
+	 * Only handle POLLHUP when POLLIN is not set to avoid duplicate
+	 * processing - when both are set, recv() will return 0 (EOF) naturally.
+	 */
+	if ((pev->event.revents & ZSOCK_POLLHUP) &&
+	    !(pev->event.revents & ZSOCK_POLLIN)) {
+		if (pev->event.fd != fds[SOCK_ID_IPV4_LISTEN].fd &&
+		    pev->event.fd != fds[SOCK_ID_IPV6_LISTEN].fd) {
+			i = SOCK_ID_IPV6_LISTEN + 1;
+			for (; i < SOCK_ID_MAX; i++) {
+				if (fds[i].fd == pev->event.fd) {
+					break;
+				}
+			}
+
+			if (i < SOCK_ID_MAX) {
+				tcp_received(&sock_addr[i], 0);
+				zsock_close(fds[i].fd);
+				fds[i].fd = -1;
+				memset(&sock_addr[i], 0, sizeof(struct net_sockaddr));
+				(void)net_socket_service_register(&svc_tcp, fds,
+								  ARRAY_SIZE(fds),
+								  NULL);
+			}
+		}
+		return 0;
 	}
 
 	if (!(pev->event.revents & ZSOCK_POLLIN)) {

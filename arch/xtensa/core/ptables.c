@@ -570,7 +570,7 @@ __weak void arch_reserved_pages_update(void)
 	uintptr_t page;
 	int idx;
 
-	for (page = CONFIG_SRAM_BASE_ADDRESS, idx = 0;
+	for (page = DT_CHOSEN_SRAM_ADDR, idx = 0;
 	     page < (uintptr_t)z_mapped_start;
 	     page += CONFIG_MMU_PAGE_SIZE, idx++) {
 		k_mem_page_frame_set(&k_mem_page_frames[idx], K_MEM_PAGE_FRAME_RESERVED);
@@ -1379,6 +1379,8 @@ int arch_mem_domain_deinit(struct k_mem_domain *domain)
 
 	domain->arch.ptables = NULL;
 
+	sys_slist_find_and_remove(&xtensa_domain_list, &domain->arch.node);
+
 	k_spin_unlock(&xtensa_mmu_lock, key);
 
 	K_SPINLOCK(&xtensa_counter_lock) {
@@ -1686,21 +1688,7 @@ static bool page_validate(uint32_t *ptables, uint32_t page, uint8_t ring, bool w
 	return true;
 }
 
-/**
- * @brief Check if a memory region can be legally accessed.
- *
- * @param[in] ptables Pointer to the level 1 page table.
- * @param[in] addr Start virtual address of the memory region to be checked.
- * @param[in] size Size of the memory region to be checked.
- * @param[in] write True if the access needs to write to this page, false if read only.
- * @param[in] ring Ring value for the access.
- *
- * @retval 0 Access is legal.
- * @retval -1 Access is not legal and will probably generate page fault.
- *
- * @see arch_buffer_validate
- */
-static int mem_buffer_validate(const void *addr, size_t size, int write, int ring)
+int arch_buffer_validate(const void *addr, size_t size, int write)
 {
 	int ret = 0;
 	uint8_t *virt;
@@ -1714,23 +1702,13 @@ static int mem_buffer_validate(const void *addr, size_t size, int write, int rin
 
 	for (size_t offset = 0; offset < aligned_size;
 	     offset += CONFIG_MMU_PAGE_SIZE) {
-		if (!page_validate(ptables, (uint32_t)(virt + offset), ring, write)) {
+		if (!page_validate(ptables, (uint32_t)(virt + offset), RING_USER, write)) {
 			ret = -1;
 			break;
 		}
 	}
 
 	return ret;
-}
-
-bool xtensa_mem_kernel_has_access(const void *addr, size_t size, int write)
-{
-	return mem_buffer_validate(addr, size, write, RING_KERNEL) == 0;
-}
-
-int arch_buffer_validate(const void *addr, size_t size, int write)
-{
-	return mem_buffer_validate(addr, size, write, RING_USER);
 }
 
 void xtensa_exc_dtlb_multihit_handle(void *vaddr)

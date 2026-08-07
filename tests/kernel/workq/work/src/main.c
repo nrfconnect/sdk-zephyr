@@ -19,6 +19,12 @@
 
 #define DELAY_MS 100
 #define DELAY_TIMEOUT K_MSEC(DELAY_MS)
+#define DELAY_TOLERANCE_TICKS (IS_ENABLED(CONFIG_BOARD_QEMU_CORTEX_A9) ? 10U : 1U)
+
+static uint32_t delay_max_ms(void)
+{
+	return k_ticks_to_ms_ceil32(DELAY_TOLERANCE_TICKS + k_ms_to_ticks_ceil32(DELAY_MS));
+}
 
 BUILD_ASSERT(COOPHI_PRIORITY < CONFIG_SYSTEM_WORKQUEUE_PRIORITY,
 	     "COOPHI not higher priority than system workqueue");
@@ -244,7 +250,7 @@ static void test_queue_start(void)
 	zassert_equal(preempt_queue.flags, K_WORK_QUEUE_STARTED);
 
 	if (IS_ENABLED(CONFIG_THREAD_NAME)) {
-		const char *tn = k_thread_name_get(&preempt_queue.thread);
+		const char *tn = k_thread_name_get(preempt_queue.thread_id);
 
 		zassert_true(tn != cfg.name);
 		zassert_true(tn != NULL);
@@ -258,7 +264,7 @@ static void test_queue_start(void)
 	zassert_equal(invalid_test_queue.flags, K_WORK_QUEUE_STARTED);
 
 	if (IS_ENABLED(CONFIG_THREAD_NAME)) {
-		const char *tn = k_thread_name_get(&invalid_test_queue.thread);
+		const char *tn = k_thread_name_get(invalid_test_queue.thread_id);
 
 		zassert_true(tn != cfg.name);
 		zassert_true(tn != NULL);
@@ -328,10 +334,50 @@ ZTEST(work_1cpu, test_1cpu_simple_queue)
 	zassert_equal(rc, 0);
 }
 
+/* Single CPU check that work submitted while the queue's runner
+ * thread is suspended is queued (not lost or rejected) and runs as
+ * soon as the thread is resumed.
+ */
+ZTEST(work_1cpu, test_1cpu_suspend_resume_queue)
+{
+	int rc;
+	k_tid_t wq_tid = k_work_queue_thread_get(&coophi_queue);
+
+	zassert_not_null(wq_tid);
+
+	/* Reset state and use the non-blocking handler */
+	reset_counters();
+	k_work_init(&common_work, counter_handler);
+	zassert_equal(k_work_busy_get(&common_work), 0);
+
+	/* Suspend the workqueue's runner thread. */
+	k_thread_suspend(wq_tid);
+
+	/* Submission should still succeed and the work should be queued. */
+	rc = k_work_submit_to_queue(&coophi_queue, &common_work);
+	zassert_equal(rc, 1);
+	zassert_equal(k_work_busy_get(&common_work), K_WORK_QUEUED);
+	zassert_equal(k_work_is_pending(&common_work), true);
+
+	/* Sleeping must not let the work run while the runner is suspended. */
+	k_sleep(K_MSEC(DELAY_MS));
+	zassert_equal(coophi_counter(), 0);
+	zassert_equal(k_work_busy_get(&common_work), K_WORK_QUEUED);
+	zassert_equal(k_sem_take(&sync_sem, K_NO_WAIT), -EBUSY);
+
+	/* Resuming the runner should drain the pending work. */
+	k_thread_resume(wq_tid);
+
+	rc = k_sem_take(&sync_sem, DELAY_TIMEOUT);
+	zassert_equal(rc, 0);
+	zassert_equal(coophi_counter(), 1);
+	zassert_equal(k_work_busy_get(&common_work), 0);
+}
+
 /* Basic SMP check submitting with a non-blocking handler. */
 ZTEST(work, test_smp_simple_queue)
 {
-	if (!IS_ENABLED(CONFIG_SMP)) {
+	if (!IS_ENABLED(CONFIG_SMP) || (CONFIG_MP_MAX_NUM_CPUS == 1)) {
 		ztest_test_skip();
 		return;
 	}
@@ -731,9 +777,11 @@ ZTEST(work_1cpu, test_1cpu_running_cancel)
 	zassert_equal(coophi_counter(), 0);
 
 	/* Busy wait until timer expires. Thread context is blocked so cancelling
-	 * of work won't be completed.
+	 * of work won't be completed. Add one tick of slack on top of the
+	 * nominal timeout for the +1 round-up inside z_add_timeout() plus
+	 * 1 ms for general measurement jitter.
 	 */
-	k_busy_wait(1000 * (ms_timeout + 1));
+	k_busy_wait(1000 * ms_timeout + k_ticks_to_us_ceil32(1) + 1000);
 
 	zassert_equal(k_timer_status_get(&ctx->timer), 1);
 
@@ -793,9 +841,11 @@ ZTEST(work_1cpu, test_1cpu_running_cancel_sync)
 	zassert_equal(coophi_counter(), 1);
 
 	/* Busy wait until timer expires. Thread context is blocked so cancelling
-	 * of work won't be completed.
+	 * of work won't be completed. Add one tick of slack on top of the
+	 * nominal timeout for the +1 round-up inside z_add_timeout() plus
+	 * 1 ms for general measurement jitter.
 	 */
-	k_busy_wait(1000 * (ms_timeout + 1));
+	k_busy_wait(1000 * ms_timeout + k_ticks_to_us_ceil32(1) + 1000);
 
 	zassert_equal(k_timer_status_get(&ctx->timer), 1);
 
@@ -824,7 +874,7 @@ ZTEST(work, test_smp_running_cancel)
 {
 	int rc;
 
-	if (!IS_ENABLED(CONFIG_SMP)) {
+	if (!IS_ENABLED(CONFIG_SMP) || (CONFIG_MP_MAX_NUM_CPUS == 1)) {
 		ztest_test_skip();
 		return;
 	}
@@ -992,8 +1042,7 @@ ZTEST(work_1cpu, test_1cpu_basic_schedule)
 {
 	int rc;
 	uint32_t sched_ms;
-	uint32_t max_ms = k_ticks_to_ms_ceil32(1U
-				+ k_ms_to_ticks_ceil32(DELAY_MS));
+	uint32_t max_ms = delay_max_ms();
 	uint32_t elapsed_ms;
 	struct k_work *wp = &dwork.work; /* whitebox testing */
 
@@ -1142,8 +1191,7 @@ ZTEST(work_1cpu, test_1cpu_basic_reschedule)
 {
 	int rc;
 	uint32_t sched_ms;
-	uint32_t max_ms = k_ticks_to_ms_ceil32(1U
-				+ k_ms_to_ticks_ceil32(DELAY_MS));
+	uint32_t max_ms = delay_max_ms();
 	uint32_t elapsed_ms;
 	struct k_work *wp = &dwork.work; /* whitebox testing */
 
@@ -1368,8 +1416,7 @@ ZTEST(work_1cpu, test_1cpu_system_schedule)
 {
 	int rc;
 	uint32_t sched_ms;
-	uint32_t max_ms = k_ticks_to_ms_ceil32(1U
-				+ k_ms_to_ticks_ceil32(DELAY_MS));
+	uint32_t max_ms = delay_max_ms();
 	uint32_t elapsed_ms;
 
 	/* Reset state and use non-blocking handler */
@@ -1412,8 +1459,7 @@ ZTEST(work_1cpu, test_1cpu_system_reschedule)
 {
 	int rc;
 	uint32_t sched_ms;
-	uint32_t max_ms = k_ticks_to_ms_ceil32(1U
-				+ k_ms_to_ticks_ceil32(DELAY_MS));
+	uint32_t max_ms = delay_max_ms();
 	uint32_t elapsed_ms;
 
 	/* Reset state and use non-blocking handler */
@@ -1460,6 +1506,156 @@ ZTEST(work_1cpu, test_1cpu_system_reschedule)
 ZTEST(work, test_nop)
 {
 	ztest_test_skip();
+}
+
+/* Cooperative priority below the ztest thread so submitted work stays queued
+ * until the test thread blocks, making the processing deterministic on 1 CPU.
+ */
+#define POLICY_PRIORITY K_PRIO_COOP(3)
+
+struct ordered_work {
+	struct k_work work;
+	int id;
+};
+
+static struct k_work_q order_queue;
+static K_THREAD_STACK_DEFINE(order_stack, STACK_SIZE);
+static struct ordered_work order_items[3];
+static int order_seq[3];
+static int order_seq_n;
+static struct k_sem order_done_sem;
+
+static void order_handler(struct k_work *work)
+{
+	struct ordered_work *o = CONTAINER_OF(work, struct ordered_work, work);
+
+	order_seq[order_seq_n++] = o->id;
+	if (o->id == 2) {
+		k_sem_give(&order_done_sem);
+	}
+}
+
+/* Verify work items are processed in submission order. */
+/**
+ * @brief Verify a work queue processes work items in submission order
+ * @ingroup kernel_workqueue_tests
+ */
+ZTEST(work_1cpu, test_1cpu_queue_order)
+{
+	struct k_work_queue_config cfg = {
+		.name = "order",
+		.no_yield = true,
+	};
+
+	order_seq_n = 0;
+	k_sem_init(&order_done_sem, 0, 1);
+
+	k_work_queue_start(&order_queue, order_stack, STACK_SIZE, POLICY_PRIORITY, &cfg);
+
+	/* The queue is lower priority than this thread, so all three items are
+	 * queued before the queue thread runs.
+	 */
+	for (int i = 0; i < 3; i++) {
+		order_items[i].id = i;
+		k_work_init(&order_items[i].work, order_handler);
+		zassert_equal(k_work_submit_to_queue(&order_queue, &order_items[i].work), 1,
+			      "failed to queue item %d", i);
+	}
+
+	zassert_ok(k_sem_take(&order_done_sem, K_FOREVER));
+
+	zassert_equal(order_seq[0], 0, "items not processed in submission order");
+	zassert_equal(order_seq[1], 1, "items not processed in submission order");
+	zassert_equal(order_seq[2], 2, "items not processed in submission order");
+
+	zassert_true(k_work_queue_drain(&order_queue, true) >= 0, "drain failed");
+	zassert_ok(k_work_queue_stop(&order_queue, K_FOREVER), "stop failed");
+}
+
+static struct k_work_q yield_queue;
+static K_THREAD_STACK_DEFINE(yield_stack, STACK_SIZE);
+static struct k_thread yield_competitor;
+static K_THREAD_STACK_DEFINE(yield_comp_stack, STACK_SIZE);
+static struct k_work yield_w0, yield_w1;
+static struct k_sem yield_comp_sem;
+static struct k_sem yield_done_sem;
+static char yield_seq[4];
+static int yield_seq_n;
+
+static void yield_competitor_fn(void *p1, void *p2, void *p3)
+{
+	ARG_UNUSED(p1);
+	ARG_UNUSED(p2);
+	ARG_UNUSED(p3);
+
+	/* Stays unready until the first work item makes us runnable. */
+	k_sem_take(&yield_comp_sem, K_FOREVER);
+	yield_seq[yield_seq_n++] = 'C';
+}
+
+static void yield_w0_handler(struct k_work *work)
+{
+	ARG_UNUSED(work);
+
+	yield_seq[yield_seq_n++] = '0';
+	/* Make the equal-priority competitor runnable while the queue thread is
+	 * processing. A yielding queue must let it run before the next item.
+	 */
+	k_sem_give(&yield_comp_sem);
+}
+
+static void yield_w1_handler(struct k_work *work)
+{
+	ARG_UNUSED(work);
+
+	yield_seq[yield_seq_n++] = '1';
+	k_sem_give(&yield_done_sem);
+}
+
+/* Verify the work queue yields to other ready threads between items. */
+/**
+ * @brief Verify a work queue yields between processing successive work items
+ *
+ * @details A cooperative work queue with the default (yielding) policy runs two
+ * work items. The first item makes an equal-priority competitor thread runnable;
+ * because the queue yields between items, the competitor runs before the second
+ * item, producing the interleaving "0C1".
+ *
+ * @ingroup kernel_workqueue_tests
+ */
+ZTEST(work_1cpu, test_1cpu_queue_yield)
+{
+	/* Default config: no_yield not set, so the queue yields between items. */
+	struct k_work_queue_config cfg = {
+		.name = "yield",
+	};
+
+	yield_seq_n = 0;
+	k_sem_init(&yield_comp_sem, 0, 1);
+	k_sem_init(&yield_done_sem, 0, 1);
+
+	k_work_queue_start(&yield_queue, yield_stack, STACK_SIZE, POLICY_PRIORITY, &cfg);
+
+	/* Competitor at the same priority as the queue, initially not runnable. */
+	k_thread_create(&yield_competitor, yield_comp_stack, STACK_SIZE,
+			yield_competitor_fn, NULL, NULL, NULL,
+			POLICY_PRIORITY, 0, K_NO_WAIT);
+
+	k_work_init(&yield_w0, yield_w0_handler);
+	k_work_init(&yield_w1, yield_w1_handler);
+	zassert_equal(k_work_submit_to_queue(&yield_queue, &yield_w0), 1);
+	zassert_equal(k_work_submit_to_queue(&yield_queue, &yield_w1), 1);
+
+	zassert_ok(k_sem_take(&yield_done_sem, K_FOREVER));
+	zassert_ok(k_thread_join(&yield_competitor, K_FOREVER));
+
+	yield_seq[yield_seq_n] = '\0';
+	zassert_mem_equal(yield_seq, "0C1", 3,
+			  "expected competitor to run between items (0C1), got \"%s\"",
+			  yield_seq);
+
+	zassert_true(k_work_queue_drain(&yield_queue, true) >= 0, "drain failed");
+	zassert_ok(k_work_queue_stop(&yield_queue, K_FOREVER), "stop failed");
 }
 
 void *workq_setup(void)

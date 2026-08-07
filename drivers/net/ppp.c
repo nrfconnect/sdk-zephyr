@@ -987,7 +987,7 @@ static int ppp_driver_init(const struct device *dev)
 	k_work_queue_start(&ppp->cb_workq, ppp_workq,
 			   K_KERNEL_STACK_SIZEOF(ppp_workq),
 			   K_PRIO_COOP(PPP_WORKQ_PRIORITY), NULL);
-	k_thread_name_set(&ppp->cb_workq.thread, "ppp_workq");
+	k_thread_name_set(ppp->cb_workq.thread_id, "ppp_workq");
 #if defined(CONFIG_NET_PPP_ASYNC_UART)
 	k_work_init_delayable(&ppp->uart_recovery_work, uart_recovery);
 #endif
@@ -1096,10 +1096,16 @@ static void ppp_uart_isr(const struct device *uart, void *user_data)
 	int rx = 0, ret;
 
 	/* get all of the data off UART as fast as we can */
-	while (uart_irq_update(uart) && uart_irq_rx_ready(uart)) {
+	uart_irq_update(uart);
+
+	if (uart_irq_rx_ready(uart) <= 0) {
+		return;
+	}
+
+	while (true) {
 		rx = uart_fifo_read(uart, context->buf, sizeof(context->buf));
 		if (rx <= 0) {
-			continue;
+			return;
 		}
 
 		ret = ring_buf_put(&context->rx_ringbuf, context->buf, rx);
@@ -1107,7 +1113,7 @@ static void ppp_uart_isr(const struct device *uart, void *user_data)
 			LOG_ERR("Rx buffer doesn't have enough space. "
 				"Bytes pending: %d, written: %d",
 				rx, ret);
-			break;
+			return;
 		}
 
 		k_work_submit_to_queue(&context->cb_workq, &context->cb_work);

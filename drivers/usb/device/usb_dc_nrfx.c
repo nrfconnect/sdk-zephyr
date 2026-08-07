@@ -178,12 +178,8 @@ struct usbd_event {
  * be derived from the theoretical number of backlog events possible depending
  * on the number of endpoints configured.
  */
-#define FIFO_ELEM_SZ            sizeof(struct usbd_event)
-#define FIFO_ELEM_ALIGN         sizeof(unsigned int)
-
-K_MEM_SLAB_DEFINE(fifo_elem_slab, FIFO_ELEM_SZ,
-		  CONFIG_USB_NRFX_EVT_QUEUE_SIZE, FIFO_ELEM_ALIGN);
-
+K_MEM_SLAB_DEFINE_TYPE(fifo_elem_slab, struct usbd_event,
+		       CONFIG_USB_NRFX_EVT_QUEUE_SIZE);
 
 /** Number of IN Endpoints configured (including control) */
 #define CFG_EPIN_CNT (DT_INST_PROP(0, num_in_endpoints) +	\
@@ -1925,7 +1921,7 @@ static int usb_init(void)
 			   K_KERNEL_STACK_SIZEOF(usbd_work_queue_stack),
 			   CONFIG_SYSTEM_WORKQUEUE_PRIORITY, NULL);
 
-	k_thread_name_set(&usbd_work_queue.thread, "usbd_workq");
+	k_thread_name_set(usbd_work_queue.thread_id, "usbd_workq");
 	k_work_init(&ctx->usb_work, usbd_work_handler);
 
 	return 0;

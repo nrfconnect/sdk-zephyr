@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2019, Linaro Limited
  * Copyright (c) 2024-2025, tinyVision.ai Inc.
+ * Copyright (c) 2026 NXP
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -118,13 +119,13 @@ int video_buffer_release(struct video_buffer *vbuf)
 	return 0;
 }
 
-int video_import_buffer(uint8_t *mem, size_t sz, uint16_t *idx)
+struct video_buffer *video_import_buffer(uint8_t *mem, size_t sz)
 {
 	uint16_t ind;
 
 	if (mem == NULL || sz == 0) {
 		LOG_ERR("Invalid memory address or size");
-		return -EINVAL;
+		return NULL;
 	}
 
 	/* Find the 1st available slot in the video buffer pool */
@@ -135,7 +136,7 @@ int video_import_buffer(uint8_t *mem, size_t sz, uint16_t *idx)
 	}
 
 	if (ind == ARRAY_SIZE(video_buf)) {
-		return -ENOBUFS;
+		return NULL;
 	}
 
 	/* Populate the internal buffer */
@@ -146,10 +147,7 @@ int video_import_buffer(uint8_t *mem, size_t sz, uint16_t *idx)
 	video_buf[ind].bytesused = 0;
 	video_buf[ind].timestamp = 0;
 
-	/* Return the buffer index to the requester */
-	*idx = ind;
-
-	return 0;
+	return &video_buf[ind];
 }
 
 int video_enqueue(const struct device *dev, struct video_buffer *buf)
@@ -531,10 +529,16 @@ int video_estimate_fmt_size(struct video_format *fmt)
 
 	switch (fmt->pixelformat) {
 	case VIDEO_PIX_FMT_JPEG:
+	case VIDEO_PIX_FMT_PNG:
 	case VIDEO_PIX_FMT_H264:
 		/* Rough estimate for the worst case (quality = 100) */
 		fmt->pitch = 0;
 		fmt->size = fmt->width * fmt->height * 2;
+		break;
+	case VIDEO_PIX_FMT_NV12:
+	case VIDEO_PIX_FMT_NV21:
+		fmt->pitch = fmt->width;
+		fmt->size = fmt->pitch * fmt->height * 2U;
 		break;
 	default:
 		/* Uncompressed format */

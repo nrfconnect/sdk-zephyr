@@ -9,6 +9,7 @@
 #include "frdm_mcxa577-pinctrl.dtsi"
 #include <zephyr/dt-bindings/gpio/arduino-header-r3.h>
 #include <zephyr/dt-bindings/input/input-event-codes.h>
+#include <zephyr/dt-bindings/wuc/wuc_nxp_wuu.h>
 
 / {
 	aliases {
@@ -17,8 +18,12 @@
 		led2 = &blue_led;
 		sw0 = &user_button_2;
 		sw1 = &user_button_3;
+		wakeup-button = &user_button_2;
 		watchdog0 = &wwdt0;
 		flash-controller = &fmu;
+		die-temp0 = &temp0;
+		rtc = &rtc;
+		ambient-temp0 = &p3t1755;
 	};
 
 	leds {
@@ -47,6 +52,8 @@
 			label = "User SW2";
 			gpios = <&gpio3 17 GPIO_ACTIVE_LOW>;
 			zephyr,code = <INPUT_KEY_0>;
+			/* P3_17 reaches the core as WUU external pin 26. */
+			wakeup-ctrls = <&wuu NXP_WUU_PIN_26_FALLING_INT>;
 		};
 
 		user_button_3: button_3 {
@@ -88,7 +95,19 @@
 	clock-frequency = <DT_FREQ_M(200)>;
 };
 
+&porta {
+	status = "okay";
+};
+
+&portb {
+	status = "okay";
+};
+
 &gpio0 {
+	status = "okay";
+};
+
+&waketimer0 {
 	status = "okay";
 };
 
@@ -218,6 +237,49 @@
 	phy: ethernet-phy@0 {
 		compatible = "ethernet-phy";
 		reg = <0>;
+		status = "okay";
+	};
+};
+
+&eim0 {
+	status = "okay";
+};
+
+&eim0_channel0 {
+	status = "okay";
+};
+
+&erm0 {
+	status = "okay";
+};
+
+&crc {
+	status = "okay";
+};
+
+&flexcan0 {
+	status = "okay";
+	pinctrl-0 = <&pinmux_flexcan0>;
+	pinctrl-names = "default";
+};
+
+&rtc {
+	status = "okay";
+	clock-src = <1>;
+};
+
+&i3c0 {
+	status = "okay";
+	pinctrl-0 = <&pinmux_i3c0>;
+	pinctrl-names = "default";
+
+	i2c-scl-hz = <DT_FREQ_K(400)>;
+	i3c-scl-hz = <DT_FREQ_M(4)>;
+	i3c-od-scl-hz = <DT_FREQ_K(1500)>;
+
+	p3t1755: p3t1755@4800000236152a0090 {
+		compatible = "nxp,p3t1755";
+		reg = <0x48 0x0236 0x152a0090>;
 		status = "okay";
 	};
 };

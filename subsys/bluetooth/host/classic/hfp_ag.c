@@ -323,7 +323,7 @@ static struct bt_ag_tx *bt_ag_tx_alloc(void)
 	 * so if we're in the same workqueue but there are no immediate
 	 * contexts available, there's no chance we'll get one by waiting.
 	 */
-	if (k_current_get() == &k_sys_work_q.thread) {
+	if (k_current_get() == k_sys_work_q.thread_id) {
 		return k_fifo_get(&ag_tx_free, K_NO_WAIT);
 	}
 
@@ -3763,10 +3763,11 @@ static void hfp_ag_recv(struct bt_rfcomm_dlc *dlc, struct net_buf *buf)
 		if (strlen(cmd_handlers[index].cmd) > len) {
 			continue;
 		}
-		if (strncmp((char *)data, cmd_handlers[index].cmd,
-				 strlen(cmd_handlers[index].cmd)) != 0) {
+
+		if (memcmp(data, cmd_handlers[index].cmd, strlen(cmd_handlers[index].cmd)) != 0) {
 			continue;
 		}
+
 		if (NULL != cmd_handlers[index].handler) {
 			(void)net_buf_pull(buf, strlen(cmd_handlers[index].cmd));
 			err = cmd_handlers[index].handler(ag, buf);

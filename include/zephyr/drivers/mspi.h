@@ -30,7 +30,7 @@ extern "C" {
  *        controllers.
  * @defgroup mspi_interface MSPI
  * @since 3.7
- * @version 0.8.0
+ * @version 0.9.0
  * @ingroup io_interfaces
  * @{
  */
@@ -471,7 +471,6 @@ struct mspi_callback_context {
 };
 
 /**
- * @typedef mspi_callback_handler_t
  * @brief Define the application callback handler function signature.
  *
  * @param mspi_cb_ctx Pointer to the MSPI callback context
@@ -556,9 +555,7 @@ __syscall int mspi_config(const struct mspi_dt_spec *spec);
 
 static inline int z_impl_mspi_config(const struct mspi_dt_spec *spec)
 {
-	const struct mspi_driver_api *api = (const struct mspi_driver_api *)spec->bus->api;
-
-	return api->config(spec);
+	return DEVICE_API_GET(mspi, spec->bus)->config(spec);
 }
 
 /**
@@ -598,9 +595,7 @@ static inline int z_impl_mspi_dev_config(const struct device *controller,
 					 const enum mspi_dev_cfg_mask param_mask,
 					 const struct mspi_dev_cfg *cfg)
 {
-	const struct mspi_driver_api *api = (const struct mspi_driver_api *)controller->api;
-
-	return api->dev_config(controller, dev_id, param_mask, cfg);
+	return DEVICE_API_GET(mspi, controller)->dev_config(controller, dev_id, param_mask, cfg);
 }
 
 /**
@@ -618,9 +613,7 @@ __syscall int mspi_get_channel_status(const struct device *controller, uint8_t c
 
 static inline int z_impl_mspi_get_channel_status(const struct device *controller, uint8_t ch)
 {
-	const struct mspi_driver_api *api = (const struct mspi_driver_api *)controller->api;
-
-	return api->get_channel_status(controller, ch);
+	return DEVICE_API_GET(mspi, controller)->get_channel_status(controller, ch);
 }
 
 /** @} */
@@ -662,13 +655,65 @@ static inline int z_impl_mspi_transceive(const struct device *controller,
 					 const struct mspi_dev_id *dev_id,
 					 const struct mspi_xfer *req)
 {
-	const struct mspi_driver_api *api = (const struct mspi_driver_api *)controller->api;
+	const struct mspi_driver_api *api = DEVICE_API_GET(mspi, controller);
 
 	if (!api->transceive) {
 		return -ENOTSUP;
 	}
 
 	return api->transceive(controller, dev_id, req);
+}
+
+/**
+ * @brief Transfer data over MSPI without command or address phases.
+ *
+ * Convenience wrapper over mspi_transceive() for transfers that consist
+ * of a data phase only. It builds the @ref mspi_xfer from caller-owned
+ * packets and enforces the data-only contract
+ * (@ref mspi_xfer.cmd_length and @ref mspi_xfer.addr_length
+ * are 0). @ref mspi_xfer_packet.cmd and @ref mspi_xfer_packet.address
+ * are ignored by the driver.
+ *
+ * This is the intended transfer call where the hardware cannot distinguish
+ * a command byte from a data byte and only @ref mspi_xfer_packet.dir,
+ * @ref mspi_xfer_packet.num_bytes and @ref mspi_xfer_packet.data_buf
+ * are significant. It may equally be used by a controller for
+ * data-only transactions.
+ *
+ * The packets remain caller owned and must stay valid until the
+ * transfer completes when @p async is true.
+ *
+ * @param controller Pointer to the device structure for the driver instance.
+ * @param dev_id Pointer to the device ID structure from a device.
+ * @param packets Transfer packets.
+ * @param num_packet Number of transfer packets.
+ * @param xfer_mode Transfer mode (PIO/DMA).
+ * @param async Async or sync transfer.
+ * @param timeout Transfer timeout value(ms).
+ *
+ * @retval 0 If successful.
+ * @retval -ENOTSUP
+ * @retval -EIO General input / output error, failed to send over the bus.
+ */
+static inline int mspi_transceive_data_only(const struct device *controller,
+					    const struct mspi_dev_id *dev_id,
+					    const struct mspi_xfer_packet *packets,
+					    uint32_t num_packet,
+					    enum mspi_xfer_mode xfer_mode,
+					    bool async,
+					    uint32_t timeout)
+{
+	struct mspi_xfer xfer = {
+		.async       = async,
+		.xfer_mode   = xfer_mode,
+		.cmd_length  = 0,
+		.addr_length = 0,
+		.packets     = packets,
+		.num_packet  = num_packet,
+		.timeout     = timeout,
+	};
+
+	return mspi_transceive(controller, dev_id, &xfer);
 }
 
 /** @} */
@@ -700,7 +745,7 @@ static inline int z_impl_mspi_xip_config(const struct device *controller,
 					 const struct mspi_dev_id *dev_id,
 					 const struct mspi_xip_cfg *cfg)
 {
-	const struct mspi_driver_api *api = (const struct mspi_driver_api *)controller->api;
+	const struct mspi_driver_api *api = DEVICE_API_GET(mspi, controller);
 
 	if (!api->xip_config) {
 		return -ENOTSUP;
@@ -732,7 +777,7 @@ static inline int z_impl_mspi_scramble_config(const struct device *controller,
 					      const struct mspi_dev_id *dev_id,
 					      const struct mspi_scramble_cfg *cfg)
 {
-	const struct mspi_driver_api *api = (const struct mspi_driver_api *)controller->api;
+	const struct mspi_driver_api *api = DEVICE_API_GET(mspi, controller);
 
 	if (!api->scramble_config) {
 		return -ENOTSUP;
@@ -765,7 +810,7 @@ static inline int z_impl_mspi_timing_config(const struct device *controller,
 					    const struct mspi_dev_id *dev_id,
 					    const uint32_t param_mask, void *cfg)
 {
-	const struct mspi_driver_api *api = (const struct mspi_driver_api *)controller->api;
+	const struct mspi_driver_api *api = DEVICE_API_GET(mspi, controller);
 
 	if (!api->timing_config) {
 		return -ENOTSUP;
@@ -802,7 +847,7 @@ static inline int mspi_register_callback(const struct device *controller,
 					 mspi_callback_handler_t cb,
 					 struct mspi_callback_context *ctx)
 {
-	const struct mspi_driver_api *api = (const struct mspi_driver_api *)controller->api;
+	const struct mspi_driver_api *api = DEVICE_API_GET(mspi, controller);
 
 	if (!api->register_callback) {
 		return -ENOTSUP;
