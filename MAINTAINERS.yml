@@ -6482,7 +6482,7 @@ West:
     - ithinuel
   files:
     - modules/mbedtls/
-    - tests/crypto/psa/
+    - tests/crypto/mbedtls_psa/
     - tests/crypto/secp256r1/
     - tests/benchmarks/mbedtls/
   labels:
