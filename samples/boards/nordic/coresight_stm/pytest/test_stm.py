@@ -203,12 +203,7 @@ def nrfutil_dictionary_from_serial(
     try:
         # run nrfutil trace in background non-blocking
         logger.info(f"Executing:\n{cmd}")
-        proc = subprocess.Popen(cmd.split(),
-                                stdin=subprocess.PIPE,
-                                stdout=subprocess.PIPE,
-                                stderr=subprocess.STDOUT,
-                                encoding='UTF-8',
-                                errors='replace')
+        proc = subprocess.Popen(cmd.split(), stdout=subprocess.DEVNULL)
     except OSError as exc:
         logger.error(f"Unable to start nrfutil trace:\n{cmd}\n{exc}")
     try:
@@ -217,8 +212,6 @@ def nrfutil_dictionary_from_serial(
         pass
     finally:
         _kill(proc)
-        outs, errs = proc.communicate()
-        logger.info(f"{outs=}\n{errs=}")
 
 
 def test_sample_STM_decoded(dut: DeviceAdapter):
