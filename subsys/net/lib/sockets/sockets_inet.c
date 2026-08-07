@@ -170,8 +170,7 @@ int zsock_close_ctx(struct net_context *ctx, int sock)
 		(void)net_context_recv(ctx, NULL, K_NO_WAIT, NULL);
 	}
 
-	ctx->user_data = INT_TO_POINTER(EINTR);
-	sock_set_error(ctx);
+	sock_set_error(ctx, EINTR);
 
 	zsock_flush_queue(ctx);
 
@@ -218,8 +217,7 @@ static void zsock_accepted_cb(struct net_context *new_ctx,
 
 		(void)k_condvar_signal(&parent->cond.recv);
 	} else if (status < 0) {
-		parent->user_data = INT_TO_POINTER(-status);
-		sock_set_error(parent);
+		sock_set_error(parent, -status);
 
 		k_fifo_cancel_wait(&parent->recv_q);
 		(void)k_condvar_signal(&parent->cond.recv);
@@ -251,8 +249,7 @@ static void zsock_received_cb(struct net_context *ctx,
 		user_data);
 
 	if (status < 0) {
-		ctx->user_data = INT_TO_POINTER(-status);
-		sock_set_error(ctx);
+		sock_set_error(ctx, -status);
 	}
 
 	/* if pkt is NULL, EOF */
@@ -357,8 +354,7 @@ int zsock_bind_ctx(struct net_context *ctx, const struct net_sockaddr *addr,
 static void zsock_connected_cb(struct net_context *ctx, int status, void *user_data)
 {
 	if (status < 0) {
-		ctx->user_data = INT_TO_POINTER(-status);
-		sock_set_error(ctx);
+		sock_set_error(ctx, -status);
 
 		/* Wake pending threads, if any. */
 		k_fifo_cancel_wait(&ctx->recv_q);
@@ -404,7 +400,7 @@ int zsock_connect_ctx(struct net_context *ctx, const struct net_sockaddr *addr,
 
 	if (net_context_get_state(ctx) == NET_CONTEXT_CONNECTING) {
 		if (sock_is_error(ctx)) {
-			errno = POINTER_TO_INT(ctx->user_data);
+			errno = sock_get_error(ctx);
 			return -1;
 		}
 
@@ -518,7 +514,7 @@ int zsock_accept_ctx(struct net_context *parent, struct net_sockaddr *addr,
 	}
 
 	if (sock_is_error(parent)) {
-		errno = POINTER_TO_INT(parent->user_data);
+		errno = sock_get_error(parent);
 		return -1;
 	}
 
@@ -1005,7 +1001,7 @@ int zsock_wait_data(struct net_context *ctx, k_timeout_t *timeout)
 		}
 
 		if (sock_is_error(ctx)) {
-			return -POINTER_TO_INT(ctx->user_data);
+			return -sock_get_error(ctx);
 		}
 	}
 
@@ -1016,9 +1012,10 @@ static int insert_pktinfo(struct net_msghdr *msg, int level, int type,
 			  void *pktinfo, size_t pktinfo_len)
 {
 	struct net_cmsghdr *cmsg;
+	size_t cmsg_space = NET_CMSG_SPACE(pktinfo_len);
 
-	if (msg->msg_controllen < pktinfo_len) {
-		return -EINVAL;
+	if (msg->msg_controllen < cmsg_space) {
+		return -ENOMEM;
 	}
 
 	for (cmsg = NET_CMSG_FIRSTHDR(msg); cmsg != NULL; cmsg = NET_CMSG_NXTHDR(msg, cmsg)) {
@@ -1029,6 +1026,12 @@ static int insert_pktinfo(struct net_msghdr *msg, int level, int type,
 
 	if (cmsg == NULL) {
 		return -EINVAL;
+	}
+
+	/* Ensure the full element fits at the selected location, not just a header. */
+	if (cmsg_space > (size_t)((uint8_t *)msg->msg_control + msg->msg_controllen -
+				  (uint8_t *)cmsg)) {
+		return -ENOMEM;
 	}
 
 	cmsg->cmsg_len = NET_CMSG_LEN(pktinfo_len);
@@ -1160,7 +1163,7 @@ static int update_msg_controllen(struct net_msghdr *msg)
 		if (cmsg->cmsg_len == 0) {
 			break;
 		}
-		cmsg_space += cmsg->cmsg_len;
+		cmsg_space += NET_ALIGN_H(cmsg->cmsg_len);
 	}
 	msg->msg_controllen = cmsg_space;
 
@@ -1463,7 +1466,7 @@ static ssize_t zsock_recv_stream_timed(struct net_context *ctx, struct net_msghd
 	for (end = sys_timepoint_calc(timeout); max_len > 0; timeout = sys_timepoint_timeout(end)) {
 
 		if (sock_is_error(ctx)) {
-			return -POINTER_TO_INT(ctx->user_data);
+			return -sock_get_error(ctx);
 		}
 
 		if (sock_is_eof(ctx)) {
@@ -1847,7 +1850,7 @@ int zsock_getsockopt_ctx(struct net_context *ctx, int level, int optname,
 				return -1;
 			}
 
-			*(int *)optval = POINTER_TO_INT(ctx->user_data);
+			*(int *)optval = sock_get_error(ctx);
 
 			return 0;
 		}

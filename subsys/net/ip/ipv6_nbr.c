@@ -2159,6 +2159,7 @@ int net_ipv6_send_ns(struct net_if *iface,
 
 			/* Let the system timeout and then send the NS again */
 			net_ipv6_nbr_unlock();
+			net_pkt_unref(pkt);
 			return 0;
 		}
 	}
@@ -2492,8 +2493,13 @@ static inline bool handle_ra_6co(struct net_pkt *pkt, uint8_t len)
 	 * bits in the Context Prefix field that are valid.  The value ranges
 	 * from 0 to 128.  If it is more than 64, then the Length MUST be 3.
 	 */
-	if ((context->context_len > 64 && len != 3U) ||
+	if (context->context_len > 128U ||
+	    (context->context_len > 64 && len != 3U) ||
 	    (context->context_len <= 64U && len != 2U)) {
+		/* Per RFC 6775 the context length is at most 128. A larger
+		 * value makes context_len/8 exceed the prefix size and
+		 * underflows the memset length below.
+		 */
 		return false;
 	}
 
@@ -2717,7 +2723,7 @@ static enum net_verdict handle_ra_input(struct net_icmp_ctx *ctx,
 	}
 
 	if (reachable_time && reachable_time <= MAX_REACHABLE_TIME &&
-	    (net_if_ipv6_get_reachable_time(net_pkt_iface(pkt)) !=
+	    (net_if_ipv6_get_base_reachable_time(net_pkt_iface(pkt)) !=
 	     reachable_time)) {
 		net_if_ipv6_set_base_reachable_time(net_pkt_iface(pkt),
 						    reachable_time);
