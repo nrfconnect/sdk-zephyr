@@ -166,7 +166,7 @@
 	status = "okay";
 };
 
-&mspi00 {
+&qspi00 {
 	status = "okay";
 	op-mode = "MSPI_OP_MODE_CONTROLLER";
 };
