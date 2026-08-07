@@ -22,7 +22,6 @@ def testinstance(tmp_path: Path) -> TestInstance:
     testsuite.harness = 'pytest'
     testsuite.ignore_faults = False
     testsuite.sysbuild = False
-    testsuite.build = True
     platform = Platform()
 
     testinstance = TestInstance(testsuite, platform, 'zephyr', 'outdir')
