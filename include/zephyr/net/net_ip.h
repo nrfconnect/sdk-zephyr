@@ -82,6 +82,7 @@ enum net_ip_protocol_secure {
 	NET_IPPROTO_TLS_1_3 = 259,     /**< TLS 1.3 protocol */
 	NET_IPPROTO_DTLS_1_0 = 272,    /**< DTLS 1.0 protocol */
 	NET_IPPROTO_DTLS_1_2 = 273,    /**< DTLS 1.2 protocol */
+	NET_IPPROTO_QUIC = 511,        /**< QUIC protocol     */
 };
 
 /** Socket type */
@@ -307,6 +308,12 @@ struct net_cmsghdr {
 	int           cmsg_level;  /**< Originating protocol */
 	int           cmsg_type;   /**< Protocol-specific type */
 	z_max_align_t cmsg_data[]; /**< Flexible array member to force alignment of net_cmsghdr */
+};
+
+/** Linger option struct for the SO_LINGER socket option */
+struct net_linger {
+	int l_onoff;  /**< Whether the linger behaviour is enabled */
+	int l_linger; /**< Linger time in seconds */
 };
 
 /** @cond INTERNAL_HIDDEN */
@@ -1907,6 +1914,19 @@ static inline struct net_sockaddr *net_sad(const struct net_sockaddr_storage *ad
 }
 
 /**
+ * @brief Get net_sockaddr_storage from net_sockaddr. This is a helper so that
+ * the code calling this function can be made shorter.
+ *
+ * @param addr Socket address
+ *
+ * @return Pointer to socket storage address (struct net_sockaddr_storage)
+ */
+static inline struct net_sockaddr_storage *net_sas(const struct net_sockaddr *addr)
+{
+	return (struct net_sockaddr_storage *)addr;
+}
+
+/**
  * @brief Get net_sockaddr_in6 from net_sockaddr. This is a helper so that
  * the code calling this function can be made shorter.
  *
@@ -2107,6 +2127,26 @@ const char *net_ipaddr_parse_mask(const char *str, size_t str_len,
  * @return 0 if ok, <0 if error
  */
 int net_port_set_default(struct net_sockaddr *addr, uint16_t default_port);
+
+/**
+ * @brief Set the port in the sockaddr structure.
+ *
+ * @param addr Pointer to user supplied struct sockaddr.
+ * @param port Port number to set.
+ *
+ * @return 0 if ok, <0 if error
+ */
+int net_port_set(struct net_sockaddr *addr, uint16_t port);
+
+/**
+ * @brief Get the port in the sockaddr structure.
+ *
+ * @param addr Pointer to user supplied struct sockaddr.
+ * @param port Pointer to a variable where the port number is returned.
+ *
+ * @return 0 if ok, < 0 if error
+ */
+int net_port_get(struct net_sockaddr *addr, uint16_t *port);
 
 /**
  * @brief Compare TCP sequence numbers.

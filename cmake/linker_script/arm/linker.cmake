@@ -108,6 +108,17 @@ if(CONFIG_ROMSTART_RELOCATION_ROM)
   set(ROMSTART_ADDRESS ${CONFIG_ROMSTART_REGION_ADDRESS})
 endif()
 
+set(vector_table_min_size_arg)
+if(CONFIG_CORTEX_M_NULL_POINTER_EXCEPTION)
+  math(EXPR _vector_start_address "${ROMSTART_ADDRESS} + ${CONFIG_ROM_START_OFFSET} + 0")
+  math(EXPR _null_pointer_page_size "${CONFIG_CORTEX_M_NULL_POINTER_EXCEPTION_PAGE_SIZE} + 0")
+  math(EXPR VECTOR_TABLE_MIN_SIZE "${_null_pointer_page_size} - ${_vector_start_address}")
+
+  if(VECTOR_TABLE_MIN_SIZE GREATER 0)
+    set(vector_table_min_size_arg MIN_SIZE ${VECTOR_TABLE_MIN_SIZE})
+  endif()
+endif()
+
 zephyr_linker_group(NAME RAM_REGION VMA RAM LMA ROM_REGION)
 if(CONFIG_ROMSTART_RELOCATION_ROM)
   zephyr_linker_group(NAME ROMSTART_REGION VMA ROMSTART LMA ROMSTART)
@@ -253,15 +264,19 @@ zephyr_linker_section_configure(
   SYMBOLS _vector_start _vector_end
   ALIGN ${VECTOR_ALIGN}
   PRIO 50
+  ${vector_table_min_size_arg}
 )
 
 dt_chosen(chosen_itcm PROPERTY "zephyr,itcm")
 if(DEFINED chosen_itcm)
   dt_node_has_status(status_result PATH ${chosen_itcm} STATUS okay)
   if(${status_result})
-    zephyr_linker_group(NAME ITCM_REGION VMA ITCM LMA ROM_REGION)
+    dt_prop(chosen_itcm_region PATH ${chosen_itcm} PROPERTY "zephyr,memory-region")
+    if(NOT DEFINED chosen_itcm_region)
+      zephyr_linker_group(NAME ITCM_REGION VMA ITCM LMA ROM_REGION)
 
-    zephyr_linker_section(NAME .itcm GROUP ITCM_REGION SUBALIGN 4)
+      zephyr_linker_section(NAME .itcm GROUP ITCM_REGION SUBALIGN 4)
+    endif()
   endif()
 endif()
 
@@ -271,9 +286,9 @@ if(DEFINED chosen_dtcm)
   if(${status_result})
     zephyr_linker_group(NAME DTCM_REGION VMA DTCM LMA ROM_REGION)
 
-    zephyr_linker_section(NAME .dtcm_bss GROUP DTCM_REGION SUBALIGN 4 TYPE BSS)
-    zephyr_linker_section(NAME .dtcm_noinit GROUP DTCM_REGION SUBALIGN 4 TYPE NOLOAD NOINIT)
-    zephyr_linker_section(NAME .dtcm_data GROUP DTCM_REGION SUBALIGN 4)
+    zephyr_linker_section(NAME .dtcm_bss GROUP DTCM_REGION ALIGN 4 TYPE BSS)
+    zephyr_linker_section(NAME .dtcm_noinit GROUP DTCM_REGION ALIGN 4 TYPE NOLOAD NOINIT)
+    zephyr_linker_section(NAME .dtcm_data GROUP DTCM_REGION ALIGN 4)
   endif()
 endif()
 

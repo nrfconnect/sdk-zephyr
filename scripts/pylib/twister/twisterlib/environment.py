@@ -384,6 +384,13 @@ Artificially long but functional example:
         help="""Only run device tests with current artifacts, do not build
              the code""")
 
+    parser.add_argument(
+        "--post-build-checks", action="store_true",
+        help="""Run post-build checks on each build directory once a build
+             completes, for example detecting git repositories accidentally
+             cloned into a build directory. Disabled by default; intended to
+             be enabled in CI.""")
+
     parser.add_argument("--timeout-multiplier", type=float, default=1,
         help="""Globally adjust tests timeouts by specified multiplier. The resulting test
         timeout would be multiplication of test timeout value, board-level timeout multiplier
@@ -509,6 +516,14 @@ structure in the main Zephyr tree: boards/<vendor>/<board_name>/""")
                         selected to run with enabled coverage. Requires another reporting mode to be
                         active (`--coverage-per-instance`) to have at least one of these reporting
                         modes. Default: %(default)s""")
+
+    coverage_group.add_argument("--coverage-per-test", action="store_true", default=False,
+                help="""Collect a separate coverage artifact for every individual Ztest
+                        test case, enabling a per-test to source-code coverage matrix.
+                        Requires the 'lcov' coverage tool. Implies --coverage. On platforms
+                        that support semihosting (e.g. mps2/*) the per-test data is written
+                        straight to the host filesystem, avoiding console traffic.
+                        Default: %(default)s""")
 
     parser.add_argument(
         "--test-config",
@@ -915,6 +930,12 @@ def parse_arguments(
 
     if options.aggressive_no_clean:
         options.no_clean = True
+
+    if options.coverage_per_test:
+        options.coverage = True
+        if options.coverage_tool != "lcov":
+            logger.error("--coverage-per-test requires the 'lcov' coverage tool.")
+            sys.exit(1)
 
     if options.coverage:
         options.enable_coverage = True

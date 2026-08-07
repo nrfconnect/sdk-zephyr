@@ -1221,6 +1221,7 @@ static void bt_hci_le_per_adv_sync_established_common(struct net_buf *buf)
 	struct bt_le_per_adv_sync_synced_info sync_info;
 	struct bt_le_per_adv_sync *pending_per_adv_sync;
 	struct bt_le_per_adv_sync_cb *listener, *tmp;
+	bt_addr_le_t pending_id_addr;
 	bt_addr_le_t id_addr;
 	bool unexpected_evt;
 	int err;
@@ -1253,10 +1254,22 @@ static void bt_hci_le_per_adv_sync_established_common(struct net_buf *buf)
 		bt_addr_le_copy(&id_addr, bt_lookup_id_addr(BT_ID_DEFAULT, &evt->adv_addr));
 	}
 
+	if (pending_per_adv_sync != NULL) {
+		bt_addr_le_t *addr_to_check = &pending_per_adv_sync->addr;
+
+		if (bt_addr_le_is_resolved(addr_to_check)) {
+			bt_addr_le_copy_resolved(&pending_id_addr, addr_to_check);
+		} else {
+			bt_addr_le_copy(
+				&pending_id_addr,
+				bt_lookup_id_addr(BT_ID_DEFAULT, addr_to_check));
+		}
+	}
+
 	if (!pending_per_adv_sync ||
 	    (!atomic_test_bit(pending_per_adv_sync->flags, BT_PER_ADV_SYNC_SYNCING_USE_LIST) &&
 	     ((pending_per_adv_sync->sid != evt->sid) ||
-	      !bt_addr_le_eq(&pending_per_adv_sync->addr, &id_addr)))) {
+	      !bt_addr_le_eq(&pending_id_addr, &id_addr)))) {
 		LOG_ERR("Unexpected per adv sync established event");
 		/* Request terminate of pending periodic advertising in controller */
 		per_adv_sync_terminate(sys_le16_to_cpu(evt->handle));
@@ -1351,6 +1364,11 @@ int bt_le_per_adv_sync_subevent(struct bt_le_per_adv_sync *per_adv_sync,
 	struct bt_hci_cp_le_set_pawr_sync_subevent *cp;
 	struct net_buf *buf;
 
+	if (!IS_ARRAY_ELEMENT(per_adv_sync_pool, per_adv_sync)) {
+		LOG_DBG("Invalid per_adv_sync pointer %p", per_adv_sync);
+		return -EINVAL;
+	}
+
 	if (params->num_subevents > BT_HCI_PAWR_SUBEVENT_MAX) {
 		return -EINVAL;
 	}
@@ -1376,6 +1394,11 @@ int bt_le_per_adv_set_response_data(struct bt_le_per_adv_sync *per_adv_sync,
 {
 	struct bt_hci_cp_le_set_pawr_response_data *cp;
 	struct net_buf *buf;
+
+	if (!IS_ARRAY_ELEMENT(per_adv_sync_pool, per_adv_sync)) {
+		LOG_DBG("Invalid per_adv_sync pointer %p", per_adv_sync);
+		return -EINVAL;
+	}
 
 	if (per_adv_sync->num_subevents == 0) {
 		return -EINVAL;
@@ -1854,7 +1877,18 @@ struct bt_le_per_adv_sync *bt_le_per_adv_sync_lookup_index(uint8_t index)
 int bt_le_per_adv_sync_get_info(struct bt_le_per_adv_sync *per_adv_sync,
 				struct bt_le_per_adv_sync_info *info)
 {
-	if (per_adv_sync == NULL || info == NULL) {
+	if (!IS_ARRAY_ELEMENT(per_adv_sync_pool, per_adv_sync)) {
+		LOG_DBG("Invalid per_adv_sync pointer %p", per_adv_sync);
+		return -EINVAL;
+	}
+
+	if (info == NULL) {
+		LOG_DBG("info is NULL");
+		return -EINVAL;
+	}
+
+	if (!atomic_test_bit(per_adv_sync->flags, BT_PER_ADV_SYNC_CREATED)) {
+		LOG_DBG("per_adv_sync %p is not created", per_adv_sync);
 		return -EINVAL;
 	}
 
@@ -2031,6 +2065,11 @@ static int bt_le_per_adv_sync_terminate(struct bt_le_per_adv_sync *per_adv_sync)
 {
 	int err;
 
+	if (!IS_ARRAY_ELEMENT(per_adv_sync_pool, per_adv_sync)) {
+		LOG_DBG("Invalid per_adv_sync pointer %p", per_adv_sync);
+		return -EINVAL;
+	}
+
 	if (!atomic_test_bit(per_adv_sync->flags, BT_PER_ADV_SYNC_SYNCED)) {
 		return -EINVAL;
 	}
@@ -2050,6 +2089,11 @@ int bt_le_per_adv_sync_delete(struct bt_le_per_adv_sync *per_adv_sync)
 
 	if (!BT_FEAT_LE_EXT_PER_ADV(bt_dev.le.features)) {
 		return -ENOTSUP;
+	}
+
+	if (!IS_ARRAY_ELEMENT(per_adv_sync_pool, per_adv_sync)) {
+		LOG_DBG("Invalid per_adv_sync pointer %p", per_adv_sync);
+		return -EINVAL;
 	}
 
 	if (atomic_test_bit(per_adv_sync->flags, BT_PER_ADV_SYNC_SYNCED)) {
@@ -2107,6 +2151,11 @@ static int bt_le_set_per_adv_recv_enable(struct bt_le_per_adv_sync *per_adv_sync
 
 	if (!BT_FEAT_LE_EXT_PER_ADV(bt_dev.le.features)) {
 		return -ENOTSUP;
+	}
+
+	if (!IS_ARRAY_ELEMENT(per_adv_sync_pool, per_adv_sync)) {
+		LOG_DBG("Invalid per_adv_sync pointer %p", per_adv_sync);
+		return -EINVAL;
 	}
 
 	if (!atomic_test_bit(per_adv_sync->flags, BT_PER_ADV_SYNC_SYNCED)) {
@@ -2170,6 +2219,11 @@ int bt_le_per_adv_sync_transfer(const struct bt_le_per_adv_sync *per_adv_sync,
 		return -ENOTSUP;
 	} else if (!BT_FEAT_LE_PAST_SEND(bt_dev.le.features)) {
 		return -ENOTSUP;
+	}
+
+	if (!IS_ARRAY_ELEMENT(per_adv_sync_pool, per_adv_sync)) {
+		LOG_DBG("Invalid per_adv_sync pointer %p", per_adv_sync);
+		return -EINVAL;
 	}
 
 	buf = bt_hci_cmd_alloc(K_FOREVER);

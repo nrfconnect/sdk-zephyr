@@ -9,7 +9,7 @@
  */
 
 /* Use highest log level if both IPv4 and IPv6 are defined */
-#if defined(CONFIG_NET_IPV4) && defined(CONFIG_NET_IPV6)
+#if defined(CONFIG_NET_NATIVE_IPV4) && defined(CONFIG_NET_NATIVE_IPV6)
 
 #if CONFIG_NET_ICMPV4_LOG_LEVEL > CONFIG_NET_ICMPV6_LOG_LEVEL
 #define ICMP_LOG_LEVEL CONFIG_NET_ICMPV4_LOG_LEVEL
@@ -17,9 +17,9 @@
 #define ICMP_LOG_LEVEL CONFIG_NET_ICMPV6_LOG_LEVEL
 #endif
 
-#elif defined(CONFIG_NET_IPV4)
+#elif defined(CONFIG_NET_NATIVE_IPV4)
 #define ICMP_LOG_LEVEL CONFIG_NET_ICMPV4_LOG_LEVEL
-#elif defined(CONFIG_NET_IPV6)
+#elif defined(CONFIG_NET_NATIVE_IPV6)
 #define ICMP_LOG_LEVEL CONFIG_NET_ICMPV6_LOG_LEVEL
 #else
 #define ICMP_LOG_LEVEL LOG_LEVEL_INF
@@ -123,7 +123,7 @@ int net_icmp_cleanup_ctx(struct net_icmp_ctx *ctx)
 	return 0;
 }
 
-#if defined(CONFIG_NET_IPV4)
+#if defined(CONFIG_NET_NATIVE_IPV4)
 static int send_icmpv4_echo_request(struct net_icmp_ctx *ctx,
 				    struct net_if *iface,
 				    struct net_in_addr *dst,
@@ -182,7 +182,10 @@ static int send_icmpv4_echo_request(struct net_icmp_ctx *ctx,
 	echo_req->identifier = net_htons(params->identifier);
 	echo_req->sequence   = net_htons(params->sequence);
 
-	net_pkt_set_data(pkt, &icmpv4_access);
+	ret = net_pkt_set_data(pkt, &icmpv4_access);
+	if (ret < 0) {
+		goto drop;
+	}
 
 	if (params->data != NULL && params->data_size > 0) {
 		ret = net_pkt_write(pkt, params->data, params->data_size);
@@ -256,7 +259,7 @@ static int send_icmpv4_echo_request(struct net_icmp_ctx *ctx,
 }
 #endif
 
-#if defined(CONFIG_NET_IPV6)
+#if defined(CONFIG_NET_NATIVE_IPV6)
 static int send_icmpv6_echo_request(struct net_icmp_ctx *ctx,
 				    struct net_if *iface,
 				    struct net_in6_addr *dst,
@@ -315,7 +318,10 @@ static int send_icmpv6_echo_request(struct net_icmp_ctx *ctx,
 	echo_req->identifier = net_htons(params->identifier);
 	echo_req->sequence   = net_htons(params->sequence);
 
-	net_pkt_set_data(pkt, &icmpv6_access);
+	ret = net_pkt_set_data(pkt, &icmpv6_access);
+	if (ret < 0) {
+		goto drop;
+	}
 
 	if (params->data != NULL && params->data_size > 0) {
 		ret = net_pkt_write(pkt, params->data, params->data_size);

@@ -65,24 +65,16 @@ void z_openrisc_timer_isr(void)
 	}
 }
 
-void sys_clock_set_timeout(int32_t ticks, bool idle)
+void sys_clock_set_timeout(uint32_t ticks, bool idle)
 {
 #if defined(CONFIG_TICKLESS_KERNEL)
-	if (ticks == K_TICKS_FOREVER) {
-		if (idle) {
-			return;
-		}
-
-		ticks = INT32_MAX;
-	}
-
 	/*
 	 * Clamp the max period length to a number of cycles that can fit
 	 * in half the range of a cycle_diff_t for native width divisions
 	 * to be usable elsewhere. The half range gives us extra room to cope
 	 * with the unavoidable IRQ servicing latency.
 	 */
-	ticks = CLAMP(ticks, 0, MAX_CYC / 2 / cyc_per_tick);
+	ticks = MIN(ticks, MAX_CYC / 2 / cyc_per_tick);
 
 	const uint32_t compare =
 		((last_ticks + last_elapsed + (uint32_t)ticks) * cyc_per_tick) & MAX_CYC;

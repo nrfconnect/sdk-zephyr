@@ -27,7 +27,7 @@ LOG_MODULE_DECLARE(net_zperf, CONFIG_NET_ZPERF_LOG_LEVEL);
 
 /* To support multicast */
 #include "ipv6.h"
-#include "zephyr/net/igmp.h"
+#include <zephyr/net/igmp.h>
 
 static struct net_sockaddr_in6 *in6_addr_my;
 static struct net_sockaddr_in *in4_addr_my;
@@ -137,19 +137,57 @@ static void udp_received(int sock, const struct net_sockaddr *addr, uint8_t *dat
 						     &session->stat) < 0) {
 				NET_ERR("Failed to send the packet");
 			}
-		} else {
-			zperf_reset_session_stats(session);
-			session->state = STATE_ONGOING;
-			session->start_time = time;
-
-			/* Start a new session! */
-			if (udp_session_cb != NULL) {
-				udp_session_cb(ZPERF_SESSION_STARTED, NULL,
-					       udp_user_data);
-			}
+			break;
 		}
-		break;
+
+		/* Start a new session */
+		zperf_reset_session_stats(session);
+		session->state = STATE_ONGOING;
+		session->start_time = time;
+
+		if (udp_session_cb != NULL) {
+			udp_session_cb(ZPERF_SESSION_STARTED, NULL,
+				       udp_user_data);
+		}
+
+		/* This is already the first packet of the new session */
+		__fallthrough;
 	case STATE_ONGOING:
+		/* Update counter */
+		session->counter++;
+		session->length += datalen;
+
+		/* Compute jitter */
+		transit_time = time_delta(
+			k_ticks_to_us_ceil32(time),
+			net_ntohl(hdr->tv_sec) * USEC_PER_SEC +
+			net_ntohl(hdr->tv_usec));
+		if (session->last_transit_time != 0) {
+			int32_t delta_transit = transit_time -
+				session->last_transit_time;
+
+			delta_transit =
+				(delta_transit < 0) ?
+				-delta_transit : delta_transit;
+
+			session->jitter +=
+				(delta_transit - session->jitter) / 16;
+		}
+
+		session->last_transit_time = transit_time;
+
+		/* Check header id */
+		if (abs(id) != session->next_id) {
+			if (id < session->next_id) {
+				session->outorder++;
+			} else {
+				session->error += id - session->next_id;
+				session->next_id = id + 1;
+			}
+		} else {
+			session->next_id++;
+		}
+
 		if (id < 0) { /* Negative id means session end. */
 			struct zperf_results results = { 0 };
 			uint64_t duration;
@@ -189,41 +227,6 @@ static void udp_received(int sock, const struct net_sockaddr *addr, uint8_t *dat
 			if (udp_session_cb != NULL) {
 				udp_session_cb(ZPERF_SESSION_FINISHED, &results,
 					       udp_user_data);
-			}
-		} else {
-			/* Update counter */
-			session->counter++;
-			session->length += datalen;
-
-			/* Compute jitter */
-			transit_time = time_delta(
-				k_ticks_to_us_ceil32(time),
-				net_ntohl(hdr->tv_sec) * USEC_PER_SEC +
-				net_ntohl(hdr->tv_usec));
-			if (session->last_transit_time != 0) {
-				int32_t delta_transit = transit_time -
-					session->last_transit_time;
-
-				delta_transit =
-					(delta_transit < 0) ?
-					-delta_transit : delta_transit;
-
-				session->jitter +=
-					(delta_transit - session->jitter) / 16;
-			}
-
-			session->last_transit_time = transit_time;
-
-			/* Check header id */
-			if (id != session->next_id) {
-				if (id < session->next_id) {
-					session->outorder++;
-				} else {
-					session->error += id - session->next_id;
-					session->next_id = id + 1;
-				}
-			} else {
-				session->next_id++;
 			}
 		}
 		break;
@@ -317,7 +320,8 @@ static int udp_recv_data(struct net_socket_service_event *pev)
 {
 	static uint8_t buf[UDP_RECEIVER_BUF_SIZE];
 	int ret = 1;
-	int family, sock_error;
+	int family, sock_error = 0;
+	int default_error = EIO;
 	struct net_sockaddr addr;
 	net_socklen_t optlen = sizeof(int);
 	net_socklen_t addrlen = sizeof(addr);
@@ -328,10 +332,18 @@ static int udp_recv_data(struct net_socket_service_event *pev)
 
 	if ((pev->event.revents & ZSOCK_POLLERR) ||
 	    (pev->event.revents & ZSOCK_POLLNVAL)) {
+		if (pev->event.revents & ZSOCK_POLLNVAL) {
+			default_error = EBADF;
+		}
+
 		(void)zsock_getsockopt(pev->event.fd, ZSOCK_SOL_SOCKET,
 				       ZSOCK_SO_DOMAIN, &family, &optlen);
-		(void)zsock_getsockopt(pev->event.fd, ZSOCK_SOL_SOCKET,
-				       ZSOCK_SO_ERROR, &sock_error, &optlen);
+		if (zsock_getsockopt(pev->event.fd, ZSOCK_SOL_SOCKET,
+				     ZSOCK_SO_ERROR, &sock_error, &optlen) < 0 ||
+		    sock_error == 0) {
+			sock_error = default_error;
+		}
+
 		NET_ERR("UDP receiver IPv%d socket error (%d)",
 			family == NET_AF_INET ? 4 : 6, sock_error);
 		ret = -sock_error;

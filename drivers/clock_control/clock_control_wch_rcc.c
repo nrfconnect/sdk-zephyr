@@ -36,7 +36,7 @@
 #endif
 
 #if defined(CONFIG_DT_HAS_WCH_CH32V20X_30X_PLL_CLOCK_ENABLED)
-#if defined(CONFIG_SOC_CH32V307)
+#if defined(CONFIG_SOC_CH32V305) || defined(CONFIG_SOC_CH32V307) || defined(CONFIG_SOC_CH32V317)
 /* TODO: Entry 13 is 6.5x (fractional multiple currently unsupported without
  * changes to RCC config datatype)
  */
@@ -106,6 +106,14 @@ static void clock_control_wch_rcc_setup_flash(void)
 	if (WCH_RCC_SYSCLK <= 15000000) {
 		latency = FLASH_ACTLR_LATENCY_0;
 	} else if (WCH_RCC_SYSCLK <= 24000000) {
+		latency = FLASH_ACTLR_LATENCY_1;
+	} else {
+		latency = FLASH_ACTLR_LATENCY_2;
+	}
+#elif defined(CONFIG_SOC_CH32V103)
+	if (WCH_RCC_SYSCLK <= 24000000) {
+		latency = FLASH_ACTLR_LATENCY_0;
+	} else if (WCH_RCC_SYSCLK <= 48000000) {
 		latency = FLASH_ACTLR_LATENCY_1;
 	} else {
 		latency = FLASH_ACTLR_LATENCY_2;

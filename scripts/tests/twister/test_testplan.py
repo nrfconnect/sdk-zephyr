@@ -263,6 +263,55 @@ def test_apply_filters_part3(class_testplan, all_testsuites_dict, platforms_list
     assert not filtered_instances
 
 
+# Regression guard for #33247 / #32835: a testsuite with integration_platforms
+# must produce the documented platform scope in both integration (-G) and
+# non-integration modes, including non-default platforms listed in
+# integration_platforms.
+#
+# Fixture testsuite at test_data/testsuites_integration/tests/test_integration/
+# test_data.yaml declares integration_platforms: [demo_board_2, demo_board_3].
+# demo_board_1 and demo_board_3 are default platforms (testing.default: true);
+# demo_board_2 is not. The fixture lives outside the test_data/testsuites/ tree
+# scanned by the shared all_testsuites_dict fixture so that the integration-
+# platforms validation (which needs platforms loaded first) does not break the
+# other tests in this file.
+@pytest.mark.parametrize("integration_flag, expected_platforms", [
+    # -G: scope is exactly the integration_platforms set.
+    (True,  {'demo_board_2', 'demo_board_3'}),
+    # no -G: scope is default platforms ∪ integration_platforms, so the
+    # non-default demo_board_2 must still appear (this is the case that
+    # silently regressed in #32835).
+    (False, {'demo_board_1', 'demo_board_2', 'demo_board_3'}),
+], ids=["with_-G_flag", "without_-G_flag"])
+def test_integration_platforms_scope(class_testplan, test_data,
+                                     integration_flag, expected_platforms):
+    plan = class_testplan
+
+    # Load platforms via the normal add_configurations() path so platform_names
+    # gets both the "<board>/<soc>" form and the bare "<board>" alias that
+    # verify_platforms_existence checks against.
+    plan.env.board_roots = [os.path.abspath(os.path.join(test_data, "board_config"))]
+    plan.add_configurations()
+
+    # Point test_roots at the isolated fixture tree and load it ourselves.
+    plan.env.test_roots = [
+        os.path.join(test_data, "testsuites_integration", "tests"),
+    ]
+    plan.TEST_DEFINITION_FILENAME = ['test_data.yaml']
+    plan.add_testsuites()
+
+    plan.options.integration = integration_flag
+    plan.apply_filters()
+
+    selected = {
+        inst.platform.name.split('/')[0]
+        for key, inst in plan.instances.items()
+        if 'test_integration.check_integration_platforms' in key
+        and inst.status != TwisterStatus.FILTER
+    }
+    assert selected == expected_platforms
+
+
 def get_testsuite_for_given_test(plan: TestPlan, testname: str) -> TestSuite | None:
     """ Helper function to get testsuite object for a given testname"""
     for _, testsuite in plan.testsuites.items():
@@ -908,13 +957,13 @@ def test_testplan_load(
 
 TESTDATA_5 = [
     (False, False, None, 1, 2,
-     ['plat1/testA', 'plat1/testB', 'plat1/testC',
+     ['plat1/testA', 'plat2/testA', 'plat1/testB',
       'plat3/testA', 'plat3/testB', 'plat3/testC']),
     (False, False, None, 1, 5,
      ['plat1/testA',
       'plat3/testA', 'plat3/testB', 'plat3/testC']),
     (False, False, None, 2, 2,
-     ['plat2/testA', 'plat2/testB']),
+     ['plat2/testB', 'plat1/testC']),
     (True, False, None, 1, 2,
      ['plat1/testA', 'plat2/testA', 'plat1/testB',
       'plat3/testA', 'plat3/testB', 'plat3/testC']),
@@ -949,15 +998,20 @@ def test_testplan_generate_subset(
         shuffle_tests=shuffle,
         shuffle_tests_seed=seed
     )
+    def make_inst(ts_name, status):
+        inst = mock.Mock(status=status)
+        inst.testsuite.name = ts_name
+        return inst
+
     testplan.instances = {
-        'plat1/testA': mock.Mock(status=TwisterStatus.NONE),
-        'plat1/testB': mock.Mock(status=TwisterStatus.NONE),
-        'plat1/testC': mock.Mock(status=TwisterStatus.NONE),
-        'plat2/testA': mock.Mock(status=TwisterStatus.NONE),
-        'plat2/testB': mock.Mock(status=TwisterStatus.NONE),
-        'plat3/testA': mock.Mock(status=TwisterStatus.SKIP),
-        'plat3/testB': mock.Mock(status=TwisterStatus.SKIP),
-        'plat3/testC': mock.Mock(status=TwisterStatus.ERROR),
+        'plat1/testA': make_inst('testA', TwisterStatus.NONE),
+        'plat1/testB': make_inst('testB', TwisterStatus.NONE),
+        'plat1/testC': make_inst('testC', TwisterStatus.NONE),
+        'plat2/testA': make_inst('testA', TwisterStatus.NONE),
+        'plat2/testB': make_inst('testB', TwisterStatus.NONE),
+        'plat3/testA': make_inst('testA', TwisterStatus.SKIP),
+        'plat3/testB': make_inst('testB', TwisterStatus.SKIP),
+        'plat3/testC': make_inst('testC', TwisterStatus.ERROR),
     }
 
     testplan.generate_subset(subset, sets)
@@ -1199,9 +1253,15 @@ def test_testplan_info(capfd):
     assert 'dummy text\n' in out
 
 
+# Platforms with twister=False (here 'p1e1') are still listed in platforms so
+# references to them resolve, but they are never added as default platforms.
 TESTDATA_8 = [
-    (False, ['p1e2/unit_testing', 'p2/unit_testing', 'p3/unit_testing'], ['p2/unit_testing', 'p3/unit_testing']),
-    (True, ['p1e2/unit_testing', 'p2/unit_testing', 'p3/unit_testing'], ['p3/unit_testing']),
+    (False,
+     ['p1e1/unit_testing', 'p1e2/unit_testing', 'p2/unit_testing', 'p3/unit_testing'],
+     ['p2/unit_testing', 'p3/unit_testing']),
+    (True,
+     ['p1e1/unit_testing', 'p1e2/unit_testing', 'p2/unit_testing', 'p3/unit_testing'],
+     ['p3/unit_testing']),
 ]
 
 @pytest.mark.parametrize(

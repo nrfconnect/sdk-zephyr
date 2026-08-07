@@ -244,7 +244,7 @@ The following modems are already supported in
 * SIMCom SIM7080, A76xx
 * u-blox SARA-R4, SARA-R5, LARA-R6
 * Sierra Wireless HL7800
-* Telit ME910G1, ME310G1
+* Telit ME910G1, ME310G1, LE910C1 Thread-x, LEx10Q1
 * Nordic Semiconductor nRF91 SLM
 * Sequans GM02S
 
@@ -326,7 +326,7 @@ binding, then write a driver source file using the macros from
    /* Macro for defining a DT instance */
    #define MY_MODEM_DEVICE(inst)                                                   \
        MODEM_DT_INST_PPP_DEFINE(inst,                                              \
-           MODEM_CELLULAR_INST_NAME(ppp, inst), NULL, 98, 1500, 64);               \
+           MODEM_CELLULAR_INST_NAME(ppp, inst), NULL, 1500, 64);                   \
                                                                                    \
        static struct modem_cellular_data                                           \
            MODEM_CELLULAR_INST_NAME(data, inst) = {                                \
@@ -348,6 +348,29 @@ binding, then write a driver source file using the macros from
 
 The example above is minimal but enough to start a PPP connection on a generic cellular modem.
 Refer to :zephyr_file:`drivers/modem/modem_cellular.c` for more complete examples.
+
+Board-specific init script
+==========================
+
+The init, network and dial scripts are vendor-scoped (keyed to the devicetree
+compatible), so configuration that differs between boards using the same modem,
+for example RF tuner band routing, would otherwise require forking the vendor
+driver. A board may instead register its own chat script with
+:c:macro:`MODEM_CELLULAR_BOARD_INIT_DEFINE`. The script runs over the AT control
+channel after CMUX is established and before APN and network configuration.
+Boards that register no script add no ROM or RAM footprint.
+
+The driver overrides the script's completion callback with the one that
+advances the connect sequence, so any callback set on the script is ignored.
+
+.. code-block:: c
+
+   MODEM_CHAT_MATCH_DEFINE(board_init_ok_match, "OK", "", NULL);
+   MODEM_CHAT_SCRIPT_CMDS_DEFINE(board_init_cmds,
+       MODEM_CHAT_SCRIPT_CMD_RESP("AT+QCFG=\"rf/tuner_cfg\",0,\"12,28\"", board_init_ok_match));
+   MODEM_CHAT_SCRIPT_NO_ABORT_DEFINE(board_init, board_init_cmds, NULL, 10);
+
+   MODEM_CELLULAR_BOARD_INIT_DEFINE(DT_NODELABEL(modem), &board_init);
 
 .. _cmux-power-saving:
 
@@ -374,6 +397,14 @@ runtime power management is enabled.
 When data is to be sent or received on any DLCI channel, the CMUX module
 will exit the idle state and wakes the modem up by sending flag characters
 until it receives a flag character from the modem.
+
+For modems that drive sleep and wake from a hardware line outside CMUX
+rather than via the in-band protocol, the ``cmux-no-powersave-handshake``
+property opts out of the handshake on both halves. On entry CMUX skips
+the PSC frame exchange and transitions directly to power save. On exit
+CMUX skips the flag-character exchange and transitions directly to
+connected once the pipe is re-opened. The next outgoing frame
+re-synchronises framing on its own.
 
 Some modems allow UART to be powered down only when the DTR (Data Terminal Ready)
 signal is de-asserted. In this case, a UART device with DTR support can be used

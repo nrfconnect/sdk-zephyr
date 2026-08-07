@@ -83,6 +83,19 @@ NET_BUF_POOL_DEFINE(dns_qname_pool, DNS_RESOLVER_BUF_CTR,
 DNS_CACHE_DEFINE(dns_cache, CONFIG_DNS_RESOLVER_CACHE_MAX_ENTRIES);
 #endif /* CONFIG_DNS_RESOLVER_CACHE */
 
+/**
+ * Get raw integer value from query type
+ *
+ * Useful for private RR types.
+ *
+ * @param type Query type
+ * @return Raw integer value
+ */
+static inline unsigned int dns_query_type_raw(enum dns_query_type type)
+{
+	return (unsigned int)type;
+}
+
 static K_MUTEX_DEFINE(lock);
 static struct dns_resolve_context dns_default_ctx;
 
@@ -179,6 +192,87 @@ static void join_ipv6_mcast_group(struct net_if *iface, void *user_data)
 			net_sprint_ipv6_addr(&net_sin6(addr)->sin6_addr));
 	}
 }
+
+#if defined(CONFIG_MDNS_RESOLVER) && !defined(CONFIG_MDNS_RESPONDER)
+/* When the mDNS responder is not enabled, the resolver is the one that joined
+ * the mDNS multicast groups. If an interface goes fully down and comes back up
+ * (for example the connection manager reacting to an Ethernet cable being
+ * reattached), the stack leaves those groups and does not rejoin them (they
+ * are removed, not just marked unjoined). Rejoin them here so that multicast
+ * mDNS responses keep being delivered.
+ */
+static struct net_mgmt_event_callback mdns_mcast_cb;
+
+static void mdns_rejoin_groups(struct net_if *iface)
+{
+	ARG_UNUSED(iface);
+
+	/* Rejoin so that a fresh membership report is always emitted, even when
+	 * the group is still locally marked as joined (a plain join would then
+	 * return early without sending a report). Fall back to a join if the
+	 * group was removed while the interface was down.
+	 */
+#if defined(CONFIG_NET_IPV4) && defined(CONFIG_NET_IPV4_IGMP)
+	if (net_if_flag_is_set(iface, NET_IF_IPV4)) {
+		struct net_in_addr addr4 = { { { 224, 0, 0, 251 } } };
+		int ret;
+
+		ret = net_ipv4_igmp_rejoin(iface, &addr4);
+		if (ret == -ENOENT) {
+			ret = net_ipv4_igmp_join(iface, &addr4, NULL);
+		}
+
+		if (ret < 0) {
+			NET_DBG("Cannot rejoin %s mDNS group (%d)", "IPv4", ret);
+		}
+	}
+#endif
+
+#if defined(CONFIG_NET_IPV6) && defined(CONFIG_NET_IPV6_MLD)
+	if (net_if_flag_is_set(iface, NET_IF_IPV6)) {
+		struct net_in6_addr addr6 = { { { 0xff, 0x02, 0, 0, 0, 0, 0, 0,
+						  0, 0, 0, 0, 0, 0, 0, 0xfb } } };
+		int ret;
+
+		ret = net_ipv6_mld_rejoin(iface, &addr6);
+		if (ret == -ENOENT) {
+			ret = net_ipv6_mld_join(iface, &addr6);
+		}
+
+		if (ret < 0) {
+			NET_DBG("Cannot rejoin %s mDNS group (%d)", "IPv6", ret);
+		}
+	}
+#endif
+}
+
+static void mdns_iface_event_handler(struct net_mgmt_event_callback *cb,
+				     uint64_t mgmt_event, struct net_if *iface)
+{
+	ARG_UNUSED(cb);
+
+	if (mgmt_event == NET_EVENT_IF_UP) {
+		mdns_rejoin_groups(iface);
+	}
+}
+
+static void mdns_monitor_register(void)
+{
+	static bool registered;
+
+	if (registered) {
+		return;
+	}
+
+	net_mgmt_init_event_callback(&mdns_mcast_cb, mdns_iface_event_handler,
+				     NET_EVENT_IF_UP);
+	net_mgmt_add_event_callback(&mdns_mcast_cb);
+
+	registered = true;
+}
+#else
+#define mdns_monitor_register(...)
+#endif /* CONFIG_MDNS_RESOLVER && !CONFIG_MDNS_RESPONDER */
 
 static void dns_postprocess_server(struct dns_resolve_context *ctx, int idx)
 {
@@ -545,7 +639,7 @@ static int dns_resolve_init_locked(struct dns_resolve_context *ctx,
 	};
 #endif
 	struct net_sockaddr *local_addr = NULL;
-	net_socklen_t addr_len = 0;
+	__maybe_unused net_socklen_t addr_len = 0;
 	int i = 0, idx = 0;
 	const struct net_in6_addr *addr6 = NULL;
 	const struct net_in_addr *addr4 = NULL;
@@ -662,11 +756,11 @@ static int dns_resolve_init_locked(struct dns_resolve_context *ctx,
 
 		dns_postprocess_server(ctx, idx);
 
-		NET_DBG("[%d] %.*s%s%s%s%s%s%s%s", i, (int)server_len, servers[i],
+		NET_DBG("[%d] %.*s%s%s%s%s%s%s%s", idx, (int)server_len, servers[i],
 			IS_ENABLED(CONFIG_MDNS_RESOLVER) ?
-			(ctx->servers[i].is_mdns ? " mDNS" : "") : "",
+			(ctx->servers[idx].is_mdns ? " mDNS" : "") : "",
 			IS_ENABLED(CONFIG_LLMNR_RESOLVER) ?
-			(ctx->servers[i].is_llmnr ? " LLMNR" : "") : "",
+			(ctx->servers[idx].is_llmnr ? " LLMNR" : "") : "",
 			iface_str != NULL ? " via " : "",
 			iface_str != NULL ? iface_str : "",
 			source != DNS_SOURCE_UNKNOWN ? " (" : "",
@@ -712,13 +806,13 @@ static int dns_resolve_init_locked(struct dns_resolve_context *ctx,
 
 		dns_postprocess_server(ctx, idx);
 
-		NET_DBG("[%d] %s%s%s%s%s%s%s%s", i,
+		NET_DBG("[%d] %s%s%s%s%s%s%s%s", idx,
 			net_sprint_addr(servers_sa[i]->sa_family,
 					&net_sin(servers_sa[i])->sin_addr),
 			IS_ENABLED(CONFIG_MDNS_RESOLVER) ?
-			(ctx->servers[i].is_mdns ? " mDNS" : "") : "",
+			(ctx->servers[idx].is_mdns ? " mDNS" : "") : "",
 			IS_ENABLED(CONFIG_LLMNR_RESOLVER) ?
-			(ctx->servers[i].is_llmnr ? " LLMNR" : "") : "",
+			(ctx->servers[idx].is_llmnr ? " LLMNR" : "") : "",
 			interfaces != NULL ? " via " : "",
 			interfaces != NULL ? iface_str : "",
 			source != DNS_SOURCE_UNKNOWN ? " (" : "",
@@ -735,9 +829,9 @@ static int dns_resolve_init_locked(struct dns_resolve_context *ctx,
 			local_addr = (struct net_sockaddr *)&local_addr6;
 			addr_len = sizeof(struct net_sockaddr_in6);
 
-			if (IS_ENABLED(CONFIG_MDNS_RESOLVER) &&
-			    ctx->servers[i].is_mdns && port == 0) {
-				local_addr6.sin6_port = net_htons(5353);
+			if (IS_ENABLED(CONFIG_MDNS_RESOLVER) && port == 0) {
+				local_addr6.sin6_port =
+					net_htons(ctx->servers[i].is_mdns ? 5353 : 0);
 			}
 #else
 			continue;
@@ -749,9 +843,9 @@ static int dns_resolve_init_locked(struct dns_resolve_context *ctx,
 			local_addr = (struct net_sockaddr *)&local_addr4;
 			addr_len = sizeof(struct net_sockaddr_in);
 
-			if (IS_ENABLED(CONFIG_MDNS_RESOLVER) &&
-			    ctx->servers[i].is_mdns && port == 0) {
-				local_addr4.sin_port = net_htons(5353);
+			if (IS_ENABLED(CONFIG_MDNS_RESOLVER) && port == 0) {
+				local_addr4.sin_port =
+					net_htons(ctx->servers[i].is_mdns ? 5353 : 0);
 			}
 #else
 			continue;
@@ -1248,6 +1342,21 @@ static int dns_validate_record(struct dns_resolve_context *ctx, struct dns_msg_t
 
 		break;
 	}
+
+#if defined(CONFIG_DNS_RESOLVER_PRIVATE_RR_SUPPORT)
+	case DNS_RESPONSE_PRIVATE:
+		pos = dns_msg->msg + dns_msg->response_position;
+
+		info->ai_family = NET_AF_UNSPEC;
+		info->ai_extension = DNS_RESOLVE_PRIVATE;
+		info->ai_private.type = *answer_type;
+		info->ai_private.datalen = MIN(dns_msg->response_length,
+					       DNS_MAX_PRIVATE_DATA_SIZE);
+		memcpy(info->ai_private.data, pos, info->ai_private.datalen);
+
+		break;
+#endif /* CONFIG_DNS_RESOLVER_PRIVATE_RR_SUPPORT */
+
 	case DNS_RESPONSE_CNAME_NO_IP:
 		/* Instead of using the QNAME at DNS_QUERY_POS,
 		 * we will use this CNAME
@@ -1398,7 +1507,7 @@ int dns_validate_msg(struct dns_resolve_context *ctx,
 		 * type of answer we got. Currently only A or AAAA
 		 * are supported.
 		 */
-		if (ctx->queries[*query_idx].query_type == (enum dns_query_type)DNS_RR_TYPE_ANY &&
+		if (ctx->queries[*query_idx].query_type == DNS_QUERY_TYPE_ANY &&
 		    answer_type != DNS_RR_TYPE_AAAA && answer_type != DNS_RR_TYPE_A) {
 			ret = DNS_EAI_ADDRFAMILY;
 			goto quit;
@@ -1410,6 +1519,14 @@ int dns_validate_msg(struct dns_resolve_context *ctx,
 			 * for query redirection.
 			 */
 			continue;
+		}
+
+		if (IS_ENABLED(CONFIG_DNS_RESOLVER_PRIVATE_RR_SUPPORT) &&
+		    dns_query_type_is_private(ctx->queries[*query_idx].query_type) &&
+		    dns_msg->response_type == DNS_RESPONSE_PRIVATE &&
+		    answer_type != dns_query_type_raw(ctx->queries[*query_idx].query_type)) {
+			ret = DNS_EAI_ADDRFAMILY;
+			goto quit;
 		}
 
 		invoke_query_callback(DNS_EAI_INPROGRESS, &info, &ctx->queries[*query_idx]);
@@ -1506,7 +1623,19 @@ static int dns_read(struct dns_resolve_context *ctx,
 
 #if defined(CONFIG_DNS_RESOLVER_PACKET_FORWARDING)
 	if (ctx->pkt_fw_cb != NULL) {
-		ctx->pkt_fw_cb(dns_data, data_len, ctx->queries[query_idx].user_data);
+		/* Some packets are discarded by dns_validate_msg function
+		 *(DNS_HEADER_REFUSED, or ANCOUNT < 1). Applications that install this callback
+		 * might require such packets, so try to update query_idx and forward them.
+		 */
+		if (query_idx < 0 && dns_msg.msg_size > DNS_MSG_HEADER_SIZE &&
+		    dns_header_qdcount(dns_msg.msg) > 0 && *dns_id > 0 &&
+		    dns_unpack_response_query(&dns_msg) == 0) {
+			update_query_idx(ctx, &dns_msg, dns_id, &query_idx, query_hash);
+		}
+		/* Make sure that query index is in a valid range */
+		if (query_idx >= 0 && query_idx < CONFIG_DNS_NUM_CONCUR_QUERIES) {
+			ctx->pkt_fw_cb(dns_data, data_len, ctx->queries[query_idx].user_data);
+		}
 	}
 #endif /* CONFIG_DNS_RESOLVER_PACKET_FORWARDING */
 
@@ -1746,7 +1875,7 @@ int dns_resolve_cancel_with_name(struct dns_resolve_context *ctx,
 		/* Use net_buf as a temporary buffer to store the packed
 		 * DNS name.
 		 */
-		buf = net_buf_alloc(&dns_msg_pool, ctx->buf_timeout);
+		buf = net_buf_alloc(&dns_msg_pool, K_FOREVER);
 		if (!buf) {
 			return -ENOMEM;
 		}
@@ -1833,6 +1962,32 @@ static void query_timeout(struct k_work *work)
 	k_mutex_unlock(&pending_query->ctx->lock);
 }
 
+static inline bool query_type_is_valid(enum dns_query_type type)
+{
+	bool valid_query_type = false;
+
+	switch (type) {
+	case DNS_QUERY_TYPE_A:
+	case DNS_QUERY_TYPE_CNAME:
+	case DNS_QUERY_TYPE_PTR:
+	case DNS_QUERY_TYPE_TXT:
+	case DNS_QUERY_TYPE_AAAA:
+	case DNS_QUERY_TYPE_SRV:
+	case DNS_QUERY_TYPE_ANY:
+		valid_query_type = true;
+		break;
+	default:
+		/* Check if this is a private RR type */
+		if (IS_ENABLED(CONFIG_DNS_RESOLVER_PRIVATE_RR_SUPPORT) &&
+		    dns_query_type_is_private(type)) {
+			valid_query_type = true;
+		}
+		break;
+	}
+
+	return valid_query_type;
+}
+
 int dns_resolve_name_internal(struct dns_resolve_context *ctx,
 			      const char *query,
 			      enum dns_query_type type,
@@ -1855,6 +2010,10 @@ int dns_resolve_name_internal(struct dns_resolve_context *ctx,
 #endif /* CONFIG_DNS_RESOLVER_CACHE */
 
 	if (!ctx || !query || !cb) {
+		return -EINVAL;
+	}
+
+	if (!query_type_is_valid(type)) {
 		return -EINVAL;
 	}
 
@@ -2088,8 +2247,7 @@ try_resolve:
 	if (IS_ENABLED(CONFIG_MDNS_RESOLVER)) {
 		const char *ptr = strrchr(query, '.');
 
-		/* Note that we memcmp() the \0 here too */
-		if (ptr && !memcmp(ptr, (const void *){ ".local" }, 7)) {
+		if (ptr && strcmp(ptr, ".local") == 0) {
 			mdns_query = true;
 
 			ctx->queries[i].id = 0;
@@ -2113,10 +2271,11 @@ try_resolve:
 		}
 
 		/* If mDNS is enabled, then send .local queries only to
-		 * a well known multicast mDNS server address.
+		 * a well known multicast mDNS server and non .local only
+		 * to unicast servers.
 		 */
-		if (IS_ENABLED(CONFIG_MDNS_RESOLVER) && mdns_query &&
-		    !ctx->servers[j].is_mdns) {
+		if (IS_ENABLED(CONFIG_MDNS_RESOLVER) &&
+		    (mdns_query != !!ctx->servers[j].is_mdns)) {
 			continue;
 		}
 
@@ -2141,11 +2300,24 @@ try_resolve:
 			continue;
 		}
 
+#if defined(CONFIG_DNS_RESOLVER_QUERY_ALL_AVAILABLE_SERVERS)
+		/* Send query to all available DNS servers.
+		 * The first valid response received will be used.
+		 *
+		 * However, mDNS and LLMNR use multicast addresses,
+		 * so there is no need to send the query to more than
+		 * one multicast server of the same type.
+		 */
+		if (ctx->servers[j].is_mdns || ctx->servers[j].is_llmnr) {
+			break;
+		}
+#else
 		/* Do one concurrent query only for each name resolve.
 		 * TODO: Change the i (query index) to do multiple concurrent
 		 *       to each server.
 		 */
 		break;
+#endif /* CONFIG_DNS_RESOLVER_QUERY_ALL_AVAILABLE_SERVERS */
 	}
 
 	if (nfail > 0) {
@@ -2389,6 +2561,10 @@ unlock:
 	k_mutex_unlock(&ctx->lock);
 	k_mutex_unlock(&lock);
 
+	if (err == 0) {
+		net_mgmt_event_notify(NET_EVENT_DNS_SERVERS_RECONFIGURED, NULL);
+	}
+
 	return err;
 }
 
@@ -2525,6 +2701,12 @@ struct dns_resolve_context *dns_resolve_get_default(void)
 int dns_resolve_init_default(struct dns_resolve_context *ctx)
 {
 	int ret = 0;
+
+	/* Make sure the mDNS multicast groups are rejoined if an interface
+	 * goes down and comes back up (no-op when the responder is enabled).
+	 */
+	mdns_monitor_register();
+
 #if defined(CONFIG_DNS_SERVER_IP_ADDRESSES)
 	static const char *dns_servers[SERVER_COUNT + 1];
 	int count = DNS_SERVER_COUNT;

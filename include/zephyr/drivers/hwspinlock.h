@@ -35,14 +35,16 @@ extern "C" {
  * @brief HW spinlock controller runtime context
  */
 struct hwspinlock_context {
-	/**
-	 * @internal
-	 * Per HW spinlock lock
-	 * @note HW spinlock protects resources across clusters, but we need to protect the
-	 * access to HW spinlock inside of the same cluster, so a single thread may claim the
-	 * lock at a time.
+	/** @cond INTERNAL_HIDDEN */
+	/*
+	 * Per HW spinlock lock.
+	 *
+	 * HW spinlock protects resources across clusters, but we need to protect the
+	 * access to the HW spinlock inside of the same cluster, so a single thread may
+	 * claim the lock at a time.
 	 */
 	struct k_spinlock lock;
+	/** @endcond */
 };
 
 /**
@@ -157,7 +159,7 @@ struct hwspinlock_dt_spec {
 /**
  * @brief Instance version of HWSPINLOCK_DT_SPEC_GET_BY_IDX()
  *
- * @param inst DT_DRV_COMPAT instance number
+ * @param inst @c DT_DRV_COMPAT instance number
  * @param idx Index of the hwlocks element
  *
  * @see HWSPINLOCK_DT_SPEC_GET_BY_IDX()
@@ -168,7 +170,7 @@ struct hwspinlock_dt_spec {
 /**
  * @brief Instance version of HWSPINLOCK_DT_SPEC_GET_BY_NAME()
  *
- * @param inst DT_DRV_COMPAT instance number
+ * @param inst @c DT_DRV_COMPAT instance number
  * @param name lowercase-and-underscores name of the hwlocks element
  *
  * @see HWSPINLOCK_DT_SPEC_GET_BY_NAME()
@@ -178,7 +180,7 @@ struct hwspinlock_dt_spec {
 /**
  * @brief Instance version of HWSPINLOCK_DT_SPEC_GET()
  *
- * @param inst DT_DRV_COMPAT instance number
+ * @param inst @c DT_DRV_COMPAT instance number
  *
  * @see HWSPINLOCK_DT_SPEC_GET()
  */
@@ -264,7 +266,7 @@ __subsystem struct hwspinlock_driver_api {
 static inline int hw_spin_trylock(const struct device *dev, hwspinlock_ctx_t *ctx, uint32_t id,
 				  k_spinlock_key_t *key)
 {
-	const struct hwspinlock_driver_api *api = (const struct hwspinlock_driver_api *)dev->api;
+	const struct hwspinlock_driver_api *api = DEVICE_API_GET(hwspinlock, dev);
 	int ret;
 
 	if (api->trylock == NULL) {
@@ -313,7 +315,7 @@ static inline int hw_spin_trylock(const struct device *dev, hwspinlock_ctx_t *ct
 static inline k_spinlock_key_t hw_spin_lock(const struct device *dev, hwspinlock_ctx_t *ctx,
 					    uint32_t id)
 {
-	const struct hwspinlock_driver_api *api = (const struct hwspinlock_driver_api *)dev->api;
+	const struct hwspinlock_driver_api *api = DEVICE_API_GET(hwspinlock, dev);
 	k_spinlock_key_t k;
 
 	__ASSERT(api->lock != NULL, "hwspinlock lock callback must be implemented");
@@ -338,7 +340,7 @@ static inline k_spinlock_key_t hw_spin_lock(const struct device *dev, hwspinlock
 static inline void hw_spin_unlock(const struct device *dev, hwspinlock_ctx_t *ctx, uint32_t id,
 				  k_spinlock_key_t key)
 {
-	const struct hwspinlock_driver_api *api = (const struct hwspinlock_driver_api *)dev->api;
+	const struct hwspinlock_driver_api *api = DEVICE_API_GET(hwspinlock, dev);
 
 	__ASSERT(api->unlock != NULL, "hwspinlock unlock callback must be implemented");
 
@@ -358,7 +360,7 @@ static inline void hw_spin_unlock(const struct device *dev, hwspinlock_ctx_t *ct
  */
 static inline uint32_t hw_spinlock_get_max_id(const struct device *dev)
 {
-	const struct hwspinlock_driver_api *api = (const struct hwspinlock_driver_api *)dev->api;
+	const struct hwspinlock_driver_api *api = DEVICE_API_GET(hwspinlock, dev);
 
 	__ASSERT(api->get_max_id != NULL, "hwspinlock get_max_id callback must be implemented");
 

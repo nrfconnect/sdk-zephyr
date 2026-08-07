@@ -197,10 +197,10 @@
 			 * ARM PLL is an integer PLL, with an input clock
 			 * of 24MHz. The PLL features a loop divider and
 			 * post divider. The output frequency is calculated
-			 * as Fout = 24MHz * (clock-mult / clock-div)
+			 * as Fout = 24MHz * loop-div / (2 * post-div)
 			 */
-			arm_pll: arm-pll {
-				compatible = "fixed-factor-clock";
+			arm_pll: clock {
+				compatible = "nxp,imxrt11xx-arm-pll";
 				#clock-cells = <0>;
 			};
 		};
@@ -806,7 +806,7 @@
 		};
 
 		enet1g: ethernet@40420000 {
-			compatible = "nxp,enet1g";
+			compatible = "nxp,enet";
 			reg = <0x40420000 0x628>;
 			clocks = <&ccm IMX_CCM_ENET1G_CLK 0 0>;
 			status = "disabled";
@@ -1203,6 +1203,86 @@
 			interrupts = <80 0>, <81 0>;
 			nxp,tx-channel = <1>;
 			status = "disabled";
+		};
+
+		micfil: micfil@40c20000 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			compatible = "nxp,micfil";
+			reg = <0x40c20000 0x1000>;
+			interrupts = <202 0>;
+			clocks = <&ccm IMX_CCM_PDM_CLK 0x1f00 4>;
+			/* Source from audio PLL */
+			clock-mux = <6>;
+			podf = <192>;
+			pll-clocks = <&anatop 0 0 0>,
+				     <&anatop 0 0 32>,
+				     <&anatop 0 0 1>,
+				     <&anatop 0 0 768>,
+				     <&anatop 0 0 1000>;
+			pll-clock-names = "src", "lp", "pd", "num", "den";
+			quality-mode = <1>;
+			cic-decimation-rate = <0>;
+			fifo-watermark = <4>;
+			sample-rate = <16000>;
+
+			status = "disabled";
+
+			channel0: micfil-channel@0 {
+				reg = <0>;
+				dc-remover-cutoff-freq = <2>;
+				decimation-filter-gain = <4>;
+				status = "disabled";
+			};
+
+			channel1: micfil-channel@1 {
+				reg = <1>;
+				dc-remover-cutoff-freq = <2>;
+				decimation-filter-gain = <4>;
+				status = "disabled";
+			};
+
+			channel2: micfil-channel@2 {
+				reg = <2>;
+				dc-remover-cutoff-freq = <2>;
+				decimation-filter-gain = <4>;
+				status = "disabled";
+			};
+
+			channel3: micfil-channel@3 {
+				reg = <3>;
+				dc-remover-cutoff-freq = <2>;
+				decimation-filter-gain = <4>;
+				status = "disabled";
+			};
+
+			channel4: micfil-channel@4 {
+				reg = <4>;
+				dc-remover-cutoff-freq = <2>;
+				decimation-filter-gain = <4>;
+				status = "disabled";
+			};
+
+			channel5: micfil-channel@5 {
+				reg = <5>;
+				dc-remover-cutoff-freq = <2>;
+				decimation-filter-gain = <4>;
+				status = "disabled";
+			};
+
+			channel6: micfil-channel@6 {
+				reg = <6>;
+				dc-remover-cutoff-freq = <2>;
+				decimation-filter-gain = <4>;
+				status = "disabled";
+			};
+
+			channel7: micfil-channel@7 {
+				reg = <7>;
+				dc-remover-cutoff-freq = <2>;
+				decimation-filter-gain = <4>;
+				status = "disabled";
+			};
 		};
 
 		src: reset-controller@40c04000 {

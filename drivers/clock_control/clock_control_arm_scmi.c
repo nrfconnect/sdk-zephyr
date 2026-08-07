@@ -16,6 +16,19 @@ struct scmi_clock_data {
 	uint32_t clk_num;
 };
 
+static bool scmi_clk_supports_get_permissions(struct scmi_protocol *proto, uint32_t clk_id)
+{
+	struct scmi_clock_attributes attributes;
+	int ret;
+
+	ret = scmi_clock_attributes(proto, clk_id, &attributes);
+	if (ret) {
+		return false;
+	}
+
+	return SCMI_CLK_HAS_RESTRICTIONS(attributes.attributes);
+}
+
 static int scmi_clock_on_off(const struct device *dev,
 			     clock_control_subsys_t clk, bool on)
 {
@@ -23,6 +36,8 @@ static int scmi_clock_on_off(const struct device *dev,
 	struct scmi_protocol *proto;
 	uint32_t clk_id;
 	struct scmi_clock_config cfg;
+	uint32_t permissions;
+	int ret;
 
 	proto = dev->data;
 	data = proto->data;
@@ -30,6 +45,18 @@ static int scmi_clock_on_off(const struct device *dev,
 
 	if (clk_id >= data->clk_num) {
 		return -EINVAL;
+	}
+
+	if (scmi_clk_supports_get_permissions(proto, clk_id)) {
+		ret = scmi_clock_get_permissions(proto, clk_id, &permissions);
+		if (ret) {
+			LOG_ERR("failed to query clock permissions: %d", ret);
+			return ret;
+		}
+
+		if (!SCMI_CLK_STATE_CONTROL_ALLOWED(permissions)) {
+			return 0;
+		}
 	}
 
 	memset(&cfg, 0, sizeof(cfg));
@@ -106,7 +133,7 @@ static int scmi_clock_init(const struct device *dev)
 	proto = dev->data;
 	data = proto->data;
 
-	ret = scmi_clock_protocol_attributes(proto, &attributes);
+	ret = scmi_protocol_attributes_get(proto, &attributes);
 	if (ret < 0) {
 		LOG_ERR("failed to fetch clock attributes: %d", ret);
 		return ret;
@@ -121,4 +148,4 @@ static struct scmi_clock_data data;
 
 DT_INST_SCMI_PROTOCOL_DEFINE(0, &scmi_clock_init, NULL, &data, NULL,
 			     PRE_KERNEL_1, CONFIG_CLOCK_CONTROL_INIT_PRIORITY,
-			     &scmi_clock_api, SCMI_CLK_PROTOCOL_SUPPORTED_VERSION);
+			     &scmi_clock_api, SCMI_CLK_PROTOCOL_SUPPORTED_VERSION, NULL);

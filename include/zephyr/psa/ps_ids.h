@@ -3,8 +3,8 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-#ifndef ZEPHYR_PSA_PS_IDS_H_
-#define ZEPHYR_PSA_PS_IDS_H_
+#ifndef ZEPHYR_INCLUDE_PSA_PS_IDS_H_
+#define ZEPHYR_INCLUDE_PSA_PS_IDS_H_
 
 /**
  * @file zephyr/psa/ps_ids.h
@@ -18,4 +18,4 @@
 #define ZEPHYR_PSA_SETTINGS_TFM_PS_UID_RANGE_BEGIN 0x2C000000
 #define ZEPHYR_PSA_SETTINGS_TFM_PS_UID_RANGE_SIZE  0x10000 /**< 64 Ki */
 
-#endif /* ZEPHYR_PSA_PS_IDS_H_ */
+#endif /* ZEPHYR_INCLUDE_PSA_PS_IDS_H_ */

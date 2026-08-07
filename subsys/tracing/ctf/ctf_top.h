@@ -9,6 +9,7 @@
 
 #include <stddef.h>
 #include <string.h>
+#include <tracing_core.h>
 #include <ctf_map.h>
 #include <zephyr/tracing/tracing_format.h>
 #include <zephyr/net/net_ip.h>
@@ -50,10 +51,20 @@
 	}
 
 #ifdef CONFIG_TRACING_CTF_TIMESTAMP
+#include <zephyr/timing/timing.h>
+
+static inline uint64_t ctf_top_timestamp_get(void)
+{
+	return timing_ns_get();
+}
+
 #define CTF_EVENT(...)                                                                             \
 	{                                                                                          \
+		if (!is_tracing_enabled()) {                                                       \
+			return;                                                                    \
+		}                                                                                  \
 		int key = irq_lock();                                                              \
-		const uint32_t tstamp = k_cyc_to_ns_floor64(k_cycle_get_32());                     \
+		const uint64_t tstamp = ctf_top_timestamp_get();                                   \
                                                                                                    \
 		CTF_GATHER_FIELDS(tstamp, __VA_ARGS__)                                             \
 		irq_unlock(key);                                                                   \
@@ -340,6 +351,8 @@ typedef enum {
 	CTF_EVENT_TIMER_EXPIRY_EXIT = 0x101,
 	CTF_EVENT_TIMER_STOP_FN_EXPIRY_ENTER = 0x102,
 	CTF_EVENT_TIMER_STOP_FN_EXPIRY_EXIT = 0x103,
+	CTF_EVENT_SYS_INIT_ENTER = 0x104,
+	CTF_EVENT_SYS_INIT_EXIT = 0x105,
 
 } ctf_event_t;
 
@@ -1400,6 +1413,17 @@ static inline void ctf_top_net_tx_time(int32_t if_index, uint32_t iface, uint32_
 static inline void ctf_named_event(ctf_bounded_string_t name, uint32_t arg0, uint32_t arg1)
 {
 	CTF_EVENT(CTF_LITERAL(uint16_t, CTF_EVENT_NAMED_EVENT), name, arg0, arg1);
+}
+
+static inline void ctf_sys_init_enter(ctf_bounded_string_t name, uint32_t fn, uint8_t level)
+{
+	CTF_EVENT(CTF_LITERAL(uint16_t, CTF_EVENT_SYS_INIT_ENTER), name, fn, level);
+}
+
+static inline void ctf_sys_init_exit(ctf_bounded_string_t name, uint32_t fn, uint8_t level,
+				     int32_t result)
+{
+	CTF_EVENT(CTF_LITERAL(uint16_t, CTF_EVENT_SYS_INIT_EXIT), name, fn, level, result);
 }
 
 /* GPIO */

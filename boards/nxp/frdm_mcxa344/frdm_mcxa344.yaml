@@ -24,4 +24,7 @@ supported:
   - spi
   - uart
   - watchdog
+  - edac
+  - pwm
+  - opamp
 vendor: nxp
