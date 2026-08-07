@@ -73,12 +73,8 @@ struct zms_ate {
 		/** data field used to store small sized data */
 		uint8_t data[8];
 		struct {
-			union {
-				/** data offset within sector */
-				uint32_t offset;
-				/** full cycle count (for empty ATE) */
-				uint32_t full_cycle_cnt;
-			};
+			/** data offset within sector */
+			uint32_t offset;
 			union {
 				/**
 				 * crc for data: The data CRC is checked only when the whole data
@@ -101,12 +97,8 @@ struct zms_ate {
 	union {
 		/** data field used to store small sized data */
 		uint8_t data[4];
-		union {
-			/** data offset within sector */
-			uint32_t offset;
-			/** full cycle count (for empty ATE) */
-			uint32_t full_cycle_cnt;
-		};
+		/** data offset within sector */
+		uint32_t offset;
 		/** Used to store metadata information such as storage version. */
 		uint32_t metadata;
 	};
