@@ -27,7 +27,7 @@ tests:
     integration_platforms:
       - stm32h573i_dk
     extra_configs:
-      - CONFIG_ETH_STM32_HAL_TX_ASYNC=y
+      - CONFIG_ETH_STM32_HAL_TX_ASYNC=n
   sample.net.zperf_st:
     harness: console
     harness_config:
