@@ -13,7 +13,8 @@ from twisterlib.hardwaremap import HardwareMap
 from twisterlib.testinstance import TestInstance
 from twisterlib.testplan import TestConfiguration, TestPlan
 
-from . import ZEPHYR_BASE  # pylint: disable=no-name-in-module
+# pylint: disable=no-name-in-module
+from . import ZEPHYR_BASE
 
 pytest_plugins = ["pytester"]
 
@@ -68,7 +69,8 @@ def testplan_obj(class_env):
 def testsuites_dict(class_testplan):
     """ Pytest fixture to call add_testcase function of
 	Testsuite class and return the dictionary of testsuites"""
-    class_testplan.TEST_DEFINITION_FILENAME = ['test_sample_app.yaml', 'test_data.yaml']
+    class_testplan.SAMPLE_FILENAME = 'test_sample_app.yaml'
+    class_testplan.TESTSUITE_FILENAME = 'test_data.yaml'
     class_testplan.add_testsuites()
     return class_testplan.testsuites
 
