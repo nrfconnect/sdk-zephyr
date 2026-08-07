@@ -106,8 +106,7 @@ class TwisterHarnessConfig:
         if config.option.runner_params:
             runner_params = [w.strip() for w in config.option.runner_params]
 
-        # for backwards compatibility if config file is not given or there are no duts defined
-        # in the config file, create a single DUT based on command line options
+        # for native, qemu and backwards compatibility with DUT defined from command line
         if not test_params.duts:
             dut = CompoundHardwareData()
             dut.serial = config.option.device_serial[0] if config.option.device_serial else None
