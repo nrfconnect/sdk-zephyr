@@ -7,6 +7,4 @@ toolchain:
   - gnuarmemb
 ram: 160
 flash: 512
-supported:
-  - watchdog
 vendor: nuvoton
