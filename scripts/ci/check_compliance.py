@@ -2353,7 +2353,7 @@ class ImageSize(ComplianceTest):
         SIZE_LIMIT = 250 << 10
         BOARD_SIZE_LIMIT = 100 << 10
 
-        for file in get_files(filter="dr"):
+        for file in get_files(filter="d"):
             full_path = GIT_TOP / file
             mime_type = magic.from_file(os.fspath(full_path), mime=True)
 
