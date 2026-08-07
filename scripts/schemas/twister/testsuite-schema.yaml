@@ -157,10 +157,6 @@ $defs:
             additionalProperties: false
           bsim_exe_name:
             type: string
-          tests_scripts:
-            type: array
-            items:
-              type: string
           ztest_suite_repeat:
             type: integer
           ztest_test_repeat:
