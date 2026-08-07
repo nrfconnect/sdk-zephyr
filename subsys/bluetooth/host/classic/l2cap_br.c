@@ -1653,6 +1653,7 @@ static void connect_fixed_channel(struct bt_l2cap_br_chan *chan)
 		return;
 	}
 
+	bt_l2cap_br_chan_set_state(&chan->chan, BT_L2CAP_CONNECTED);
 	if (chan->chan.ops && chan->chan.ops->connected) {
 		chan->chan.ops->connected(&chan->chan);
 	}
@@ -1893,6 +1894,8 @@ void bt_l2cap_br_connected(struct bt_conn *conn)
 		if (!l2cap_br_chan_add(conn, chan, NULL)) {
 			return;
 		}
+
+		bt_l2cap_br_chan_set_state(chan, BT_L2CAP_CONNECTING);
 
 		/*
 		 * other fixed channels will be connected after Information
@@ -3617,7 +3620,7 @@ static void l2cap_br_conf_rsp(struct bt_l2cap_br *l2cap, uint8_t ident, uint16_t
 	struct bt_l2cap_br_chan *br_chan;
 	int err;
 
-	if (buf->len < sizeof(*rsp)) {
+	if (len < sizeof(*rsp)) {
 		LOG_ERR("Too small L2CAP conf rsp packet size");
 		return;
 	}
@@ -4396,7 +4399,7 @@ static void l2cap_br_conf_req(struct bt_l2cap_br *l2cap, uint8_t ident, uint16_t
 	uint16_t flags, dcid, opt_len, hint, result = BT_L2CAP_CONF_SUCCESS;
 	struct net_buf *rsp_buf;
 
-	if (buf->len < sizeof(*req)) {
+	if (len < sizeof(*req)) {
 		LOG_ERR("Too small L2CAP conf req packet size");
 		return;
 	}
@@ -5708,8 +5711,7 @@ static int bt_l2cap_br_recv_seg(struct bt_l2cap_br_chan *br_chan, struct net_buf
 			return -ESHUTDOWN;
 		}
 
-		buf = br_chan->_sdu;
-		br_chan->_sdu = NULL;
+		buf = net_buf_take(&br_chan->_sdu);
 		br_chan->_sdu_len = 0;
 
 		/* Receiving complete SDU, notify channel and reset SDU buf */
@@ -6075,8 +6077,7 @@ void bt_l2cap_br_recv(struct bt_conn *conn, struct net_buf *buf)
 
 	if (buf->len < sizeof(*hdr)) {
 		LOG_ERR("Too small L2CAP PDU received");
-		net_buf_unref(buf);
-		return;
+		goto done;
 	}
 
 	hdr = net_buf_pull_mem(buf, sizeof(*hdr));
@@ -6085,8 +6086,7 @@ void bt_l2cap_br_recv(struct bt_conn *conn, struct net_buf *buf)
 	chan = bt_l2cap_br_lookup_rx_cid(conn, cid);
 	if (!chan) {
 		LOG_WRN("Ignoring data for unknown channel ID 0x%04x", cid);
-		net_buf_unref(buf);
-		return;
+		goto done;
 	}
 
 	/*
@@ -6094,6 +6094,11 @@ void bt_l2cap_br_recv(struct bt_conn *conn, struct net_buf *buf)
 	 * Response we connect channel here.
 	 */
 	check_fixed_channel(chan);
+
+	if (BR_CHAN(chan)->state < BT_L2CAP_CONNECTED) {
+		LOG_ERR("Chan %p in invalid state %u, ignoring data", chan, BR_CHAN(chan)->state);
+		goto done;
+	}
 
 #if defined(CONFIG_BT_L2CAP_RET_FC)
 	if (BR_CHAN(chan)->rx.mode != BT_L2CAP_BR_LINK_MODE_BASIC) {
@@ -6106,6 +6111,8 @@ void bt_l2cap_br_recv(struct bt_conn *conn, struct net_buf *buf)
 #if defined(CONFIG_BT_L2CAP_RET_FC)
 	}
 #endif /* CONFIG_BT_L2CAP_RET_FC */
+
+done:
 	net_buf_unref(buf);
 }
 
@@ -6160,7 +6167,8 @@ int bt_l2cap_br_chan_recv_complete(struct bt_l2cap_chan *chan)
 
 static int l2cap_br_accept(struct bt_conn *conn, struct bt_l2cap_chan **chan)
 {
-	int i;
+	struct bt_l2cap_br *l2cap;
+	uint8_t index;
 	static const struct bt_l2cap_chan_ops ops = {
 		.connected = l2cap_br_connected,
 		.disconnected = l2cap_br_disconnected,
@@ -6169,22 +6177,20 @@ static int l2cap_br_accept(struct bt_conn *conn, struct bt_l2cap_chan **chan)
 
 	LOG_DBG("conn %p handle %u", conn, conn->handle);
 
-	for (i = 0; i < ARRAY_SIZE(bt_l2cap_br_pool); i++) {
-		struct bt_l2cap_br *l2cap = &bt_l2cap_br_pool[i];
+	index = bt_conn_index(conn);
+	__ASSERT(index < ARRAY_SIZE(bt_l2cap_br_pool), "Invalid ACL conn index");
 
-		if (l2cap->chan.chan.conn) {
-			continue;
-		}
+	l2cap = &bt_l2cap_br_pool[index];
 
-		l2cap->chan.chan.ops = &ops;
-		*chan = &l2cap->chan.chan;
-		atomic_set(l2cap->chan.flags, 0);
-		return 0;
+	if (l2cap->chan.state != BT_L2CAP_DISCONNECTED) {
+		LOG_ERR("Signal chan %p is not idle (state %u)", &l2cap->chan, l2cap->chan.state);
+		return -EBUSY;
 	}
 
-	LOG_ERR("No available L2CAP context for conn %p", conn);
-
-	return -ENOMEM;
+	l2cap->chan.chan.ops = &ops;
+	*chan = &l2cap->chan.chan;
+	atomic_set(l2cap->chan.flags, 0);
+	return 0;
 }
 
 BT_L2CAP_BR_CHANNEL_DEFINE(br_fixed_chan, BT_L2CAP_CID_BR_SIG, l2cap_br_accept);
@@ -6521,9 +6527,14 @@ static int l2cap_br_connless_accept(struct bt_conn *conn, struct bt_l2cap_chan *
 	LOG_DBG("conn %p handle %u", conn, conn->handle);
 
 	index = bt_conn_index(conn);
-	__ASSERT(index < ARRAY_SIZE(bt_l2cap_br_pool), "Invalid ACL conn index");
+	__ASSERT(index < ARRAY_SIZE(bt_l2cap_br_connless_pool), "Invalid ACL conn index");
 
 	br_chan = &bt_l2cap_br_connless_pool[index];
+
+	if (br_chan->state != BT_L2CAP_DISCONNECTED) {
+		LOG_ERR("Connectionless chan %p is not idle (state %u)", br_chan, br_chan->state);
+		return -EBUSY;
+	}
 
 	br_chan->chan.ops = &ops;
 	br_chan->rx.mtu = BT_L2CAP_RX_MTU - BT_L2CAP_CONNLESS_SDU_HDR_SIZE;
