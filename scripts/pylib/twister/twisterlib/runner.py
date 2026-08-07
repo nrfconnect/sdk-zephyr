@@ -37,7 +37,6 @@ from twisterlib.error import (
     StatusAttributeError,
     TwisterException,
 )
-from twisterlib.hardwareutil import HardwareReservationManager
 from twisterlib.log_helper import setup_logging
 from twisterlib.statuses import TwisterStatus
 
@@ -1836,16 +1835,15 @@ class ProjectBuilder(FilterBuilder):
         The hardware is automatically released when the context is exited.
         """
         if self.instance.handler.type_str == "device":
-            hwmgr = HardwareReservationManager(
-                self.env.hwm, self.instance.platform.name, self.testsuite.harness_config
-            )
+            hwm = self.env.hwm
+            hardware = None
             try:
-                hwmgr.reserve_duts()
-                self.instance.reserved_duts = hwmgr.get_reserved_duts_as_compound_hardware_data()
-                if self.instance.reserved_duts:
-                    self.instance.hardware_id = "+".join(
-                        [str(dut.id) for dut in self.instance.reserved_duts]
-                    )
+                device = self.instance.platform.name
+                fixture = self.instance.testsuite.harness_config.get("fixture")
+                hardware = hwm.reserve_dut(device, fixture)
+                compound_hardware = hwm.create_compound_hardware_data(hardware)
+                self.instance.reserved_duts.append(compound_hardware)
+                self.instance.hardware_id = hardware.id
                 yield True
             except TwisterException as error:
                 self.instance.status = TwisterStatus.FAIL
@@ -1853,11 +1851,11 @@ class ProjectBuilder(FilterBuilder):
                 logger.error(self.instance.reason)
                 yield False
             finally:
-                hwmgr.release_duts(
-                    failed=self.instance.status in [TwisterStatus.ERROR, TwisterStatus.FAIL]
-                )
-                self.instance.reserved_duts = []
-
+                if hardware:
+                    if self.instance.status in [TwisterStatus.ERROR, TwisterStatus.FAIL]:
+                        hardware.failures_increment()
+                    hwm.release_dut(hardware)
+                    self.instance.reserved_duts = []
         else:
             # No hardware reservation needed for non-device handlers
             yield True
