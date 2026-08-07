@@ -52,18 +52,11 @@ $defs:
         items:
           type: object
           properties:
-            application:
-              type: string
             name:
-              # deprecated: use 'application' instead
-              type: string
-            path:
               type: string
             platform:
               type: string
-          anyOf:
-            - required: [application]
-            - required: [name]
+          required: [name]
           additionalProperties: false
       required_snippets:
         type: array
@@ -137,8 +130,6 @@ $defs:
                   items:
                     type: string
                 application:
-                  type: string
-                path:
                   type: string
               additionalProperties: false
           ctest_args:
