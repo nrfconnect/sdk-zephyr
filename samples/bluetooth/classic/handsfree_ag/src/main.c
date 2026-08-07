@@ -304,11 +304,14 @@ static void disconnected(struct bt_conn *conn, uint8_t reason)
 
 static void security_changed(struct bt_conn *conn, bt_security_t level, enum bt_security_err err)
 {
+	char addr[BT_ADDR_LE_STR_LEN];
 	struct bt_conn_info info;
 
 	bt_conn_get_info(conn, &info);
 
-	printk("Security changed: %s level %u, err %s(%d)\n", bt_addr_str(info.br.dst), level,
+	bt_addr_to_str(info.br.dst, addr, sizeof(addr));
+
+	printk("Security changed: %s level %u, err %s(%d)\n", addr, level,
 	       bt_security_err_to_str(err), err);
 }
 
@@ -325,6 +328,7 @@ static void discovery_recv_cb(const struct bt_br_discovery_result *result)
 
 static void discovery_timeout_cb(const struct bt_br_discovery_result *results, size_t count)
 {
+	char addr[BT_ADDR_LE_STR_LEN];
 	const uint8_t *eir;
 	bool cod_hf = false;
 	static uint8_t temp[240];
@@ -334,8 +338,8 @@ static void discovery_timeout_cb(const struct bt_br_discovery_result *results, s
 	size_t i;
 
 	for (i = 0; i < count; i++) {
-		printk("Device[%d]: %s, rssi %d, cod 0x%02x%02x%02x", i,
-		       bt_addr_str(&results[i].addr), results[i].rssi,
+		bt_addr_to_str(&results[i].addr, addr, sizeof(addr));
+		printk("Device[%d]: %s, rssi %d, cod 0x%02x%02x%02x", i, addr, results[i].rssi,
 		       results[i].cod[0], results[i].cod[1], results[i].cod[2]);
 
 		major_device = (uint8_t)BT_COD_MAJOR_DEVICE_CLASS(results[i].cod);
