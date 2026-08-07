@@ -127,7 +127,7 @@ static const struct test_clk_context global_hsfll_test_clk_contexts[] = {
 };
 #endif
 
-#if defined(CONFIG_CLOCK_CONTROL_NRF_LFCLK)
+#if defined(CONFIG_CLOCK_CONTROL_NRFS_LFCLK)
 const struct nrf_clock_spec test_clk_specs_lfclk[] = {
 	{
 		.frequency = 32768,
@@ -354,8 +354,8 @@ ZTEST(nrf2_clock_control, test_global_hsfll_control)
 
 ZTEST(nrf2_clock_control, test_lfclk_control)
 {
-	Z_TEST_SKIP_IFNDEF(CONFIG_CLOCK_CONTROL_NRF_LFCLK);
-#if defined(CONFIG_CLOCK_CONTROL_NRF_LFCLK)
+	Z_TEST_SKIP_IFNDEF(CONFIG_CLOCK_CONTROL_NRFS_LFCLK);
+#if defined(CONFIG_CLOCK_CONTROL_NRFS_LFCLK)
 	TC_PRINT("LFCLK test\n");
 	test_clock_control_request(lfclk_test_clk_contexts, ARRAY_SIZE(lfclk_test_clk_contexts));
 #endif
@@ -363,8 +363,8 @@ ZTEST(nrf2_clock_control, test_lfclk_control)
 
 ZTEST(nrf2_clock_control, test_safe_request_cancellation)
 {
-	Z_TEST_SKIP_IFNDEF(CONFIG_CLOCK_CONTROL_NRF_LFCLK);
-#if defined(CONFIG_CLOCK_CONTROL_NRF_LFCLK)
+	Z_TEST_SKIP_IFNDEF(CONFIG_CLOCK_CONTROL_NRFS_LFCLK);
+#if defined(CONFIG_CLOCK_CONTROL_NRFS_LFCLK)
 	int ret = 0;
 	int res = 0;
 	struct onoff_client cli;
