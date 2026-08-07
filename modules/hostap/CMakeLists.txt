@@ -714,9 +714,8 @@ zephyr_compile_definitions_ifdef(CONFIG_WIFI_NM_HOSTAPD_AP
   HOSTAPD_CLEANUP_INTERVAL=${CONFIG_WIFI_NM_HOSTAPD_CLEANUP_INTERVAL}
 )
 
-if(NOT CONFIG_WIFI_NM_WPA_SUPPLICANT_CRYPTO_NONE)
-  zephyr_library_link_libraries_ifdef(CONFIG_MBEDTLS_BUILTIN mbedTLS)
-endif()
+zephyr_library_link_libraries_ifndef(CONFIG_WIFI_NM_WPA_SUPPLICANT_CRYPTO_NONE
+  mbedTLS)
 
 if(CONFIG_SAE_PWE_EARLY_EXIT)
   message(WARNING "CONFIG_SAE_PWE_EARLY_EXIT is enabled, "
