@@ -42,19 +42,24 @@ static K_SEM_DEFINE(sem_ccp_action_completed, 0, 1);
 
 static void connected_cb(struct bt_conn *conn, uint8_t err)
 {
-	LOG_INF("Connected: %s", bt_conn_dst_str(conn));
+	char addr[BT_ADDR_LE_STR_LEN];
+
+	(void)bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+	LOG_INF("Connected: %s", addr);
 
 	k_sem_give(&sem_conn_state_change);
 }
 
 static void disconnected_cb(struct bt_conn *conn, uint8_t reason)
 {
+	char addr[BT_ADDR_LE_STR_LEN];
+
 	if (conn != peer_conn) {
 		return;
 	}
 
-	LOG_INF("Disconnected: %s (reason 0x%02x)", bt_conn_dst_str(conn),
-		reason);
+	(void)bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+	LOG_INF("Disconnected: %s (reason 0x%02x)", addr, reason);
 
 	bt_conn_unref(peer_conn);
 	peer_conn = NULL;
@@ -111,6 +116,7 @@ static bool check_gtbs_support(struct bt_data *data, void *user_data)
 
 static void scan_recv_cb(const struct bt_le_scan_recv_info *info, struct net_buf_simple *ad)
 {
+	char addr_str[BT_ADDR_LE_STR_LEN];
 	bool connect = false;
 
 	if (peer_conn != NULL) {
@@ -128,7 +134,8 @@ static void scan_recv_cb(const struct bt_le_scan_recv_info *info, struct net_buf
 		return;
 	}
 
-	LOG_INF("Connectable device found: %s (RSSI %d)", bt_addr_le_str(info->addr), info->rssi);
+	(void)bt_addr_le_to_str(info->addr, addr_str, sizeof(addr_str));
+	LOG_INF("Connectable device found: %s (RSSI %d)", addr_str, info->rssi);
 
 	/* Iterate on the advertising data to see if claims GTBS support */
 	bt_data_parse(ad, check_gtbs_support, &connect);
