@@ -1,4 +1,22 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+
 #include "../../../boards/nrf54h20dk_nrf54h20_common.dtsi"
+
+&cpuapp_cpuppr_ipc {
+	status = "okay";
+};
+
+&cpuppr_vevif {
+	status = "okay";
+};
+
+&cpuapp_bellboard {
+	status = "okay";
+};
+
+&cpuppr_vpr {
+	status = "okay";
+};
 
 &dut {
 	status = "reserved";

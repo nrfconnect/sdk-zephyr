@@ -12,7 +12,6 @@ tests:
     platform_allow:
       - nrf54l15dk/nrf54l15/cpuapp
       - nrf54h20dk/nrf54h20/cpurad
-      - nrf54h20dk/nrf54h20/cpuppr
       - nrf9160dk/nrf9160
       - nrf52_bsim
       - xg24_rb4187c
@@ -24,7 +23,6 @@ tests:
     platform_allow:
       - nrf54l15dk/nrf54l15/cpuapp
       - nrf54h20dk/nrf54h20/cpurad
-      - nrf54h20dk/nrf54h20/cpuppr
       - nrf9160dk/nrf9160
       - nrf52_bsim
     extra_configs:
@@ -38,7 +36,6 @@ tests:
       - nrf54l15dk/nrf54l15/cpuapp
       - nrf54h20dk/nrf54h20/cpuapp
       - nrf54h20dk/nrf54h20/cpurad
-      - nrf54h20dk/nrf54h20/cpuppr
       - nrf9160dk/nrf9160
       - nrf52_bsim
     extra_configs:
@@ -53,7 +50,6 @@ tests:
       - nrf54l15dk/nrf54l15/cpuapp
       - nrf54h20dk/nrf54h20/cpuapp
       - nrf54h20dk/nrf54h20/cpurad
-      - nrf54h20dk/nrf54h20/cpuppr
       - nrf9160dk/nrf9160
       - nrf52_bsim
     extra_configs:
@@ -69,7 +65,6 @@ tests:
       - nrf54l15dk/nrf54l15/cpuapp
       - nrf54h20dk/nrf54h20/cpuapp
       - nrf54h20dk/nrf54h20/cpurad
-      - nrf54h20dk/nrf54h20/cpuppr
       - nrf9160dk/nrf9160
       - nrf52_bsim
     extra_configs:
@@ -83,10 +78,104 @@ tests:
       - nrf54l15dk/nrf54l15/cpuapp
       - nrf54h20dk/nrf54h20/cpuapp
       - nrf54h20dk/nrf54h20/cpurad
-      - nrf54h20dk/nrf54h20/cpuppr
       - nrf9160dk/nrf9160
       - nrf52_bsim
     extra_configs:
+      - CONFIG_TEST_CHOPPED_TX=n
+      - CONFIG_UARTE_NRFX_UARTE_COUNT_BYTES_WITH_TIMER=n
+      - CONFIG_UARTE_NRFX_UARTE_COUNT_BYTES_WITH_TIMER_LEGACY=n
+      - CONFIG_UART_1_NRF_HW_ASYNC=n
+  drivers.uart.async_dual.ppr.54h:
+    sysbuild: true
+    harness: ztest
+    harness_config:
+      fixture: uart_loopback
+    depends_on: gpio
+    platform_allow:
+      - nrf54h20dk/nrf54h20/cpuppr
+    integration_platforms:
+      - nrf54h20dk/nrf54h20/cpuppr
+    extra_configs:
+      - CONFIG_IPC_SERVICE=y
+      - CONFIG_MBOX=y
+      - CONFIG_GPPI_EXT_ALLOCATOR_CLI=y
+  drivers.uart.async_dual.busy_sim.ppr.54h:
+    sysbuild: true
+    harness: ztest
+    harness_config:
+      fixture: uart_loopback
+    depends_on: gpio
+    platform_allow:
+      - nrf54h20dk/nrf54h20/cpuppr
+    integration_platforms:
+      - nrf54h20dk/nrf54h20/cpuppr
+    extra_configs:
+      - CONFIG_IPC_SERVICE=y
+      - CONFIG_MBOX=y
+      - CONFIG_GPPI_EXT_ALLOCATOR_CLI=y
+      - CONFIG_TEST_BUSY_SIM=y
+  drivers.uart.async_dual.pm_runtime.ppr.54h:
+    sysbuild: true
+    harness: ztest
+    harness_config:
+      fixture: uart_loopback
+    depends_on: gpio
+    platform_allow:
+      - nrf54h20dk/nrf54h20/cpuppr
+    integration_platforms:
+      - nrf54h20dk/nrf54h20/cpuppr
+    extra_configs:
+      - CONFIG_IPC_SERVICE=y
+      - CONFIG_MBOX=y
+      - CONFIG_GPPI_EXT_ALLOCATOR_CLI=y
+      - CONFIG_PM_DEVICE_RUNTIME=y
+      - CONFIG_PM_DEVICE=y
+  drivers.uart.async_dual.pm_runtime.busy_sim.ppr.54h:
+    sysbuild: true
+    harness: ztest
+    harness_config:
+      fixture: uart_loopback
+    depends_on: gpio
+    platform_allow:
+      - nrf54h20dk/nrf54h20/cpuppr
+    integration_platforms:
+      - nrf54h20dk/nrf54h20/cpuppr
+    extra_configs:
+      - CONFIG_IPC_SERVICE=y
+      - CONFIG_MBOX=y
+      - CONFIG_GPPI_EXT_ALLOCATOR_CLI=y
+      - CONFIG_PM_DEVICE_RUNTIME=y
+      - CONFIG_PM_DEVICE=y
+      - CONFIG_TEST_BUSY_SIM=y
+  drivers.uart.async_dual.pm_runtime.explicit.ppr.54h:
+    sysbuild: true
+    harness: ztest
+    harness_config:
+      fixture: uart_loopback
+    depends_on: gpio
+    platform_allow:
+      - nrf54h20dk/nrf54h20/cpuppr
+    integration_platforms:
+      - nrf54h20dk/nrf54h20/cpuppr
+    extra_configs:
+      - CONFIG_IPC_SERVICE=y
+      - CONFIG_MBOX=y
+      - CONFIG_GPPI_EXT_ALLOCATOR_CLI=y
+      - CONFIG_PM_RUNTIME_IN_TEST=y
+  drivers.uart.async_dual.no_tx_chopped.ppr.54h:
+    sysbuild: true
+    harness: ztest
+    harness_config:
+      fixture: uart_loopback
+    depends_on: gpio
+    platform_allow:
+      - nrf54h20dk/nrf54h20/cpuppr
+    integration_platforms:
+      - nrf54h20dk/nrf54h20/cpuppr
+    extra_configs:
+      - CONFIG_IPC_SERVICE=y
+      - CONFIG_MBOX=y
+      - CONFIG_GPPI_EXT_ALLOCATOR_CLI=y
       - CONFIG_TEST_CHOPPED_TX=n
       - CONFIG_UARTE_NRFX_UARTE_COUNT_BYTES_WITH_TIMER=n
       - CONFIG_UARTE_NRFX_UARTE_COUNT_BYTES_WITH_TIMER_LEGACY=n
