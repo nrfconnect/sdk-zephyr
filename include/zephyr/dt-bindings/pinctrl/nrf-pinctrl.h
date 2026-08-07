@@ -268,6 +268,8 @@
 #define NRF_FUN_TPIU_DATA2       82U
 /** TPIU DATA3 */
 #define NRF_FUN_TPIU_DATA3       83U
+/** VPR VIO (pin controlled by a VPR through its VIO interface) */
+#define NRF_FUN_VPR_VIO          84U
 
 /** @} */
 
