@@ -41,5 +41,64 @@
 	load-capacitance-picofarad = <7>;
 };
 
-/* Include default memory partition configuration file */
-#include <nordic/nrf5340_cpuapp_ns_partition.dtsi>
+&flash0 {
+	partitions {
+		ranges;
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		boot_partition: partition@0 {
+			compatible = "zephyr,mapped-partition";
+			label = "mcuboot";
+			reg = <0x00000000 0x10000>;
+		};
+
+		slot0_partition: partition@10000 {
+			compatible = "zephyr,mapped-partition";
+			label = "image-0";
+			reg = <0x10000 0xe0000>;
+			ranges = <0x0 0x10000 0xe0000>;
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			slot0_s_partition: partition@0 {
+				compatible = "zephyr,mapped-partition";
+				label = "image-0-secure";
+				reg = <0x0 0xc000>;
+			};
+
+			slot0_ns_partition: partition@c000 {
+				compatible = "zephyr,mapped-partition";
+				label = "image-0-nonsecure";
+				reg = <0xc000 0xd4000>;
+			};
+		};
+
+		nonsecure_storage: partition@f0000 {
+			compatible = "zephyr,mapped-partition";
+			label = "nonsecure-storage";
+			reg = <0xf0000 0x10000>;
+		};
+	};
+};
+
+&mx25r64 {
+	partitions {
+		compatible = "fixed-partitions";
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		slot1_partition: partition@0 {
+			label = "image-1";
+			reg = <0x0 0xe0000>;
+		};
+
+		slot3_partition: partition@e0000 {
+			label = "image-3";
+			reg = <0xe0000 0x40000>;
+		};
+	};
+};
+
+#include "nordic/nrf5340_sram_partition.dtsi"
+#include "nordic/nrf5340_shared_sram_partition.dtsi"

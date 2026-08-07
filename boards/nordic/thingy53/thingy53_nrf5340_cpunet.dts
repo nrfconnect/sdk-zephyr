@@ -23,7 +23,7 @@
 		nordic,802154-spinel-ipc = &ipc0;
 		zephyr,sram = &sram1;
 		zephyr,flash = &flash1;
-		zephyr,code-partition = &slot0_partition;
+		zephyr,code-partition = &s0_partition;
 		zephyr,ieee802154 = &ieee802154;
 	};
 
@@ -146,28 +146,22 @@ fem_spi: &spi0 {
 		#size-cells = <1>;
 		ranges;
 
-		boot_partition: partition@0 {
+		b0n_partition: partition@0 {
 			compatible = "zephyr,mapped-partition";
-			label = "mcuboot";
-			reg = <0x00000000 0xc000>;
+			label = "b0n";
+			reg = <0x0 0x8580>;
 		};
 
-		slot0_partition: partition@c000 {
+		bl_storage: provision_partition: partition@8580 {
+			compatible = "zephyr,mapped-partition";
+			label = "b0-provision-data";
+			reg = <0x8580 0x280>;
+		};
+
+		s0_partition: partition@8800 {
 			compatible = "zephyr,mapped-partition";
 			label = "image-0";
-			reg = <0x0000c000 0x17000>;
-		};
-
-		slot1_partition: partition@23000 {
-			compatible = "zephyr,mapped-partition";
-			label = "image-1";
-			reg = <0x00023000 0x17000>;
-		};
-
-		storage_partition: partition@3a000 {
-			compatible = "zephyr,mapped-partition";
-			label = "storage";
-			reg = <0x0003a000 0x6000>;
+			reg = <0x8800 0x37800>;
 		};
 	};
 };
