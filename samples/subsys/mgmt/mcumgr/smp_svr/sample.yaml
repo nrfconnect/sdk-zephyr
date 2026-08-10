@@ -37,11 +37,13 @@ tests:
       - frdm_k64f
     integration_platforms:
       - frdm_k64f
+  # Uses prj_no_bootloader.conf instead of prj.conf: this is the only scenario
+  # built without MCUboot, so the image-management settings prj.conf carries for
+  # every other scenario cannot take effect here.
   sample.mcumgr.smp_svr.udp-dtls:
     extra_args:
+      - FILE_SUFFIX="no_bootloader"
       - EXTRA_CONF_FILE="udp-dtls.conf"
-      - CONFIG_IMG_MANAGER=n
-      - SB_CONFIG_BOOTLOADER_NONE=y
     platform_allow:
       - native_sim
     integration_platforms:

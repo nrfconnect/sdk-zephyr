@@ -46,6 +46,9 @@ def main():
     if args.zephyr_base:
         os.environ['ZEPHYR_BASE'] = args.zephyr_base
 
+    strict_scope = StrictScope(args.strict_scope_dir, args.strict_scope_file) \
+        if args.strict_flip_checks else None
+
     print("Parsing " + args.kconfig_file)
     kconf = Kconfig(args.kconfig_file, warn_to_stderr=False,
                     suppress_traceback=True)
@@ -88,8 +91,8 @@ def main():
         # Print warnings for symbols that didn't get the assigned value. Only
         # do this for handwritten input too, to avoid likely unhelpful warnings
         # when using an old configuration and updating Kconfig files.
-        check_assigned_sym_values(kconf)
-        check_assigned_choice_values(kconf)
+        check_assigned_sym_values(kconf, strict_scope)
+        check_assigned_choice_values(kconf, strict_scope)
 
     if kconf.syms.get('WARN_DEPRECATED', kconf.y).tri_value == 2:
         check_deprecated(kconf)
@@ -132,6 +135,9 @@ def main():
         if error_out:
             err("Aborting due to Kconfig warnings")
 
+    if strict_scope:
+        strict_scope.report()
+
     # Write the merged configuration and the C header
     print(kconf.write_config(args.config_out))
     print(kconf.write_autoconf(args.header_out))
@@ -158,7 +164,68 @@ user-configurable (has no prompt). It gets its value indirectly from other
 symbols. """ + SYM_INFO_HINT.format(sym))
 
 
-def check_assigned_sym_values(kconf):
+class StrictScope:
+    # Decides which configuration fragments an ineffective assignment is an
+    # error for, rather than just a warning.
+    #
+    # A fragment is in scope when it sits directly in one of 'dirs' (files in
+    # subdirectories such as boards/ or socs/ are not in scope), or when it is
+    # listed in 'files'. The application owns those fragments and knows the
+    # target they are built for, so an assignment that Kconfig discards there
+    # is a bug. Everything else - board and SoC defconfigs, shield, snippet and
+    # module fragments, fragments belonging to another image - is shared
+    # between targets and cannot be expected to "take" everywhere, so those
+    # keep warning only.
+
+    def __init__(self, dirs, files):
+        self.dirs = {os.path.realpath(d) for d in dirs}
+        self.files = {os.path.realpath(f) for f in files}
+        self.errors = []
+
+    def covers(self, loc):
+        if loc is None:
+            return False
+
+        path = os.path.realpath(loc[0])
+        return path in self.files or os.path.dirname(path) in self.dirs
+
+    def add(self, loc, msg):
+        # Records 'msg' as an error and returns True if 'loc' is in scope.
+        # Returns False otherwise, leaving it to the caller to warn instead.
+
+        if not self.covers(loc):
+            return False
+
+        self.errors.append(f"{loc[0]}:{loc[1]}: {msg}")
+        return True
+
+    def report(self):
+        # Prints every recorded error and aborts if there were any. All of them
+        # are reported at once so that a single build lists everything that
+        # needs fixing.
+
+        if not self.errors:
+            return
+
+        for msg in self.errors:
+            print("\n" + textwrap.fill("error: " + msg, 100), file=sys.stderr)
+
+        err(f"aborting due to {len(self.errors)} ineffective Kconfig "
+            "assignment(s) in application-owned configuration. Assign a value "
+            "that Kconfig can honor, satisfy the missing dependencies, or drop "
+            "the assignment. Building with -DKCONFIG_STRICT=n downgrades this "
+            "to a warning.")
+
+
+def report_ineffective(strict_scope, loc, msg):
+    # Turns an ineffective assignment into an error when it comes from a
+    # fragment in the strict scope, and into a warning otherwise.
+
+    if strict_scope is None or not strict_scope.add(loc, msg):
+        warn(msg)
+
+
+def check_assigned_sym_values(kconf, strict_scope=None):
     # Verifies that the values assigned to symbols "took" (matches the value
     # the symbols actually got), printing warnings otherwise. Choice symbols
     # are checked separately, in check_assigned_choice_values().
@@ -197,7 +264,8 @@ def check_assigned_sym_values(kconf):
                 msg += "Check these unsatisfied dependencies: " + \
                     ", ".join(expr_strs) + ". "
 
-            warn(msg + SYM_INFO_HINT.format(sym))
+            report_ineffective(strict_scope, sym.user_loc,
+                               msg + SYM_INFO_HINT.format(sym))
 
 
 def missing_deps(sym):
@@ -225,7 +293,7 @@ def missing_deps(sym):
     return [dep for dep in deps if expr_value(dep) == 0]
 
 
-def check_assigned_choice_values(kconf):
+def check_assigned_choice_values(kconf, strict_scope=None):
     # Verifies that any choice symbols that were selected (by setting them to
     # y) ended up as the selection, printing warnings otherwise.
     #
@@ -242,7 +310,7 @@ def check_assigned_choice_values(kconf):
         if choice.user_selection and \
            choice.user_selection is not choice.selection:
 
-            warn(f"""\
+            report_ineffective(strict_scope, choice.user_selection.user_loc, f"""\
 The choice symbol {choice.user_selection.name_and_loc} was selected (set =y),
 but {choice.selection.name_and_loc if choice.selection else "no symbol"} ended
 up as the choice selection. """ + SYM_INFO_HINT.format(choice.user_selection))
@@ -364,6 +432,25 @@ def parse_args():
                              "set specific configuration settings to a "
                              "pre-defined value and thereby remove any user "
                              " adjustments.")
+    parser.add_argument("--strict-flip-checks",
+                        action="store_true",
+                        help="Treat an assignment that Kconfig does not honor "
+                             "as an error instead of a warning, for the "
+                             "fragments selected by --strict-scope-dir and "
+                             "--strict-scope-file")
+    parser.add_argument("--strict-scope-dir",
+                        action="append",
+                        default=[],
+                        help="Directory whose configuration fragments the "
+                             "strict checks apply to. Only files directly in "
+                             "the directory are covered, not files in its "
+                             "subdirectories. May be given multiple times.")
+    parser.add_argument("--strict-scope-file",
+                        action="append",
+                        default=[],
+                        help="Configuration fragment the strict checks apply "
+                             "to, regardless of its location. May be given "
+                             "multiple times.")
     parser.add_argument("--zephyr-base",
                         help="Path to current Zephyr installation")
     parser.add_argument("kconfig_file",

@@ -397,6 +397,49 @@ if(DEFINED FORCED_CONF_FILE)
   list(APPEND input_configs_flags --forced-input-configs)
 endif()
 
+# Strict Kconfig checking: an assignment that Kconfig ends up discarding is an
+# error rather than a warning, but only for the configuration the application
+# itself owns. That is the fragments placed directly in the application
+# configuration directory (prj.conf and any overlay next to it) plus the symbols
+# given on the CMake command line as -DCONFIG_<symbol>=<value>. Both are written
+# for one specific build, so an assignment that does not take effect there is a
+# bug in the application.
+#
+# Everything else keeps warning only: board and SoC defconfigs, the application
+# boards/ and socs/ subdirectories, shields, snippets, fragments coming from
+# modules, and fragments a parent image passes to a child image. Those are
+# shared between several build targets, where the same assignment can be both
+# meaningful for one target and discarded for another.
+#
+# Script mode (package_helper.cmake) is exempt as well. It is used to resolve
+# the configuration without building it, most notably by twister to evaluate a
+# testsuite 'filter:' expression on every platform. A test that is about to be
+# filtered out is expected to have assignments that do not take effect there,
+# and the platforms that survive the filter still get the strict checks from
+# the real build that follows.
+zephyr_get(KCONFIG_STRICT SYSBUILD GLOBAL)
+if(NOT DEFINED KCONFIG_STRICT)
+  # Note: set_ifndef() is not usable here, as it overwrites a variable that is
+  # defined but false, which is exactly how the feature is turned off.
+  set(KCONFIG_STRICT ON)
+endif()
+
+set(kconfig_strict_args)
+if(KCONFIG_STRICT AND "--handwritten-input-configs" IN_LIST input_configs_flags
+   AND NOT DEFINED CMAKE_SCRIPT_MODE_FILE)
+  list(APPEND kconfig_strict_args --strict-flip-checks)
+
+  set(kconfig_strict_dirs ${APPLICATION_CONFIG_DIR} ${APPLICATION_SOURCE_DIR})
+  list(REMOVE_DUPLICATES kconfig_strict_dirs)
+  foreach(dir ${kconfig_strict_dirs})
+    list(APPEND kconfig_strict_args --strict-scope-dir ${dir})
+  endforeach()
+
+  if(EXTRA_KCONFIG_OPTIONS_FILE)
+    list(APPEND kconfig_strict_args --strict-scope-file ${EXTRA_KCONFIG_OPTIONS_FILE})
+  endif()
+endif()
+
 cmake_path(GET AUTOCONF_H PARENT_PATH autoconf_h_path)
 if(NOT EXISTS ${autoconf_h_path})
   file(MAKE_DIRECTORY ${autoconf_h_path})
@@ -410,6 +453,7 @@ execute_process(
   ${ZEPHYR_BASE}/scripts/kconfig/kconfig.py
   --zephyr-base=${ZEPHYR_BASE}
   ${input_configs_flags}
+  ${kconfig_strict_args}
   ${KCONFIG_ROOT}
   ${DOTCONFIG}
   ${AUTOCONF_H}

@@ -3,6 +3,13 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
+# The nRF54H20 application and radio cores are split out into their own
+# scenarios below. They are the only targets here that cannot honor the
+# CONFIG_REBOOT=n in prj.conf: their board configuration turns on NRFS, whose
+# NRFS_LOCAL_DOMAIN selects REBOOT unconditionally. Since prj.conf is shared,
+# dropping or relaxing the assignment there would silently pull REBOOT into
+# every other platform instead, so the targets are split rather than the
+# assignment weakened.
 tests:
   mgmt.mcumgr.smp.version:
     tags:
@@ -14,6 +21,8 @@ tests:
       - posix
     platform_exclude:
       - qemu_kvm_arm64
+      - nrf54h20dk/nrf54h20/cpuapp
+      - nrf54h20dk/nrf54h20/cpurad
   mgmt.mcumgr.smp.version_no_legacy:
     tags:
       - smp_version
@@ -26,3 +35,24 @@ tests:
       - posix
     platform_exclude:
       - qemu_kvm_arm64
+      - nrf54h20dk/nrf54h20/cpuapp
+      - nrf54h20dk/nrf54h20/cpurad
+  mgmt.mcumgr.smp.version.nrfs:
+    tags:
+      - smp_version
+      - mcumgr
+    platform_allow:
+      - nrf54h20dk/nrf54h20/cpuapp
+      - nrf54h20dk/nrf54h20/cpurad
+    extra_configs:
+      - CONFIG_REBOOT=y
+  mgmt.mcumgr.smp.version_no_legacy.nrfs:
+    tags:
+      - smp_version
+      - mcumgr
+    platform_allow:
+      - nrf54h20dk/nrf54h20/cpuapp
+      - nrf54h20dk/nrf54h20/cpurad
+    extra_configs:
+      - CONFIG_MCUMGR_SMP_SUPPORT_ORIGINAL_PROTOCOL=n
+      - CONFIG_REBOOT=y
