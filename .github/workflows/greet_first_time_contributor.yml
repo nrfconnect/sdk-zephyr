@@ -18,7 +18,7 @@ jobs:
       issues: write        # to comment on issues
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: zephyrproject-rtos/action-first-interaction@58853996b1ac504b8e0f6964301f369d2bb22e5c # v1.1.1+zephyr.6
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
