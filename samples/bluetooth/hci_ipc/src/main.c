@@ -27,6 +27,10 @@
 #include <zephyr/logging/log_ctrl.h>
 #include <zephyr/logging/log.h>
 
+#if defined(CONFIG_HCI_IPC_FATAL_ERROR_TEST_HOOK)
+#include "fatal_error_test_hook.h"
+#endif /* CONFIG_HCI_IPC_FATAL_ERROR_TEST_HOOK */
+
 LOG_MODULE_REGISTER(hci_ipc, CONFIG_BT_LOG_LEVEL);
 
 BUILD_ASSERT(!IS_ENABLED(CONFIG_BT_CONN) || IS_ENABLED(CONFIG_BT_HCI_ACL_FLOW_CONTROL),
@@ -209,6 +213,17 @@ static void tx_thread(void *p1, void *p2, void *p3)
 
 		/* Wait until a buffer is available */
 		buf = k_fifo_get(&tx_queue, K_FOREVER);
+
+#if defined(CONFIG_HCI_IPC_FATAL_ERROR_TEST_HOOK)
+		/* The controller does not know the fault injection opcode, so the hook has to
+		 * take the buffer out of the stream before it is forwarded.
+		 */
+		if (fatal_error_test_hook_cmd(buf)) {
+			net_buf_unref(buf);
+			continue;
+		}
+#endif /* CONFIG_HCI_IPC_FATAL_ERROR_TEST_HOOK */
+
 		/* Pass buffer to the stack */
 		err = bt_send(buf);
 		if (err) {
@@ -273,6 +288,29 @@ static void hci_ipc_send(struct net_buf *buf, bool is_fatal_err)
 	net_buf_unref(buf);
 }
 
+#if defined(CONFIG_BT_CTLR_ASSERT_HANDLER) || defined(CONFIG_BT_HCI_VS_FATAL_ERROR)
+static FUNC_NORETURN void hci_ipc_fatal_error_end(void)
+{
+#if defined(CONFIG_RESET_ON_FATAL_ERROR)
+	/* Provided by the fatal error library of the nrf module. */
+	extern FUNC_NORETURN void fatal_error_reset(void);
+
+	fatal_error_reset();
+#else /* !CONFIG_RESET_ON_FATAL_ERROR */
+	LOG_ERR("Halting system");
+
+	/* Flush the logs before locking the CPU */
+	LOG_PANIC();
+
+	while (true) {
+		k_cpu_idle();
+	};
+#endif /* !CONFIG_RESET_ON_FATAL_ERROR */
+
+	CODE_UNREACHABLE;
+}
+#endif /* CONFIG_BT_CTLR_ASSERT_HANDLER || CONFIG_BT_HCI_VS_FATAL_ERROR */
+
 #if defined(CONFIG_BT_CTLR_ASSERT_HANDLER)
 void bt_ctlr_assert_handle(char *file, uint32_t line)
 {
@@ -288,29 +326,21 @@ void bt_ctlr_assert_handle(char *file, uint32_t line)
 		buf = hci_vs_err_assert(file, line);
 		if (buf != NULL) {
 			/* Send the event over ipc */
+			LOG_WRN("Send from bt ctlr assert handler over ipc.");
 			hci_ipc_send(buf, HCI_FATAL_ERR_MSG);
 		} else {
-			LOG_ERR("Can't create Fatal Error HCI event: %s at %d", __FILE__, __LINE__);
+			LOG_ERR("Can't create bt ctlr error HCI event.");
 		}
 	} else {
-		LOG_ERR("IPC endpoint is not ready yet: %s at %d", __FILE__, __LINE__);
+		LOG_ERR("IPC endpoint is not ready yet.");
 	}
-
-	LOG_ERR("Halting system");
 
 #else /* !CONFIG_BT_HCI_VS_FATAL_ERROR */
 	LOG_ERR("Controller assert in: %s at %d", file, line);
 
 #endif /* !CONFIG_BT_HCI_VS_FATAL_ERROR */
 
-	/* Flush the logs before locking the CPU */
-	LOG_PANIC();
-
-	while (true) {
-		k_cpu_idle();
-	};
-
-	CODE_UNREACHABLE;
+	hci_ipc_fatal_error_end();
 }
 #endif /* CONFIG_BT_CTLR_ASSERT_HANDLER */
 
@@ -329,24 +359,41 @@ void k_sys_fatal_error_handler(unsigned int reason, const struct arch_esf *esf)
 
 		buf = hci_vs_err_stack_frame(reason, esf);
 		if (buf != NULL) {
+			LOG_WRN("Send from fatal error handler over ipc.");
 			hci_ipc_send(buf, HCI_FATAL_ERR_MSG);
 		} else {
-			LOG_ERR("Can't create Fatal Error HCI event.\n");
+			LOG_ERR("Can't create Fatal Error HCI event.");
 		}
 	}
 
-	LOG_ERR("Halting system");
-
-	/* Flush the logs before locking the CPU */
-	LOG_PANIC();
-
-	while (true) {
-		k_cpu_idle();
-	};
-
-	CODE_UNREACHABLE;
+	hci_ipc_fatal_error_end();
 }
 #endif /* CONFIG_BT_HCI_VS_FATAL_ERROR */
+
+#if defined(CONFIG_BT_WAIT_NOP)
+/* Announce that the controller is ready to receive commands. The host has no other way of
+ * telling that the controller has booted, since the IPC endpoint binds before that.
+ */
+static void hci_ipc_send_nop(void)
+{
+	struct bt_hci_evt_cmd_complete *cc;
+	struct bt_hci_evt_hdr *hdr;
+	struct net_buf *buf;
+
+	buf = bt_buf_get_rx(BT_BUF_EVT, K_FOREVER);
+
+	hdr = net_buf_add(buf, sizeof(*hdr));
+	hdr->evt = BT_HCI_EVT_CMD_COMPLETE;
+	hdr->len = sizeof(*cc);
+
+	cc = net_buf_add(buf, sizeof(*cc));
+	cc->ncmd = 1U;
+	cc->opcode = sys_cpu_to_le16(BT_OP_NOP);
+
+	LOG_INF("Sending NOP message of %u bytes.", buf->len);
+	hci_ipc_send(buf, HCI_REGULAR_MSG);
+}
+#endif /* CONFIG_BT_WAIT_NOP */
 
 static void hci_ept_bound(void *priv)
 {
@@ -404,6 +451,10 @@ int main(void)
 	}
 
 	k_sem_take(&ipc_bound_sem, K_FOREVER);
+
+#if defined(CONFIG_BT_WAIT_NOP)
+	hci_ipc_send_nop();
+#endif /* CONFIG_BT_WAIT_NOP */
 
 	while (1) {
 		struct net_buf *buf;
