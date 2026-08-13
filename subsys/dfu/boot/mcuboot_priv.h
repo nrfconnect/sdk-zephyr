@@ -10,7 +10,7 @@
 
 #include <zephyr/storage/flash_map.h>
 
-#if defined(CONFIG_TRUSTED_EXECUTION_NONSECURE) && (CONFIG_TFM_MCUBOOT_IMAGE_NUMBER == 2)
+#ifdef CONFIG_TRUSTED_EXECUTION_NONSECURE
 #define SLOT0_LABEL	slot0_ns_partition
 #define SLOT1_LABEL	slot1_ns_partition
 #else
