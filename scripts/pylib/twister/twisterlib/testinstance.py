@@ -13,7 +13,6 @@ import hashlib
 import logging
 import os
 import random
-import re
 from enum import Enum
 
 from twisterlib.constants import (
@@ -23,7 +22,7 @@ from twisterlib.constants import (
     SUPPORTED_SIMS_WITH_EXEC,
 )
 from twisterlib.environment import TwisterEnv
-from twisterlib.error import BuildError, StatusAttributeError, TwisterException
+from twisterlib.error import BuildError, StatusAttributeError
 from twisterlib.handlers import (
     BinaryHandler,
     DeviceHandler,
@@ -318,10 +317,6 @@ class TestInstance:
                 # command-line, then we need to run the test, not just build it.
                 testsuite_runnable = all(f in set(cli_fixtures) for f in fixture)
 
-            elif self.testsuite.harness_config.required_devices:
-                # Multi-DUT only supported for device testing
-                testsuite_runnable = False
-
         return testsuite_runnable and target_ready
 
     def create_overlay(
@@ -446,33 +441,6 @@ class TestInstance:
         if len(buildlog_paths) != 1:
             raise BuildError("Missing/multiple build.log file.")
         return buildlog_paths[0]
-
-    def update_reserved_duts_with_required_applications(self):
-        if len(self.reserved_duts) < len(self.testsuite.harness_config.required_devices) + 1:
-            raise TwisterException("Not enough DUTs reserved for the required devices.")
-        for id, req_dev in enumerate(self.testsuite.harness_config.required_devices):
-            if not (req_dev.application or req_dev.platform):
-                # if neither application nor platform is specified, use the same application
-                continue
-            if platform_name := req_dev.platform:
-                platform_name = platform_name.replace("/", "_")
-            else:
-                platform_name = self.platform.normalized_name
-
-            application_name = req_dev.application or self.testsuite.id
-
-            pattern = f"{platform_name}/.*/{application_name}"
-            for build_dir in self.required_build_dirs:
-                if re.search(pattern, build_dir):
-                    # found matching build dir
-                    break
-            else:
-                raise TwisterException(
-                    "Could not find a build dir for required application "
-                    f"{application_name} on platform {platform_name}"
-                )
-
-            self.reserved_duts[id + 1].build_dir = build_dir
 
     def __repr__(self):
         return f"<TestSuite {self.testsuite.name} on {self.platform.name}>"
