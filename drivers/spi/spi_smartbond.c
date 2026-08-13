@@ -15,7 +15,7 @@ LOG_MODULE_REGISTER(spi_smartbond);
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/drivers/pinctrl.h>
 #include <zephyr/drivers/spi.h>
-#include <zephyr/drivers/spi/rtio.h>
+#include "spi_rtio.h"
 #include <zephyr/pm/device.h>
 #include <zephyr/pm/policy.h>
 #include <zephyr/pm/device_runtime.h>
@@ -641,7 +641,7 @@ static void spi_smartbond_isr(void *args)
 		spi_smartbond_write(dev);
 		break;
 	case SPI_SMARTBOND_TRANSFER_TX_RX:
-		/* Exersice the type of the next sub-transfer */
+		/* Exercise the type of the next sub-transfer */
 		if (!data->rx_len && !data->tx_len) {
 			spi_smartbond_transfer_mode_check_and_update(dev);
 

@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2017 Intel Corporation
+ * Copyright (c) 2026 Meta Platforms
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -277,3 +278,38 @@ static inline int z_vrfy_counter_set_guard_period_64(const struct device *dev, u
 }
 #include <zephyr/syscalls/counter_set_guard_period_64_mrsh.c>
 #endif /* CONFIG_COUNTER_64BITS_TICKS */
+
+#ifdef CONFIG_COUNTER_CAPTURE
+static inline int z_vrfy_counter_enable_capture(const struct device *dev,
+						uint8_t chan_id)
+{
+	K_OOPS(K_SYSCALL_OBJ(dev, K_OBJ_DRIVER_COUNTER));
+	return z_impl_counter_enable_capture((const struct device *)dev, chan_id);
+}
+#include <zephyr/syscalls/counter_enable_capture_mrsh.c>
+
+static inline int z_vrfy_counter_disable_capture(const struct device *dev,
+						 uint8_t chan_id)
+{
+	K_OOPS(K_SYSCALL_OBJ(dev, K_OBJ_DRIVER_COUNTER));
+	return z_impl_counter_disable_capture((const struct device *)dev, chan_id);
+}
+#include <zephyr/syscalls/counter_disable_capture_mrsh.c>
+#endif /* CONFIG_COUNTER_CAPTURE */
+
+#ifdef CONFIG_COUNTER_CALIBRATION
+static inline int z_vrfy_counter_set_calibration(const struct device *dev, int32_t calibration)
+{
+	K_OOPS(K_SYSCALL_DRIVER_COUNTER(dev, set_calibration));
+	return z_impl_counter_set_calibration((const struct device *)dev, calibration);
+}
+#include <zephyr/syscalls/counter_set_calibration_mrsh.c>
+
+static inline int z_vrfy_counter_get_calibration(const struct device *dev, int32_t *calibration)
+{
+	K_OOPS(K_SYSCALL_DRIVER_COUNTER(dev, get_calibration));
+	K_OOPS(K_SYSCALL_MEMORY_WRITE(calibration, sizeof(int32_t)));
+	return z_impl_counter_get_calibration((const struct device *)dev, calibration);
+}
+#include <zephyr/syscalls/counter_get_calibration_mrsh.c>
+#endif /* CONFIG_COUNTER_CALIBRATION */

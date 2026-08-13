@@ -79,7 +79,6 @@ list(APPEND zephyr_cmake_modules basic_settings)
 #
 
 list(APPEND zephyr_cmake_modules west)
-list(APPEND zephyr_cmake_modules ccache)
 list(APPEND zephyr_cmake_modules yaml)
 
 # Load default root settings
@@ -128,9 +127,18 @@ foreach(module IN LISTS zephyr_cmake_modules)
   string(CONFIGURE "${module}" module)
   include(${module})
 
+  if(NOT "${module}" MATCHES ";")
+    if(COMMAND ${module}_init)
+      cmake_language(CALL ${module}_init)
+    endif()
+  endif()
+
   list(REMOVE_ITEM SUB_COMPONENTS ${module})
   if(DEFINED SUB_COMPONENTS AND NOT SUB_COMPONENTS)
     # All requested Zephyr CMake modules have been loaded, so let's return.
+    if(COMMAND yaml_save)
+      yaml_save(NAME build_info)
+    endif()
     return()
   endif()
 endforeach()

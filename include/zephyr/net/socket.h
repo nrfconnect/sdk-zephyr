@@ -125,7 +125,7 @@ extern "C" {
 /** Socket option to select ciphersuites to use. It accepts and returns an array
  *  of integers with IANA assigned ciphersuite identifiers.
  *  If not set, socket will allow all ciphersuites available in the system
- *  (mbedTLS default behavior).
+ *  (Mbed TLS default behavior).
  */
 #define ZSOCK_TLS_CIPHERSUITE_LIST 3
 /** Read-only socket option to read a ciphersuite chosen during TLS handshake.
@@ -135,12 +135,12 @@ extern "C" {
 #define ZSOCK_TLS_CIPHERSUITE_USED 4
 /** Write-only socket option to set peer verification level for TLS connection.
  *  This option accepts an integer with a peer verification level, compatible
- *  with mbedTLS values:
+ *  with Mbed TLS values:
  *    - 0 - none
  *    - 1 - optional
  *    - 2 - required
  *
- *  If not set, socket will use mbedTLS defaults (none for servers, required
+ *  If not set, socket will use Mbed TLS defaults (none for servers, required
  *  for clients).
  */
 #define ZSOCK_TLS_PEER_VERIFY 5
@@ -148,7 +148,7 @@ extern "C" {
  *  is irrelevant for TLS connections, as for them role is selected based on
  *  connect()/listen() usage. By default, DTLS will assume client role.
  *  This option accepts an integer with a TLS role, compatible with
- *  mbedTLS values:
+ *  Mbed TLS values:
  *    - 0 - client
  *    - 1 - server
  */
@@ -171,7 +171,7 @@ extern "C" {
  */
 #define ZSOCK_TLS_DTLS_HANDSHAKE_TIMEOUT_MAX 9
 
-/** Socket option for preventing certificates from being copied to the mbedTLS
+/** Socket option for preventing certificates from being copied to the Mbed TLS
  *  heap if possible. The option is only effective for DER certificates and is
  *  ignored for PEM certificates.
  */
@@ -595,9 +595,10 @@ static inline int zsock_fcntl_wrapper(int sock, int cmd, ...)
  * https://pubs.opengroup.org/onlinepubs/9699919799/functions/ioctl.html
  * for normative description.
  * This function enables querying or manipulating underlying socket parameters.
- * Currently supported @p request values include `ZFD_IOCTL_FIONBIO`, and
- * `ZFD_IOCTL_FIONREAD`, to set non-blocking mode, and query the number of
- * bytes available to read, respectively.
+ * Currently supported @p request values include:
+ *   - @ref ZFD_IOCTL_FIONBIO
+ *   - @ref ZFD_IOCTL_FIONREAD
+ *   - @ref ZFD_IOCTL_FIONWRITE
  * This function is also exposed as `ioctl()`
  * if @kconfig{CONFIG_POSIX_API} is defined (in which case
  * it may conflict with generic POSIX `ioctl()` function).
@@ -928,7 +929,7 @@ int zsock_sendmsg_all(int sock, const struct net_msghdr *msg, int flags,
 #define ZSOCK_SO_OOBINLINE 10
 /** Socket priority */
 #define ZSOCK_SO_PRIORITY 12
-/** Socket lingers on close (ignored, for compatibility) */
+/** Socket lingers on close. Takes a struct net_linger as argument. */
 #define ZSOCK_SO_LINGER 13
 /** Allow multiple sockets to reuse a single port */
 #define ZSOCK_SO_REUSEPORT 15
@@ -1000,10 +1001,11 @@ int zsock_sendmsg_all(int sock, const struct net_msghdr *msg, int flags,
 /** @} */
 
 /**
- * @name IPv4 level options (NET_IPPROTO_IP)
+ * @defgroup ipv4_socket_options Socket options for IPv4
+ * @ingroup bsd_sockets
  * @{
  */
-/* Socket options for IPPROTO_IP level */
+/* Socket options for NET_IPPROTO_IP level */
 /** Set or receive the Type-Of-Service value for an outgoing packet. */
 #define ZSOCK_IP_TOS 1
 
@@ -1027,6 +1029,21 @@ int zsock_sendmsg_all(int sock, const struct net_msghdr *msg, int flags,
  */
 #define ZSOCK_IP_MTU 14
 
+/** Disable local IPv4 fragmentation for this socket.
+ *
+ *  Takes an integer boolean (0 = allow fragmentation, non-zero = disable).
+ *  When enabled, datagrams larger than the interface MTU are rejected locally
+ *  with errno set to ``EMSGSIZE`` instead of being fragmented. For IPv4 this also
+ *  sets the Don't Fragment (DF) bit in the IP header.
+ *
+ *  Valid for ``setsockopt()`` and ``getsockopt()`` at the ``NET_IPPROTO_IP``
+ *  level.
+ *
+ *  This option may also be passed as ancillary data in sendmsg() to override
+ *  fragmentation handling for a single datagram.
+ */
+#define ZSOCK_IP_DONTFRAG 15
+
 /** Set IPv4 multicast datagram network interface. */
 #define ZSOCK_IP_MULTICAST_IF 32
 /** Set IPv4 multicast TTL value. */
@@ -1044,7 +1061,8 @@ int zsock_sendmsg_all(int sock, const struct net_msghdr *msg, int flags,
 /** @} */
 
 /**
- * @name IPv6 level options (NET_IPPROTO_IPV6)
+ * @defgroup ipv6_socket_options Socket options for IPv6
+ * @ingroup bsd_sockets
  * @{
  */
 /* Socket options for NET_IPPROTO_IPV6 level */
@@ -1078,6 +1096,20 @@ int zsock_sendmsg_all(int sock, const struct net_msghdr *msg, int flags,
  * the device MTU or the path MTU when path MTU discovery is enabled.
  */
 #define ZSOCK_IPV6_MTU 24
+
+/** Disable local IPv6 fragmentation for this socket.
+ *
+ *  Takes an integer boolean (0 = allow fragmentation, non-zero = disable).
+ *  When enabled, datagrams larger than the interface MTU are rejected locally
+ *  with errno set to ``EMSGSIZE`` instead of being fragmented by the stack.
+ *
+ *  Valid for ``setsockopt()`` and ``getsockopt()`` at the ``NET_IPPROTO_IPV6``
+ *  level.
+ *
+ *  This option may also be passed as ancillary data in sendmsg() to override
+ *  fragmentation handling for a single datagram.
+ */
+#define ZSOCK_IPV6_DONTFRAG 62
 
 /** Don't support IPv4 access */
 #define ZSOCK_IPV6_V6ONLY 26

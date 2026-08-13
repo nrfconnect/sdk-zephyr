@@ -185,6 +185,7 @@ function(sysbuild_cache)
                      ${${SB_CACHE_APPLICATION}_CACHE_FILE} ONLY_IF_DIFFERENT
     )
   endif()
+  file(REMOVE ${${SB_CACHE_APPLICATION}_CACHE_FILE}.tmp)
 
 endfunction()
 
@@ -324,6 +325,7 @@ function(ExternalZephyrProject_Add)
     CMAKE_VERBOSE_MAKEFILE
     WEST_PYTHON        # Temporary export. Waiting for #87083 and extensions.cmake to be cleaned up.
     Python3_EXECUTABLE # Temporary export. Waiting for #87083 and extensions.cmake to be cleaned up.
+    ZEPHYR_BASE
   )
 
   set(sysbuild_cache_file ${CMAKE_BINARY_DIR}/${ZBUILD_APPLICATION}_sysbuild_cache.txt)
@@ -543,6 +545,11 @@ function(ExternalZephyrVariantProject_Add)
     endif()
   endforeach()
 
+  # Add the variant image CMake module path to replace the normal Zephyr module path
+  list(APPEND shared_cmake_vars_argument
+    "-DCMAKE_MODULE_PATH:PATH=${CMAKE_SOURCE_DIR}/cmake/zephyr/variant"
+  )
+
   set(list_separator ",")
 
   include(ExternalProject)
@@ -588,10 +595,6 @@ function(ExternalZephyrVariantProject_Add)
   set(${ZBUILD_APPLICATION}_KCONFIG_VARIANT_SOURCE
       ${CMAKE_BINARY_DIR}/${ZBUILD_SOURCE_APP}/zephyr/.config
       CACHE INTERNAL "Application config file" FORCE
-  )
-
-  set(${ZBUILD_APPLICATION}_KCONFIG_TARGETS "KCONFIG_TARGETS-NOTFOUND"
-      CACHE INTERNAL "Disable Kconfig targets" FORCE
   )
 
   set(${ZBUILD_APPLICATION}_SNIPPET ${ZBUILD_SNIPPET}

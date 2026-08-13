@@ -15,7 +15,9 @@ import threading
 import time
 import xml.etree.ElementTree as ET
 from collections import OrderedDict
+from dataclasses import asdict
 from enum import Enum
+from glob import glob
 from string import Template
 
 import junitparser.junitparser as junit
@@ -26,13 +28,19 @@ from twisterlib.environment import PYTEST_PLUGIN_INSTALLED, ZEPHYR_BASE
 from twisterlib.error import ConfigurationError, StatusAttributeError
 from twisterlib.handlers import DeviceHandler, Handler, terminate_process
 from twisterlib.harnessconfig import TWISTER_PYTEST_CONFIG_FILE, HarnessPytestConfig
+from twisterlib.modulevars import expand_zephyr_vars
 from twisterlib.reports import ReportStatus
 from twisterlib.statuses import TwisterStatus
 from twisterlib.testinstance import TestInstance
+from twisterlib.testsuitedata import HarnessConfig
 
 logger = logging.getLogger('twister')
 
 _WINDOWS = platform.system() == 'Windows'
+
+
+class HarnessException(Exception):
+    """General exception for harness-related errors."""
 
 
 class Harness:
@@ -47,8 +55,8 @@ class Harness:
         self._status = TwisterStatus.NONE
         self.reason = None
         self.type = None
-        self.regex = []
-        self.matches = OrderedDict()
+        self.regex: list[re.Pattern] = []
+        self.matches: OrderedDict[re.Pattern, str] = OrderedDict()
         self.ordered = True
         self.id = None
         self.fail_on_fault = True
@@ -89,7 +97,7 @@ class Harness:
         except KeyError as err:
             raise StatusAttributeError(self.__class__, value) from err
 
-    def configure(self, instance):
+    def configure(self, instance: TestInstance):
         self.instance = instance
         config = instance.testsuite.harness_config
         self.id = instance.testsuite.id
@@ -111,6 +119,14 @@ class Harness:
     def build(self):
         pass
 
+    def run(self, _timeout: float) -> bool:
+        """Run the test.
+
+        Returns True if the harness handled execution itself (e.g. Pytest, Ctest, Bsim).
+        Returns False if the handler should be used to execute the test (e.g. Console, Ztest).
+        """
+        return False
+
     def get_testcase_name(self):
         """
         Get current TestCase name.
@@ -131,7 +147,7 @@ class Harness:
                     record[k] = { 'ERROR': { 'msg': str(parse_error), 'doc': record[k] } }
         return record
 
-    def parse_record(self, line) -> int:
+    def parse_record(self, line: str) -> int:
         match_cnt = 0
         for record_pattern in self.record_patterns:
             match = record_pattern.search(line)
@@ -153,7 +169,7 @@ class Harness:
                     self.recording.append(rec)
         return match_cnt
 
-    def process_test(self, line):
+    def process_test(self, line: str):
 
         self.parse_record(line)
 
@@ -183,11 +199,12 @@ class Harness:
         elif self.GCOV_END in line:
             self.capture_coverage = False
 
+
 class Robot(Harness):
 
     is_robot_test = True
 
-    def configure(self, instance):
+    def configure(self, instance: TestInstance):
         super().configure(instance)
         self.instance = instance
 
@@ -220,7 +237,7 @@ class Robot(Harness):
                     command.append(f'{v}')
 
         if self.path is None:
-            raise PytestHarnessException('The parameter robot_testsuite is mandatory')
+            raise HarnessException('The parameter robot_testsuite is mandatory')
 
         if isinstance(self.path, list):
             for suite in self.path:
@@ -253,6 +270,7 @@ class Robot(Harness):
                     log_msg = out.decode(sys.getdefaultencoding())
                     log.write(log_msg)
 
+
 class Console(Harness):
 
     def get_testcase_name(self):
@@ -268,7 +286,7 @@ class Console(Harness):
             return self.instance.testcases[0].name
         return super().get_testcase_name()
 
-    def configure(self, instance):
+    def configure(self, instance: TestInstance):
         super().configure(instance)
         if self.regex is None or len(self.regex) == 0:
             self.status = TwisterStatus.FAIL
@@ -296,7 +314,7 @@ class Console(Harness):
             raise ConfigurationError(self.instance.name, tc.reason)
         #
 
-    def handle(self, line):
+    def handle(self, line: str) -> None:
         if self.type == "one_line":
             if self.pattern.search(line):
                 logger.debug(f"HARNESS:{self.__class__.__name__}:EXPECTED:"
@@ -304,8 +322,10 @@ class Console(Harness):
                 self.next_pattern += 1
                 self.status = TwisterStatus.PASS
         elif self.type == "multi_line" and self.ordered:
-            if (self.next_pattern < len(self.patterns) and
-                self.patterns[self.next_pattern].search(line)):
+            if (
+                self.next_pattern < len(self.patterns) and
+                self.patterns[self.next_pattern].search(line)
+            ):
                 logger.debug(f"HARNESS:{self.__class__.__name__}:EXPECTED("
                              f"{self.next_pattern + 1}/{self.patterns_expected}):"
                              f"'{self.patterns[self.next_pattern].pattern}'")
@@ -328,11 +348,6 @@ class Console(Harness):
         if self.fail_on_fault and self.FAULT in line:
             self.fault = True
 
-        if self.GCOV_START in line:
-            self.capture_coverage = True
-        elif self.GCOV_END in line:
-            self.capture_coverage = False
-
         self.process_test(line)
         # Reset the resulting test state to FAIL when not all of the patterns were
         # found in the output, but just ztest's 'PROJECT EXECUTION SUCCESSFUL'.
@@ -341,17 +356,21 @@ class Console(Harness):
         # test image was executed.
         # TODO: Introduce explicit match policy type to reject
         # unexpected console output, allow missing patterns, deny duplicates.
-        if self.status == TwisterStatus.PASS and \
-           self.ordered and \
-           self.next_pattern < self.patterns_expected:
+        if (
+            self.status == TwisterStatus.PASS and
+            self.ordered and
+            self.next_pattern < self.patterns_expected
+        ):
             logger.error(f"HARNESS:{self.__class__.__name__}: failed with"
                          f" {self.next_pattern} of {self.patterns_expected}"
                          f" expected ordered patterns.")
             self.status = TwisterStatus.FAIL
             self.reason = "patterns did not match (ordered)"
-        if self.status == TwisterStatus.PASS and \
-           not self.ordered and \
-           len(self.matches) < self.patterns_expected:
+        if (
+            self.status == TwisterStatus.PASS and
+            not self.ordered and
+            len(self.matches) < self.patterns_expected
+        ):
             logger.error(f"HARNESS:{self.__class__.__name__}: failed with"
                          f" {len(self.matches)} of {self.patterns_expected}"
                          f" expected unordered patterns.")
@@ -361,56 +380,225 @@ class Console(Harness):
         tc = self.instance.get_case_or_create(self.get_testcase_name())
         if self.status == TwisterStatus.PASS:
             tc.status = TwisterStatus.PASS
+        elif self.status in [TwisterStatus.FAIL, TwisterStatus.ERROR]:
+            tc.status = self.status
+            tc.reason = self.reason or "Unknown Console harness failure"
         else:
+            # status is still NONE: not all patterns have matched *yet*.
+            # handle() runs once per console line, so while the test is still
+            # producing output this branch is hit on every line that does not
+            # complete the match - it is not a failure on its own. The final
+            # verdict for an incomplete match (test ended/timed out before all
+            # patterns were seen) is decided by the handler in
+            # _update_instance_info(), so do not log or set a reason here to
+            # avoid spurious errors and bogus reasons on tests that pass later.
             tc.status = TwisterStatus.FAIL
 
 
-class PytestHarnessException(Exception):
-    """General exception for pytest."""
+class Script(Harness):
 
-
-class Pytest(Harness):
+    def __init__(self):
+        super().__init__()
+        self.log_file_path = None
+        self.source_dir = None
+        self.running_dir = None
+        self.log_prefix = None
+        self._output = []
 
     def configure(self, instance: TestInstance):
         super().configure(instance)
         self.running_dir = instance.build_dir
         self.source_dir = instance.testsuite.source_dir
-        self.report_file = os.path.join(self.running_dir, 'report.xml')
-        self.pytest_log_file_path = os.path.join(self.running_dir, 'twister_harness.log')
+        self.log_file_path = os.path.join(self.running_dir, 'twister_harness.log')
+        if os.path.exists(self.log_file_path):
+            os.remove(self.log_file_path)
+
+    def run(self, timeout: float) -> bool:
+        self.instance.testcases = []
+        for script in self._get_test_scripts():
+            rc = -1
+            if not os.path.exists(script):
+                reason = f"{script} not found!"
+                logger.error(reason)
+                self._add_testcase_from_script(script, rc, reason=reason)
+                continue
+            duration = 0.0
+            cmd = self._build_script_command(script)
+            logger.debug(f"Running command: {shlex.join(cmd)}")
+            try:
+                start_time = time.time()
+                rc = self.run_command(cmd, timeout, env=self._get_env())
+                duration = time.time() - start_time
+            except Exception as err:
+                logger.error(str(err))
+            self._add_testcase_from_script(script, rc, duration)
+            self._flush_output_to_log(cmd, rc)
+        self.instance.record(self.recording)
+        self._update_test_status()
+        return True
+
+    def _get_env(self) -> dict[str, str]:
+        """Return environment variables with BOARD set to the platform name."""
+        env = os.environ.copy()
+        env['BOARD'] = self.instance.platform.name
+        return env
+
+    def _get_test_scripts(self) -> list[str]:
+        """Return list of test scripts resolved from harness config."""
+        input_sources = self.instance.testsuite.harness_config.tests_scripts or ['tests_scripts']
+        tests_scripts = []
+        for src in input_sources:
+            source = os.path.normpath(
+                os.path.join(self.source_dir, os.path.expanduser(os.path.expandvars(src)))
+            )
+            if os.path.isdir(source):
+                # Get all .sh files in the directory, excluding those starting with '_'
+                scripts = glob(os.path.join(source, "*.sh"))
+                tests_scripts.extend(
+                    s for s in scripts if not os.path.basename(s).startswith('_')
+                )
+            else:
+                # A directly specified file or non-existent path are included as-is
+                tests_scripts.append(source)
+        return tests_scripts
+
+    def _build_script_command(self, script: str) -> list[str]:
+        """Build command list from a script path and optional extra test args."""
+        handler: Handler = self.instance.handler
+        command = [script]
+        if handler.options.extra_test_args:
+            command.extend(handler.options.extra_test_args)
+        return command
+
+    def run_command(self, cmd: list[str], timeout: float, env: dict[str, str] | None = None) -> int:
+        """Run a command, stream its output, and return the exit code."""
+        with subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            env=env,
+        ) as proc:
+            try:
+                reader_t = threading.Thread(target=self._output_reader, args=(proc,), daemon=True)
+                reader_t.start()
+                reader_t.join(timeout)
+                if reader_t.is_alive():
+                    terminate_process(proc)
+                    logger.warning('Timeout has occurred. Can be extended in testspec file. '
+                                   f'Currently set to {timeout} seconds.')
+                    self.instance.reason = 'Test timeout'
+                    self.status = TwisterStatus.FAIL
+                proc.wait(timeout)
+            except subprocess.TimeoutExpired:
+                self.status = TwisterStatus.FAIL
+                proc.kill()
+
+        return proc.returncode
+
+    def _flush_output_to_log(self, cmd: list[str], returncode: int) -> None:
+        with open(self.log_file_path, 'a') as log_file:
+            log_file.write(shlex.join(cmd) + '\n\n')
+            log_file.write('\n'.join(self._output))
+            log_file.write(f'\n=== Return code: {returncode}\n\n')
         self._output = []
+
+    def _output_reader(self, proc: subprocess.Popen) -> None:
+        self._output = []
+        log_prefix = self.log_prefix or self.__class__.__name__.upper()
+        while proc.stdout.readable() and proc.poll() is None:
+            line = proc.stdout.readline().decode().rstrip()
+            if not line:
+                continue
+            self._output.append(line)
+            logger.debug(f'{log_prefix}: {line}')
+            self.parse_record(line)
+        proc.communicate()
+
+    def _add_testcase_from_script(
+        self, script: str, rc: int, duration: float = 0.0, reason: str = ''
+    ) -> None:
+        script_name = os.path.basename(script)
+        tc_name = f"{self.id}.{script_name}"
+        tc = self.instance.add_testcase(tc_name)
+        tc.duration = duration
+        if rc == 0:
+            tc.status = TwisterStatus.PASS
+        else:
+            tc.status = TwisterStatus.FAIL
+            tc.reason = reason or f"Script {script_name} failed with return code {rc}"
+            tc.output = '\n'.join(self._output)
+
+    def _update_test_status(self):
+        if not self.instance.testcases:
+            self.instance.init_cases()
+            self.instance.status = TwisterStatus.ERROR
+            self.instance.reason = "Test scripts not found"
+        else:
+            if self.status != TwisterStatus.NONE:
+                self.instance.status = self.status
+            elif any(tc.status != TwisterStatus.PASS for tc in self.instance.testcases):
+                self.instance.status = TwisterStatus.FAIL
+            else:
+                self.instance.status = TwisterStatus.PASS
+            self.instance.execution_time = sum(tc.duration for tc in self.instance.testcases)
+
+        if self.instance.status in [TwisterStatus.ERROR, TwisterStatus.FAIL]:
+            self.instance.reason = self.instance.reason or 'Script test failed'
+            self.instance.add_missing_case_status(TwisterStatus.BLOCK, self.instance.reason)
+
+
+class Pytest(Script):
+
+    def configure(self, instance: TestInstance):
+        super().configure(instance)
+        self.log_prefix = 'PYTEST'
+        self.report_file = os.path.join(self.running_dir, 'report.xml')
         self.pytest_config_file = os.path.join(self.running_dir, TWISTER_PYTEST_CONFIG_FILE)
         self.pytest_params = HarnessPytestConfig(platform=instance.platform.name)
 
-    def pytest_run(self, timeout):
+    def run(self, timeout):
         try:
             cmd = self.generate_command()
-            self.run_command(cmd, timeout)
-        except PytestHarnessException as pytest_exception:
+            cmd, env = self._update_command_with_env_dependencies(cmd)
+            rc = self.run_command(cmd, timeout, env)
+            if rc in (ExitCode.INTERRUPTED, ExitCode.USAGE_ERROR, ExitCode.INTERNAL_ERROR):
+                self.status = TwisterStatus.ERROR
+                self.instance.reason = f'Pytest error - return code {rc}'
+            self._flush_output_to_log(cmd, rc)
+        except HarnessException as pytest_exception:
             logger.error(str(pytest_exception))
             self.status = TwisterStatus.FAIL
             self.instance.reason = str(pytest_exception)
         finally:
             self.instance.record(self.recording)
             self._update_test_status()
+        return True
 
     def generate_command(self):
-        config = self.instance.testsuite.harness_config
+        config: HarnessConfig = self.instance.testsuite.harness_config
         handler: Handler = self.instance.handler
         command = [
-            'pytest', '-s', '-v',
+            sys.executable, '-m', 'pytest', '-s', '-v',
             '--log-cli-level=DEBUG',
             '--log-cli-format=%(levelname)s: %(message)s',
             f'--junit-xml={self.report_file}',
             f'--twister-config={self.pytest_config_file}'
         ]
 
-        pytest_dut_scope = config.get('pytest_dut_scope', None) if config else None
-        if pytest_dut_scope:
-            command.append(f'--dut-scope={pytest_dut_scope}')
+        if config.pytest_dut_scope:
+            command.append(f'--dut-scope={config.pytest_dut_scope}')
 
-        pytest_root = config.get('pytest_root', ['pytest']) if config else ['pytest']
-        command.extend([os.path.normpath(os.path.join(
-            self.source_dir, os.path.expanduser(os.path.expandvars(src)))) for src in pytest_root])
+        command.extend(
+            [
+                os.path.normpath(
+                    os.path.join(
+                        self.source_dir,
+                        expand_zephyr_vars(os.path.expanduser(os.path.expandvars(src))),
+                    )
+                )
+                for src in config.pytest_root
+            ]
+        )
 
         self.pytest_params.device_type = self._get_pytest_device_type(handler.type_str)
 
@@ -420,19 +608,18 @@ class Pytest(Harness):
 
         if handler.type_str == 'device':
             self._generate_parameters_for_hardware(handler)
-            self.pytest_params.duts = self.instance.reserved_duts
         else:
             for fixture in handler.options.fixture:
                 self.pytest_params.twister_fixtures.append(fixture)
 
+        self.pytest_params.duts = self.instance.reserved_duts
         self.pytest_params.required_builds = self.instance.required_build_dirs
 
         if handler.options.extra_test_args and handler.type_str == 'native':
             self.pytest_params.extra_test_args = shlex.join(handler.options.extra_test_args)
 
         # Add any additional pytest args from YAML or CLI
-        pytest_args_yaml = config.get('pytest_args', []) if config else []
-        command.extend(pytest_args_yaml)
+        command.extend(config.pytest_args)
         if handler.options.pytest_args:
             command.extend(handler.options.pytest_args)
 
@@ -450,7 +637,7 @@ class Pytest(Harness):
         elif handler_name == 'build':
             return 'custom'
         else:
-            raise PytestHarnessException(
+            raise HarnessException(
                 f'Support for handler {handler_name} not implemented yet'
             )
 
@@ -470,36 +657,6 @@ class Pytest(Harness):
 
         # Platform flash_before is intended for boards with USB reset issues during flashing
         self.pytest_params.flash_before = self.instance.platform.flash_before
-
-    def run_command(self, cmd, timeout):
-        cmd, env = self._update_command_with_env_dependencies(cmd)
-        with subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            env=env
-        ) as proc:
-            try:
-                reader_t = threading.Thread(target=self._output_reader, args=(proc,), daemon=True)
-                reader_t.start()
-                reader_t.join(timeout)
-                if reader_t.is_alive():
-                    terminate_process(proc)
-                    logger.warning('Timeout has occurred. Can be extended in testspec file. '
-                                   f'Currently set to {timeout} seconds.')
-                    self.instance.reason = 'Pytest timeout'
-                    self.status = TwisterStatus.FAIL
-                proc.wait(timeout)
-            except subprocess.TimeoutExpired:
-                self.status = TwisterStatus.FAIL
-                proc.kill()
-
-        if proc.returncode in (ExitCode.INTERRUPTED, ExitCode.USAGE_ERROR, ExitCode.INTERNAL_ERROR):
-            self.status = TwisterStatus.ERROR
-            self.instance.reason = f'Pytest error - return code {proc.returncode}'
-        with open(self.pytest_log_file_path, 'w') as log_file:
-            log_file.write(shlex.join(cmd) + '\n\n')
-            log_file.write('\n'.join(self._output))
 
     @staticmethod
     def _update_command_with_env_dependencies(cmd):
@@ -530,17 +687,6 @@ class Pytest(Harness):
         logger.debug(f'Running pytest command: {cmd_to_print}')
 
         return cmd, env
-
-    def _output_reader(self, proc):
-        self._output = []
-        while proc.stdout.readable() and proc.poll() is None:
-            line = proc.stdout.readline().decode().rstrip()
-            if not line:
-                continue
-            self._output.append(line)
-            logger.debug(f'PYTEST: {line}')
-            self.parse_record(line)
-        proc.communicate()
 
     def _update_test_status(self):
         if self.status == TwisterStatus.NONE:
@@ -598,6 +744,7 @@ class Pytest(Harness):
             self.status = TwisterStatus.SKIP
             self.instance.reason = 'No tests collected'
 
+
 class Display_capture(Pytest):
     def generate_command(self):
         config = self.instance.testsuite.harness_config
@@ -639,7 +786,7 @@ class Shell(Pytest):
         if shell_commands := harness_config.get('shell_commands'):
             test_shell_file = os.path.join(self.running_dir, 'test_shell.yml')
             with open(test_shell_file, 'w') as f:
-                yaml.dump(shell_commands, f)
+                yaml.dump([asdict(cmd) for cmd in shell_commands], f)
             return test_shell_file
 
         test_shell_file = harness_config.get('shell_commands_file', 'test_shell.yml')
@@ -649,6 +796,7 @@ class Shell(Pytest):
         if os.path.exists(test_shell_file):
             return test_shell_file
         return None
+
 
 class Power(Pytest):
     def generate_command(self):
@@ -663,10 +811,14 @@ class Power(Pytest):
             command.append(f'--testdata={measurements}')
         return command
 
+
 class Gtest(Harness):
     ANSI_ESCAPE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
     _NAME_PATTERN = "[a-zA-Z_][a-zA-Z0-9_]*"
-    _SUITE_TEST_NAME_PATTERN = f"(?P<suite_name>{_NAME_PATTERN})\\.(?P<test_name>{_NAME_PATTERN})"
+    _SUITE_TEST_NAME_PATTERN = (
+            f"(?P<suite_name>{_NAME_PATTERN})(\\.|/)(?P<test_name>"
+            f"{_NAME_PATTERN})(/)?(?P<parametrized_test>[0-9]*\\.[a-zA-Z_]*)?"
+            )
     TEST_START_PATTERN = f".*\\[ RUN      \\] {_SUITE_TEST_NAME_PATTERN}"
     TEST_PASS_PATTERN = f".*\\[       OK \\] {_SUITE_TEST_NAME_PATTERN}"
     TEST_SKIP_PATTERN = f".*\\[ DISABLED \\] {_SUITE_TEST_NAME_PATTERN}"
@@ -698,6 +850,8 @@ class Gtest(Harness):
 
             # Generate the internal name of the test
             name = "{}.{}.{}".format(self.id, suite_name, test_start_match.group("test_name"))
+            if test_start_match.group("parametrized_test"):
+                name += f".{test_start_match.group('parametrized_test')}"
 
             # Assert that we don't already have a running test
             assert (
@@ -721,6 +875,15 @@ class Gtest(Harness):
             tc = self.instance.get_case_or_create(self.id)
             if self.has_failures or self.tc is not None:
                 self.status = TwisterStatus.FAIL
+                if self.tc is not None and not self.has_failures:
+                    self.reason = f"Gtest failure - test {self.tc} did not finish"
+                else:
+                    failed = sum(
+                        1 for t in self.instance.testcases if t.status == TwisterStatus.FAIL
+                    )
+                    self.reason = "Gtest failure"
+                    if failed > 1:
+                        self.reason += f" - {failed} tests failed"
                 tc.status = TwisterStatus.FAIL
             else:
                 self.status = TwisterStatus.PASS
@@ -746,6 +909,7 @@ class Gtest(Harness):
         tc.status = state
         if tc.status == TwisterStatus.FAIL:
             self.has_failures = True
+            self.reason = f"Gtest failure - failed test {tc}"
             tc.output = self.testcase_output
         self.testcase_output = ""
         self._match = False
@@ -753,25 +917,31 @@ class Gtest(Harness):
     def _check_result(self, line):
         test_pass_match = re.search(self.TEST_PASS_PATTERN, line)
         if test_pass_match:
-            return TwisterStatus.PASS, \
-                   "{}.{}.{}".format(
+            test_name = "{}.{}.{}".format(
                         self.id, test_pass_match.group("suite_name"),
                         test_pass_match.group("test_name")
                     )
+            if test_pass_match.group("parametrized_test"):
+                test_name += f".{test_pass_match.group('parametrized_test')}"
+            return TwisterStatus.PASS, test_name
         test_skip_match = re.search(self.TEST_SKIP_PATTERN, line)
         if test_skip_match:
-            return TwisterStatus.SKIP, \
-                   "{}.{}.{}".format(
-                       self.id, test_skip_match.group("suite_name"),
-                       test_skip_match.group("test_name")
+            test_name = "{}.{}.{}".format(
+                        self.id, test_skip_match.group("suite_name"),
+                        test_skip_match.group("test_name")
                     )
+            if test_skip_match.group("parametrized_test"):
+                test_name += f".{test_skip_match.group('parametrized_test')}"
+            return TwisterStatus.SKIP, test_name
         test_fail_match = re.search(self.TEST_FAIL_PATTERN, line)
         if test_fail_match:
-            return TwisterStatus.FAIL, \
-                   "{}.{}.{}".format(
-                       self.id, test_fail_match.group("suite_name"),
-                       test_fail_match.group("test_name")
+            test_name = "{}.{}.{}".format(
+                        self.id, test_fail_match.group("suite_name"),
+                        test_fail_match.group("test_name")
                     )
+            if test_fail_match.group("parametrized_test"):
+                test_name += f".{test_fail_match.group('parametrized_test')}"
+            return TwisterStatus.FAIL, test_name
         return None, None
 
 
@@ -785,7 +955,7 @@ class Test(Harness):
     test_suite_end_pattern = re.compile(
         r"TESTSUITE (?P<suite_name>\S*)\s+(?P<suite_status>succeeded|failed)"
     )
-    test_case_start_pattern = re.compile(r"START - (test_)?([a-zA-Z0-9_-]+)")
+    test_case_start_pattern = re.compile(r"START - (test_)?(\S+)")
     test_case_end_pattern = re.compile(
         r".*(PASS|FAIL|SKIP) - (test_)?(\S*) in (\d*[.,]?\d*) seconds"
     )
@@ -973,7 +1143,7 @@ class Ztest(Test):
     pass
 
 
-class Bsim(Harness):
+class Bsim(Script):
 
     def build(self):
         """
@@ -1007,19 +1177,21 @@ class Bsim(Harness):
         logger.debug(f'Copying executable from {original_exe_path} to {new_exe_path}')
         shutil.copy(original_exe_path, new_exe_path)
 
-class Ctest(Harness):
+
+class Ctest(Script):
     def configure(self, instance: TestInstance):
         super().configure(instance)
-        self.running_dir = instance.build_dir
         self.report_file = os.path.join(self.running_dir, 'report.xml')
-        self.ctest_log_file_path = os.path.join(self.running_dir, 'twister_harness.log')
-        self._output = []
 
-    def ctest_run(self, timeout):
+    def run(self, timeout):
         assert self.instance is not None
         try:
             cmd = self.generate_command()
-            self.run_command(cmd, timeout)
+            rc = self.run_command(cmd, timeout)
+            if rc in (ExitCode.INTERRUPTED, ExitCode.USAGE_ERROR, ExitCode.INTERNAL_ERROR):
+                self.status = TwisterStatus.ERROR
+                self.instance.reason = f'Ctest error - return code {rc}'
+            self._flush_output_to_log(cmd, rc)
         except Exception as err:
             logger.error(str(err))
             self.status = TwisterStatus.FAIL
@@ -1027,6 +1199,7 @@ class Ctest(Harness):
         finally:
             self.instance.record(self.recording)
             self._update_test_status()
+        return True
 
     def generate_command(self):
         config = self.instance.testsuite.harness_config
@@ -1040,7 +1213,7 @@ class Ctest(Harness):
             '--output-junit',
             self.report_file,
             '--output-log',
-            self.ctest_log_file_path,
+            self.log_file_path,
             '--output-on-failure',
         ]
         base_timeout = handler.get_test_timeout()
@@ -1051,45 +1224,6 @@ class Ctest(Harness):
             command.extend(handler.options.ctest_args)
 
         return command
-
-    def run_command(self, cmd, timeout):
-        with subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-        ) as proc:
-            try:
-                reader_t = threading.Thread(target=self._output_reader, args=(proc,), daemon=True)
-                reader_t.start()
-                reader_t.join(timeout)
-                if reader_t.is_alive():
-                    terminate_process(proc)
-                    logger.warning('Timeout has occurred. Can be extended in testspec file. '
-                                   f'Currently set to {timeout} seconds.')
-                    self.instance.reason = 'Ctest timeout'
-                    self.status = TwisterStatus.FAIL
-                proc.wait(timeout)
-            except subprocess.TimeoutExpired:
-                self.status = TwisterStatus.FAIL
-                proc.kill()
-
-        if proc.returncode in (ExitCode.INTERRUPTED, ExitCode.USAGE_ERROR, ExitCode.INTERNAL_ERROR):
-            self.status = TwisterStatus.ERROR
-            self.instance.reason = f'Ctest error - return code {proc.returncode}'
-            with open(self.ctest_log_file_path, 'w') as log_file:
-                log_file.write(shlex.join(cmd) + '\n\n')
-                log_file.write('\n'.join(self._output))
-
-    def _output_reader(self, proc):
-        self._output = []
-        while proc.stdout.readable() and proc.poll() is None:
-            line = proc.stdout.readline().decode().strip()
-            if not line:
-                continue
-            self._output.append(line)
-            logger.debug(f'CTEST: {line}')
-            self.parse_record(line)
-        proc.communicate()
 
     def _update_test_status(self):
         if self.status == TwisterStatus.NONE:
@@ -1146,6 +1280,7 @@ class Ctest(Harness):
                         if isinstance(r, junit.Skipped)), 'Ctest skip')
             else:
                 tc.status = TwisterStatus.PASS
+
 
 class HarnessImporter:
 

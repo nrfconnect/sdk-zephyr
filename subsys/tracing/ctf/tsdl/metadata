@@ -8,7 +8,7 @@ typealias integer { size = 64; align = 8; signed = false; } := uint64_t;
 typealias integer { size = 8; align = 8; signed = false; encoding = ASCII; } := ctf_bounded_string_t;
 
 struct event_header {
-	uint32_t timestamp;
+	uint64_t timestamp;
 	uint16_t id;
 };
 
@@ -2227,5 +2227,26 @@ event {
 	id = 0x103;
 	fields := struct {
 		uint32_t id;
+	};
+};
+
+event {
+	name = sys_init_enter;
+	id = 0x104;
+	fields := struct {
+		ctf_bounded_string_t name[20];
+		uint32_t fn;
+		uint8_t level;
+	};
+};
+
+event {
+	name = sys_init_exit;
+	id = 0x105;
+	fields := struct {
+		ctf_bounded_string_t name[20];
+		uint32_t fn;
+		uint8_t level;
+		int32_t result;
 	};
 };

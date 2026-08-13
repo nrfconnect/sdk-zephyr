@@ -214,7 +214,6 @@ static int eth_tx(const struct device *dev, struct net_pkt *pkt)
 
 	LOG_DBG("Sending Packet: %p of Length: %u", pkt, total_len);
 	if (total_len > (ETH_TXBUF_SIZE * ETH_TXBUF_NB)) {
-		eth_stats_update_errors_tx(data->iface);
 		LOG_ERR("Packet spans all available descriptors");
 		return -ENOBUFS;
 	}
@@ -224,7 +223,6 @@ static int eth_tx(const struct device *dev, struct net_pkt *pkt)
 
 	do {
 		if ((dma_tx_desc_current->Status & ETH_DMATxDesc_OWN) != 0U) {
-			eth_stats_update_errors_tx(data->iface);
 			LOG_ERR("No Descriptors Available");
 			res = -EBUSY;
 			goto error;
@@ -235,7 +233,6 @@ static int eth_tx(const struct device *dev, struct net_pkt *pkt)
 			bytes_remaining > ETH_TXBUF_SIZE ? ETH_TXBUF_SIZE : bytes_remaining;
 		if (net_pkt_read(pkt, (void *)(dma_tx_desc_current->Buffer1Addr), chunk_size) !=
 		    0U) {
-			eth_stats_update_errors_tx(data->iface);
 			LOG_ERR("Could not read descriptor buffer!");
 			res = -ENOBUFS;
 			goto error;
@@ -267,7 +264,6 @@ static int eth_tx(const struct device *dev, struct net_pkt *pkt)
 
 	/* Wait for end of TX buffer transmission */
 	if (k_sem_take(&data->tx_int_sem, K_MSEC(ETH_DMA_TX_TIMEOUT_MS)) != 0) {
-		eth_stats_update_errors_tx(data->iface);
 		LOG_DBG("TX ISR Timeout");
 		res = -EIO;
 		goto error;
@@ -397,7 +393,7 @@ static void eth_isr(const struct device *dev)
 	}
 }
 
-static int eth_wch_start(const struct device *dev)
+static int eth_wch_start(const struct device *dev, struct net_if *iface __unused)
 {
 	const struct eth_wch_config *config = dev->config;
 	ETH_TypeDef *eth = config->regs;
@@ -410,7 +406,7 @@ static int eth_wch_start(const struct device *dev)
 	return 0;
 }
 
-static int eth_wch_stop(const struct device *dev)
+static int eth_wch_stop(const struct device *dev, struct net_if *iface __unused)
 {
 	const struct eth_wch_config *config = dev->config;
 	ETH_TypeDef *eth = config->regs;
@@ -468,14 +464,13 @@ static void phy_link_state_changed(const struct device *phy_dev, struct phy_link
 	 * config. The speed can change without receiving a link down
 	 * callback before.
 	 */
-	eth_wch_stop(dev);
+	eth_wch_stop(dev, data->iface);
 	if (state->is_up) {
 		set_mac_config(dev, state);
-		eth_wch_start(dev);
-		net_eth_carrier_on(data->iface);
-	} else {
-		net_eth_carrier_off(data->iface);
+		eth_wch_start(dev, data->iface);
 	}
+
+	net_eth_carrier_set(data->iface, state->is_up);
 }
 
 static int eth_mac_init(const struct device *dev)
@@ -553,10 +548,9 @@ static void eth_wch_iface_init(struct net_if *iface)
 	}
 }
 
-static enum ethernet_hw_caps eth_wch_get_capabilities(const struct device *dev)
+static enum ethernet_hw_caps eth_wch_get_capabilities(const struct device *dev __unused,
+						      struct net_if *iface __unused)
 {
-	ARG_UNUSED(dev);
-
 	return ETHERNET_LINK_10BASE | ETHERNET_LINK_100BASE
 #if defined(CONFIG_ETH_WCH_HW_CHECKSUM)
 	       | ETHERNET_HW_RX_CHKSUM_OFFLOAD
@@ -576,7 +570,9 @@ static enum ethernet_hw_caps eth_wch_get_capabilities(const struct device *dev)
 		;
 }
 
-static int eth_wch_set_config(const struct device *dev, enum ethernet_config_type type,
+static int eth_wch_set_config(const struct device *dev,
+			      struct net_if *iface __unused,
+			      enum ethernet_config_type type,
 			      const struct ethernet_config *config)
 {
 	struct eth_wch_data *data = dev->data;
@@ -609,7 +605,7 @@ static int eth_wch_set_config(const struct device *dev, enum ethernet_config_typ
 	return -ENOTSUP;
 }
 
-static const struct device *eth_wch_get_phy(const struct device *dev)
+static const struct device *eth_wch_get_phy(const struct device *dev, struct net_if *iface __unused)
 {
 	const struct eth_wch_config *config = dev->config;
 
@@ -617,7 +613,8 @@ static const struct device *eth_wch_get_phy(const struct device *dev)
 }
 
 #if defined(CONFIG_NET_STATISTICS_ETHERNET)
-static struct net_stats_eth *eth_wch_get_stats(const struct device *dev)
+static struct net_stats_eth *eth_wch_get_stats(const struct device *dev,
+					       struct net_if *iface __unused)
 {
 	struct eth_wch_data *data = dev->data;
 
