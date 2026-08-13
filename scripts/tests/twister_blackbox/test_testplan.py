@@ -11,6 +11,7 @@ import os
 import pytest
 import json
 
+# pylint: disable=no-name-in-module
 from conftest import TEST_DATA, test_filename_mock
 from twisterlib.testplan import TestPlan
 from twisterlib.error import TwisterRuntimeError
