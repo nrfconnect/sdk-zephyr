@@ -111,10 +111,11 @@ Comments use a #:
    # This is a comment
 
 Assignments in configuration files are only respected if the dependencies for
-the symbol are satisfied. A warning is printed otherwise. To figure out what
-the dependencies of a symbol are, use one of the :ref:`interactive
-configuration interfaces <menuconfig>` (you can jump directly to a symbol with
-:kbd:`/`), or look up the symbol in the Kconfig search page.
+the symbol are satisfied. A warning is printed otherwise, or an error for the
+fragments covered by :ref:`kconfig_strict`. To figure out what the dependencies
+of a symbol are, use one of the :ref:`interactive configuration interfaces
+<menuconfig>` (you can jump directly to a symbol with :kbd:`/`), or look up the
+symbol in the Kconfig search page.
 
 
 .. _initial-conf:
@@ -407,6 +408,83 @@ There are two ways to configure a Kconfig ``choice``:
 The :file:`Kconfig.defconfig` method should be used when the dependencies of
 the choice might not be satisfied. In that case, you're setting the default
 selection whenever the user makes the choice visible.
+
+
+.. _kconfig_strict:
+
+Strict checking of ineffective assignments
+==========================================
+
+An assignment that Kconfig cannot honor, because the symbol's dependencies are
+not satisfied or because a ``select`` from another symbol wins, has no effect on
+the build. The value that ends up in :file:`zephyr/.config` is not the one the
+fragment asked for. Such an assignment is usually a leftover from an earlier
+configuration, or a misunderstanding of what the symbol depends on.
+
+Strict checking turns those ineffective assignments into build errors instead of
+warnings. It is enabled by default and only applies to the configuration the
+application itself owns:
+
+* Fragments placed directly in the :ref:`application configuration directory
+  <application-configuration-directory>`, such as :file:`prj.conf` and any
+  overlay fragment next to it.
+
+* Symbols given on the CMake command line as ``-DCONFIG_<symbol>=<value>``.
+
+Both are written for one specific build, so an assignment that does not take
+effect there is a bug in the application.
+
+Every other fragment keeps warning only, because it is shared between several
+build targets and the same assignment can be meaningful for one target and
+discarded for another:
+
+* Board and SoC :file:`*_defconfig` files, and the application
+  :file:`boards/` and :file:`socs/` subdirectories.
+
+* Shield and snippet fragments.
+
+* Fragments coming from a Zephyr module.
+
+* Fragments that a parent image passes to a child image in a
+  :ref:`sysbuild <sysbuild>` build. Note that for a child image, the
+  application configuration directory is
+  :file:`<parent app>/sysbuild/<image>/`, so :file:`prj.conf` there is
+  covered while :file:`<parent app>/sysbuild/<image>/boards/` is not.
+
+When several fragments assign the same symbol, only the fragment that
+established the value Kconfig actually used is reported. A board fragment that
+overrides :file:`prj.conf` therefore takes over responsibility for the symbol,
+and the :file:`prj.conf` assignment is no longer flagged.
+
+The checks are also skipped when Kconfig runs under
+:file:`cmake/package_helper.cmake`, which resolves the configuration without
+building it. Twister uses it to evaluate a testsuite ``filter:`` expression on
+every platform, including the ones the test is about to be filtered out on,
+where assignments are not expected to take effect. The platforms that survive
+the filter are checked by the real build that follows.
+
+The error names the fragment and the line that made the assignment, and all
+findings for an image are reported together:
+
+.. code-block:: none
+
+   error: /path/to/app/prj.conf:12: LOG_BUFFER_SIZE (defined at
+   subsys/logging/Kconfig.processing:38) was assigned the value '2048' but got the
+   value ''. Check these unsatisfied dependencies: (LOG_MODE_DEFERRED) (=n). ...
+
+Fix such an error by assigning a value that Kconfig can honor, by satisfying the
+missing dependencies, or by dropping the assignment. If the assignment is
+intentionally target-dependent, move it to a fragment that is specific to the
+targets it applies to, such as :file:`boards/<board>.conf`.
+
+To downgrade the errors back to warnings for a build, set
+``KCONFIG_STRICT`` to a false value:
+
+.. code-block:: console
+
+   west build -b <board> <app> -- -DKCONFIG_STRICT=n
+
+In a :ref:`sysbuild <sysbuild>` build, this applies to all images.
 
 
 More Kconfig resources
