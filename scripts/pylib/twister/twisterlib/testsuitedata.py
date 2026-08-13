@@ -4,11 +4,8 @@
 
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass, field
 from typing import Any
-
-logger = logging.getLogger('twister')
 
 
 @dataclass
@@ -22,7 +19,6 @@ class RequiredDevice:
     platform: str | None = None
     fixture: list[str] = field(default_factory=list)
     application: str | None = None
-    path: str | None = None
 
 
 @dataclass
@@ -86,18 +82,5 @@ class HarnessConfig:
 
 @dataclass
 class RequiredApplication:
-    application: str | None = None
-    name: str | None = field(default=None, repr=False)  # deprecated, use 'application' instead
-    path: str | None = None
+    name: str
     platform: str | None = None
-
-    def __post_init__(self):
-        if self.name:
-            logger.warning(
-                "'name' field in required_applications is deprecated, use 'application' instead"
-            )
-            if not self.application:
-                self.application = self.name
-            self.name = None
-        if not self.application:
-            raise ValueError("'application' is required in required_applications")
