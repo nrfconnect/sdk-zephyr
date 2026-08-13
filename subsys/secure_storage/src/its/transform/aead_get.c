@@ -4,7 +4,6 @@
 #include <zephyr/secure_storage/its/transform/aead_get.h>
 #include <zephyr/drivers/hwinfo.h>
 #include <zephyr/init.h>
-#include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <psa/crypto.h>
 #include <string.h>
@@ -124,17 +123,14 @@ SYS_INIT(warn_insecure_key, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);
 psa_status_t secure_storage_its_transform_aead_get_nonce(
 		uint8_t nonce[static CONFIG_SECURE_STORAGE_ITS_TRANSFORM_AEAD_NONCE_SIZE])
 {
-	psa_status_t ret = PSA_SUCCESS;
+	psa_status_t ret;
 	static uint8_t s_nonce[CONFIG_SECURE_STORAGE_ITS_TRANSFORM_AEAD_NONCE_SIZE];
 	static bool s_nonce_initialized;
-	static K_MUTEX_DEFINE(s_nonce_mutex);
-
-	k_mutex_lock(&s_nonce_mutex, K_FOREVER);
 
 	if (!s_nonce_initialized) {
 		ret = psa_generate_random(s_nonce, sizeof(s_nonce));
 		if (ret != PSA_SUCCESS) {
-			goto exit;
+			return ret;
 		}
 		s_nonce_initialized = true;
 	} else {
@@ -145,10 +141,8 @@ psa_status_t secure_storage_its_transform_aead_get_nonce(
 			}
 		}
 	}
-	memcpy(nonce, &s_nonce, sizeof(s_nonce));
 
-exit:
-	k_mutex_unlock(&s_nonce_mutex);
-	return ret;
+	memcpy(nonce, &s_nonce, sizeof(s_nonce));
+	return PSA_SUCCESS;
 }
 #endif /* CONFIG_SECURE_STORAGE_ITS_TRANSFORM_AEAD_NONCE_PROVIDER_DEFAULT */
