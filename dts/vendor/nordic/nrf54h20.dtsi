@@ -1818,16 +1818,4 @@
 		compatible = "nordic,nrf-temp-nrfs";
 		status = "disabled";
 	};
-
-	cpuapp_gswdt: cpuapp_gswdt {
-		compatible = "nordic,nrf-gswdt";
-		mbox = <&cpuapp_cpusys_gswdt_mbox>;
-		status = "disabled";
-	};
-
-	cpurad_gswdt: cpurad_gswdt {
-		compatible = "nordic,nrf-gswdt";
-		mbox = <&cpurad_cpusys_gswdt_mbox>;
-		status = "disabled";
-	};
 };
