@@ -494,7 +494,8 @@ int pinctrl_configure_pins(const pinctrl_soc_pin_t *pins, uint8_t pin_cnt,
 		case NRF_FUN_MSPI_IO1:
 		case NRF_FUN_MSPI_IO2:
 		case NRF_FUN_MSPI_IO3:
-			nrf_gpio_pin_control_select(psel, NRF_GPIO_PIN_SEL_MSPI);
+			/* Pin sel for MSPI is labelled as QSPI in MDK. This is unavoidable */
+			nrf_gpio_pin_control_select(psel, NRF_GPIO_PIN_SEL_QSPI);
 			dir = NRF_GPIO_PIN_DIR_OUTPUT;
 			input = NRF_GPIO_PIN_INPUT_CONNECT;
 			break;
