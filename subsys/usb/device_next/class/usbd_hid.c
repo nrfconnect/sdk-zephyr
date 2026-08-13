@@ -224,10 +224,6 @@ static int verify_set_report(const struct device *dev,
 		return 0;
 	}
 
-	if (ops->verify_set_report != NULL) {
-		errno = ops->verify_set_report(dev, type, id, setup->wLength);
-	}
-
 	return 0;
 }
 
