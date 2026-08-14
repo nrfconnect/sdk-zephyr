@@ -30,7 +30,7 @@ SPARC, MIPS, and a large number of `supported boards`_.
 .. below included in doc/introduction/introduction.rst
 
 
-Getting Started
+Getting Started DUMMY CHANGE
 ***************
 
 Welcome to Zephyr! See the `Introduction to Zephyr`_ for a high-level overview,
