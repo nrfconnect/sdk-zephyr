@@ -1592,7 +1592,12 @@ static int zms_mount_internal(struct zms_fs *fs, bool wipe_on_failure)
 		return -EINVAL;
 	}
 
-	k_mutex_init(&fs->zms_lock);
+	/* Initialize the mutex only on the first mount.
+	 */
+	if (!fs->lock_initialized) {
+		k_mutex_init(&fs->zms_lock);
+		fs->lock_initialized = true;
+	}
 
 	fs->flash_parameters = flash_get_parameters(fs->flash_device);
 	if (fs->flash_parameters == NULL) {
@@ -1701,6 +1706,8 @@ ssize_t zms_write(struct zms_fs *fs, zms_id_t id, const void *data, size_t len)
 		return -EINVAL;
 	}
 
+	k_mutex_lock(&fs->zms_lock, K_FOREVER);
+
 #ifdef CONFIG_ZMS_NO_DOUBLE_WRITE
 	uint64_t wlk_addr;
 
@@ -1713,7 +1720,8 @@ ssize_t zms_write(struct zms_fs *fs, zms_id_t id, const void *data, size_t len)
 			goto no_cached_entry;
 		} else {
 			/* skip delete entry for non-existing entry */
-			return 0;
+			rc = 0;
+			goto end;
 		}
 	}
 #else
@@ -1725,7 +1733,8 @@ ssize_t zms_write(struct zms_fs *fs, zms_id_t id, const void *data, size_t len)
 	struct zms_ate wlk_ate;
 	int prev_found = zms_find_ate_with_id(fs, id, wlk_addr, fs->ate_wra, &wlk_ate, &rd_addr);
 	if (prev_found < 0) {
-		return prev_found;
+		rc = prev_found;
+		goto end;
 	}
 
 	if (prev_found) {
@@ -1741,7 +1750,8 @@ ssize_t zms_write(struct zms_fs *fs, zms_id_t id, const void *data, size_t len)
 				/* skip delete entry as it is already the
 				 * last one
 				 */
-				return 0;
+				rc = 0;
+				goto end;
 			}
 		} else if (len == wlk_ate.len) {
 			/* do not try to compare if lengths are not equal */
@@ -1749,19 +1759,20 @@ ssize_t zms_write(struct zms_fs *fs, zms_id_t id, const void *data, size_t len)
 			if (len <= ZMS_DATA_IN_ATE_SIZE) {
 				rc = memcmp(&wlk_ate.data, data, len);
 				if (!rc) {
-					return 0;
+					goto end;
 				}
 			} else {
 				rc = zms_flash_block_cmp(fs, rd_addr, data, len);
 				if (rc <= 0) {
-					return rc;
+					goto end;
 				}
 			}
 		}
 	} else {
 		/* skip delete entry for non-existing entry */
 		if (len == 0) {
-			return 0;
+			rc = 0;
+			goto end;
 		}
 	}
 #ifdef CONFIG_ZMS_LOOKUP_CACHE
@@ -1778,8 +1789,6 @@ no_cached_entry:
 			required_space = fs->ate_size;
 		}
 	}
-
-	k_mutex_lock(&fs->zms_lock, K_FOREVER);
 
 	gc_count = 0;
 	while (1) {
@@ -1853,6 +1862,14 @@ ssize_t zms_read_hist(struct zms_fs *fs, zms_id_t id, void *data, size_t len, ui
 
 	cnt_his = 0U;
 
+	/* Lock the file system for the whole lookup. A concurrent write in
+	 * another thread can trigger garbage collection which relocates ATEs
+	 * and their data, updates fs->ate_wra and rebuilds the lookup cache.
+	 * Without this lock the walk below could follow stale addresses and
+	 * fail (-ENOENT/-EIO) or return corrupted data.
+	 */
+	k_mutex_lock(&fs->zms_lock, K_FOREVER);
+
 #ifdef CONFIG_ZMS_LOOKUP_CACHE
 	wlk_addr = fs->lookup_cache[zms_lookup_cache_pos(id)];
 
@@ -1870,7 +1887,8 @@ ssize_t zms_read_hist(struct zms_fs *fs, zms_id_t id, void *data, size_t len, ui
 		prev_found = zms_find_ate_with_id(fs, id, wlk_addr, fs->ate_wra, &wlk_ate,
 						  &wlk_prev_addr);
 		if (prev_found < 0) {
-			return prev_found;
+			rc = prev_found;
+			goto err;
 		}
 		if (prev_found) {
 			cnt_his++;
@@ -1882,7 +1900,7 @@ ssize_t zms_read_hist(struct zms_fs *fs, zms_id_t id, void *data, size_t len, ui
 			 */
 			rc = zms_compute_prev_addr(fs, &wlk_prev_addr);
 			if (rc) {
-				return rc;
+				goto err;
 			}
 			/* wlk_addr will be the start research address in the next loop */
 			wlk_addr = wlk_prev_addr;
@@ -1892,7 +1910,8 @@ ssize_t zms_read_hist(struct zms_fs *fs, zms_id_t id, void *data, size_t len, ui
 	}
 
 	if (((!prev_found) || (wlk_ate.id != id)) || (wlk_ate.len == 0U) || (cnt_his < cnt)) {
-		return -ENOENT;
+		rc = -ENOENT;
+		goto err;
 	}
 
 	if (wlk_ate.len <= ZMS_DATA_IN_ATE_SIZE) {
@@ -1918,15 +1937,18 @@ ssize_t zms_read_hist(struct zms_fs *fs, zms_id_t id, void *data, size_t len, ui
 				LOG_ERR("Invalid data CRC: ATE_CRC=0x%08X, "
 					"computed_data_crc=0x%08X",
 					wlk_ate.data_crc, computed_data_crc);
-				return -EIO;
+				rc = -EIO;
+				goto err;
 			}
 		}
 #endif
 	}
 
+	k_mutex_unlock(&fs->zms_lock);
 	return wlk_ate.len;
 
 err:
+	k_mutex_unlock(&fs->zms_lock);
 	return rc;
 }
 
