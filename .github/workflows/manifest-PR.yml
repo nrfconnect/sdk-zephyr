@@ -31,6 +31,15 @@ jobs:
             echo "Error: Unsupported base branch: ${{ github.event.pull_request.base.ref }}" >&2
             exit 1
           fi
+      - name: Delete existing manifest branch if present
+        if: github.event.action == 'opened'
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          REPO_NAME="${{ github.event.repository.name }}"
+          BRANCH="auto-manifest-${REPO_NAME}-${PR_NUMBER}"
+          gh api --method DELETE "repos/nordicbuilder/sdk-nrf/git/refs/heads/${BRANCH}" 2>/dev/null || true
+        env:
+          GH_TOKEN: ${{ secrets.NCS_GITHUB_TOKEN }}
       - name: handle manifest PR
         uses: nrfconnect/action-manifest-pr@main
         with:
