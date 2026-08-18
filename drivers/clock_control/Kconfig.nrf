@@ -22,7 +22,6 @@ menuconfig CLOCK_CONTROL_NRF
 	select NRFX_CLOCK_LFCLK if !CLOCK_CONTROL_NRF_FORCE_ALT
 	select NRFX_CLOCK_XO if !CLOCK_CONTROL_NRF_FORCE_ALT
 	select NRFX_CLOCK_XO24M if !CLOCK_CONTROL_NRF_FORCE_ALT
-	select DEPRECATED
 	help
 	  Enable support for the Nordic Semiconductor nRFxx series SoC clock
 	  driver.
