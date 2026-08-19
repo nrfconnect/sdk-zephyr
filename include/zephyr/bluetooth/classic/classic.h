@@ -8,8 +8,8 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-#ifndef ZEPHYR_INCLUDE_BLUETOOTH_CLASSIC_H_
-#define ZEPHYR_INCLUDE_BLUETOOTH_CLASSIC_H_
+#ifndef ZEPHYR_INCLUDE_BLUETOOTH_CLASSIC_CLASSIC_H_
+#define ZEPHYR_INCLUDE_BLUETOOTH_CLASSIC_CLASSIC_H_
 
 /**
  * @brief Bluetooth APIs
@@ -24,6 +24,7 @@
 #include <zephyr/sys/util.h>
 #include <zephyr/net_buf.h>
 #include <zephyr/bluetooth/addr.h>
+#include <zephyr/bluetooth/data.h>
 #include <zephyr/bluetooth/hci_types.h>
 
 #ifdef __cplusplus
@@ -63,7 +64,7 @@ struct bt_br_discovery_result {
 	/** Remote device address */
 	bt_addr_t addr;
 
-	/** RSSI from inquiry */
+	/** RSSI from inquiry in dBm. Range: -127 to +20. */
 	int8_t rssi;
 
 	/** Class of Device */
@@ -634,6 +635,19 @@ struct bt_br_bond_info {
 void bt_br_foreach_bond(void (*func)(const struct bt_br_bond_info *info, void *user_data),
 			void *user_data);
 
+/** @brief Write Extended Inquiry Response data.
+ *
+ *  Write the extended inquiry response data to be sent during the
+ *  extended inquiry response procedure.
+ *
+ *  @param eir          Array of bt_data elements to include in the EIR.
+ *  @param eir_count    Number of elements in the @p eir array.
+ *  @param fec_required Whether FEC encoding is required (true/false).
+ *
+ *  @return  Zero for success, non-zero otherwise.
+ */
+int bt_br_write_eir(const struct bt_data *eir, size_t eir_count, bool fec_required);
+
 /**
  * @}
  */
@@ -645,4 +659,4 @@ void bt_br_foreach_bond(void (*func)(const struct bt_br_bond_info *info, void *u
  * @}
  */
 
-#endif /* ZEPHYR_INCLUDE_BLUETOOTH_CLASSIC_H_ */
+#endif /* ZEPHYR_INCLUDE_BLUETOOTH_CLASSIC_CLASSIC_H_ */

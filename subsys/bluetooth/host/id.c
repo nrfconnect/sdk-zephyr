@@ -137,7 +137,7 @@ static int set_random_address(const bt_addr_t *addr)
 	LOG_DBG("%s", bt_addr_str(addr));
 
 	/* Do nothing if we already have the right address */
-	if (bt_addr_eq(addr, &bt_dev.random_addr.a)) {
+	if (bt_addr_eq(addr, &bt_dev.random_addr)) {
 		return 0;
 	}
 
@@ -162,8 +162,7 @@ static int set_random_address(const bt_addr_t *addr)
 		return err;
 	}
 
-	bt_addr_copy(&bt_dev.random_addr.a, addr);
-	bt_dev.random_addr.type = BT_ADDR_LE_RANDOM;
+	bt_addr_copy(&bt_dev.random_addr, addr);
 	return 0;
 }
 
@@ -186,8 +185,7 @@ int bt_id_set_adv_random_addr(struct bt_le_ext_adv *adv,
 	LOG_DBG("%s", bt_addr_str(addr));
 
 	if (!atomic_test_bit(adv->flags, BT_ADV_PARAMS_SET)) {
-		bt_addr_copy(&adv->random_addr.a, addr);
-		adv->random_addr.type = BT_ADDR_LE_RANDOM;
+		bt_addr_le_copy_addr(&adv->random_addr, addr, BT_ADDR_LE_RANDOM);
 		atomic_set_bit(adv->flags, BT_ADV_RANDOM_ADDR_PENDING);
 		return 0;
 	}
@@ -209,9 +207,9 @@ int bt_id_set_adv_random_addr(struct bt_le_ext_adv *adv,
 	}
 
 	if (&adv->random_addr.a != addr) {
-		bt_addr_copy(&adv->random_addr.a, addr);
+		bt_addr_le_copy_addr(&adv->random_addr, addr, BT_ADDR_LE_RANDOM);
 	}
-	adv->random_addr.type = BT_ADDR_LE_RANDOM;
+
 	return 0;
 }
 
@@ -249,11 +247,7 @@ static void adv_rpa_expired(struct bt_le_ext_adv *adv, void *data)
 
 static void adv_rpa_invalidate(struct bt_le_ext_adv *adv, void *data)
 {
-	/* RPA of Advertisers limited by timeout or number of packets only expire
-	 * when they are stopped.
-	 */
-	if (!atomic_test_bit(adv->flags, BT_ADV_LIMITED) &&
-	    !atomic_test_bit(adv->flags, BT_ADV_USE_IDENTITY)) {
+	if (atomic_test_bit(adv->flags, BT_ADV_RPA_UPDATE)) {
 		adv_rpa_expired(adv, data);
 	}
 }
@@ -462,7 +456,7 @@ int bt_id_set_adv_private_addr(struct bt_le_ext_adv *adv)
 			return err;
 		}
 
-		err = bt_id_set_adv_random_addr(adv, &bt_dev.random_addr.a);
+		err = bt_id_set_adv_random_addr(adv, &bt_dev.random_addr);
 		if (!err) {
 			atomic_set_bit(adv->flags, BT_ADV_RPA_VALID);
 		}
@@ -705,15 +699,12 @@ static void rpa_timeout(struct k_work *work)
 	adv_enabled = le_adv_rpa_timeout();
 	le_rpa_invalidate();
 
-	/* IF no roles using the RPA is running we can stop the RPA timer */
-	if (IS_ENABLED(CONFIG_BT_CENTRAL)) {
-		if (!(adv_enabled || atomic_test_bit(bt_dev.flags, BT_DEV_INITIATING) ||
-		      bt_le_scan_active_scanner_running())) {
-			return;
-		}
+	/* Update the RPA if we have any active procedures that use it */
+	if ((IS_ENABLED(CONFIG_BT_BROADCASTER) && adv_enabled) ||
+	    (IS_ENABLED(CONFIG_BT_CENTRAL) && atomic_test_bit(bt_dev.flags, BT_DEV_INITIATING)) ||
+	    (IS_ENABLED(CONFIG_BT_OBSERVER) && bt_le_scan_active_scanner_running())) {
+		le_update_private_addr();
 	}
-
-	le_update_private_addr();
 }
 #endif /* CONFIG_BT_PRIVACY */
 
@@ -1764,8 +1755,7 @@ uint8_t bt_id_read_public_addr(bt_addr_le_t *addr)
 		return 0U;
 	}
 
-	bt_addr_copy(&addr->a, &rp->bdaddr);
-	addr->type = BT_ADDR_LE_PUBLIC;
+	bt_addr_le_copy_addr(addr, &rp->bdaddr, BT_ADDR_LE_PUBLIC);
 
 	net_buf_unref(rsp);
 	return 1U;
@@ -1895,8 +1885,7 @@ int bt_setup_random_id_addr(void)
 				}
 			}
 
-			bt_addr_copy(&addr.a, &addrs[i].bdaddr);
-			addr.type = BT_ADDR_LE_RANDOM;
+			bt_addr_le_copy_addr(&addr, &addrs[i].bdaddr, BT_ADDR_LE_RANDOM);
 
 			err = id_create(i, &addr, irk);
 			if (err) {
@@ -2313,7 +2302,7 @@ int bt_le_oob_get_local(uint8_t id, struct bt_le_oob *oob)
 
 		le_force_rpa_timeout();
 
-		bt_addr_le_copy(&oob->addr, &bt_dev.random_addr);
+		bt_addr_le_copy_addr(&oob->addr, &bt_dev.random_addr, BT_ADDR_LE_RANDOM);
 	} else {
 		bt_addr_le_copy(&oob->addr, &bt_dev.id_addr[id]);
 	}

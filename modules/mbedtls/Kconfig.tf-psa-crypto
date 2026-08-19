@@ -20,7 +20,14 @@ config TF_PSA_CRYPTO_USER_CONFIG
 
 config MBEDTLS_ECP_NIST_OPTIM
 	bool "NIST curves optimization"
+	default y
 	depends on PSA_WANT_KEY_TYPE_ECC_KEY_PAIR_BASIC
+	help
+	  Enable specific 'modulo p' routines for each NIST prime. Depending on the
+	  prime and architecture, makes operations 4 to 8 times faster on the
+	  corresponding curve.
+
+	  The cost is a small amount of flash for the reduction tables.
 
 comment "Supported ciphers and cipher modes"
 
@@ -95,8 +102,27 @@ config MBEDTLS_HMAC_DRBG_C
 
 comment "Other configurations"
 
+config MBEDTLS_MEMORY_BUFFER_ALLOC_C
+	bool "Buffer memory allocator"
+	default y
+	help
+	  Enable the buffer allocator implementation that makes use of a (stack)
+	  based buffer to 'allocate' dynamic memory. (replaces calloc() and free() calls)
+
+if MBEDTLS_MEMORY_BUFFER_ALLOC_C
+
+config MBEDTLS_MEMORY_DEBUG
+	bool "mbed TLS memory debug activation"
+	help
+	  Enable debugging of buffer allocator memory issues. Automatically
+	  prints (to stderr) all (fatal) messages on memory allocation
+	  issues. Enables function for 'debug output' of allocated memory.
+
+endif # MBEDTLS_MEMORY_BUFFER_ALLOC_C
+
 config MBEDTLS_ENABLE_HEAP
 	bool "Global heap for mbed TLS"
+	select MBEDTLS_MEMORY_BUFFER_ALLOC_C
 	help
 	  This option enables the mbedtls to use the heap. This setting must
 	  be global so that various applications and libraries in Zephyr do not
@@ -113,9 +139,7 @@ config MBEDTLS_HEAP_SIZE
 	default 512
 	help
 	  The mbedtls routines will use this heap if enabled.
-	  See ext/lib/crypto/mbedtls/include/mbedtls/config.h and
-	  MBEDTLS_MEMORY_BUFFER_ALLOC_C option for details. That option is not
-	  enabled by default.
+	  See the MBEDTLS_MEMORY_BUFFER_ALLOC_C option for details.
 	  Default value for the heap size is not set as it depends on the
 	  application. For streaming communication with arbitrary (HTTPS)
 	  servers on the Internet, 32KB + overheads (up to another 20KB) may
@@ -130,13 +154,6 @@ config MBEDTLS_HEAP_CUSTOM_SECTION
 	  heap to a custom location, such as another SRAM region or external memory.
 
 endif # MBEDTLS_ENABLE_HEAP
-
-config MBEDTLS_MEMORY_DEBUG
-	bool "mbed TLS memory debug activation"
-	help
-	  Enable debugging of buffer allocator memory issues. Automatically
-	  prints (to stderr) all (fatal) messages on memory allocation
-	  issues. Enables function for 'debug output' of allocated memory.
 
 config MBEDTLS_CIPHER
 	bool "Generic cipher layer"
@@ -194,7 +211,9 @@ config MBEDTLS_PEM_WRITE_C
 
 config MBEDTLS_HAVE_ASM
 	bool "Use of assembly code"
-	default y if !ARM
+	# Enabled by default on ARMv7-M and ARMv8-M mainline cores because it brings performance improvement and footprint reduction.
+	# Disabled on other ARM architectures (e.g., ARMv6-M) because the footprint increases.
+	default y if !ARM || ARMV7_M_ARMV8_M_MAINLINE
 	help
 	  Enable use of assembly code in Mbed TLS. This improves the performance
 	  of asymmetric cryptography, however this might have an impact on the
@@ -406,12 +425,13 @@ config MBEDTLS_NIST_KW_C
 config MBEDTLS_DECLARE_PRIVATE_IDENTIFIERS
 	bool "Legacy crypto support (private)"
 	help
-	  Legacy crypto is now private inside TF-PSA-Crypto and they should
-	  no more be directly accessed. However there might be code that still
-	  needs to be transitioned and in this case enabling this Kconfig
-	  allows internal headers related to legacy crypto to be made public.
-	  The long term goal is to get rid of this support so all the code
-	  should be transitioned to the PSA Crypto API as soon as possible.
+	  Legacy crypto is now private inside TF-PSA-Crypto and should not be
+	  used from new code. Enable this only while transitioning callers that
+	  still need legacy declarations: with MBEDTLS_DECLARE_PRIVATE_IDENTIFIERS
+	  defined, those APIs are reachable via mbedtls/private/*.h (under the
+	  TF-PSA-Crypto builtin include path exported by the mbedtls target).
+	  The long term goal is to remove this option once all users are on the
+	  PSA Crypto API.
 
 config TF_PSA_CRYPTO_PQCP_MLDSA_ENABLED
 	bool "mldsa-native from the PQCP (post-quantum code package) driver [EXPERIMENTAL]"

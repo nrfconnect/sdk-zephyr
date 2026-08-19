@@ -5,7 +5,7 @@
  *
  */
 
-#include "zephyr/pmci/mctp/mctp_i3c_common.h"
+#include <zephyr/pmci/mctp/mctp_i3c_common.h>
 #include <zephyr/sys/__assert.h>
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/uart.h>
@@ -43,6 +43,7 @@ int mctp_i3c_target_stop(struct i3c_target_config *config)
 
 	if (b->rx_pkt != NULL) {
 		mctp_bus_rx(&b->binding, b->rx_pkt);
+		mctp_pktbuf_free(b->rx_pkt);
 		b->rx_pkt = NULL;
 	}
 

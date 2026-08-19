@@ -526,8 +526,9 @@ static inline void k_thread_heap_assign(struct k_thread *thread,
  * @return 0 on success
  * @return -EBADF Bad thread object (user mode only)
  * @return -EPERM No permissions on thread object (user mode only)
- * #return -ENOTSUP Forbidden by hardware policy
- * @return -EINVAL Thread is uninitialized or exited (user mode only)
+ * @return -ENOTSUP Forbidden by hardware policy
+ * @return -EINVAL Thread is uninitialized or exited (user mode only), or the
+ *	stack is not mapped when @kconfig{CONFIG_THREAD_STACK_MEM_MAPPED} is set
  * @return -EFAULT Bad memory address for unused_ptr (user mode only)
  */
 __syscall int k_thread_stack_space_get(const struct k_thread *thread,
@@ -685,6 +686,8 @@ __syscall int k_thread_join(struct k_thread *thread, k_timeout_t timeout);
  * sleep rounded up to the nearest millisecond (e.g. if the thread was
  * awoken by the \ref k_wakeup call).  Will be clamped to INT_MAX in
  * the case where the remaining time is unrepresentable in an int32_t.
+ * If @a timeout is K_FOREVER and the thread is woken early via
+ * k_wakeup(), -1 is returned.
  */
 __syscall int32_t k_sleep(k_timeout_t timeout);
 
@@ -1111,6 +1114,10 @@ __syscall void k_thread_priority_set(k_tid_t thread, int prio);
  * above this call, which is simply input to the priority selection
  * logic.
  *
+ * @note The relative deadline is silently clamped to the range
+ * [0, INT32_MAX / 2] (2^30 cycles) to preserve the scheduler's modular
+ * comparison invariants; negative values are clamped up to 0.
+ *
  * @kconfig_dep{CONFIG_SCHED_DEADLINE}
  *
  * @param thread A thread on which to set the deadline
@@ -1192,6 +1199,10 @@ __syscall void k_reschedule(void);
  * @note You should enable @kconfig{CONFIG_SCHED_CPU_MASK} in your project
  * configuration.
  *
+ * @note Not permitted when @kconfig{CONFIG_SCHED_CPU_MASK_PIN_ONLY} is
+ * enabled.  PIN_ONLY requires every thread to carry exactly one CPU bit;
+ * clearing all bits violates that invariant and will trigger an assertion.
+ *
  * @param thread Thread to operate upon
  * @return Zero on success, otherwise error code
  */
@@ -1206,6 +1217,11 @@ int k_thread_cpu_mask_clear(k_tid_t thread);
  * @note You should enable @kconfig{CONFIG_SCHED_CPU_MASK} in your project
  * configuration.
  *
+ * @note Not permitted when @kconfig{CONFIG_SCHED_CPU_MASK_PIN_ONLY} is
+ * enabled.  PIN_ONLY requires every thread to carry exactly one CPU bit;
+ * setting all bits violates that invariant and will trigger an assertion.
+ * Use :c:func:`k_thread_cpu_pin` instead.
+ *
  * @param thread Thread to operate upon
  * @return Zero on success, otherwise error code
  */
@@ -1218,6 +1234,8 @@ int k_thread_cpu_mask_enable_all(k_tid_t thread);
  *
  * @note You should enable @kconfig{CONFIG_SCHED_CPU_MASK} in your project
  * configuration.
+ * @note If @kconfig{CONFIG_SCHED_CPU_MASK_PIN_ONLY} is enabled the mask must
+ * contain exactly one CPU, so enabling a second CPU is not supported.
  *
  * @param thread Thread to operate upon
  * @param cpu CPU index
@@ -1232,6 +1250,11 @@ int k_thread_cpu_mask_enable(k_tid_t thread, int cpu);
  *
  * @note You should enable @kconfig{CONFIG_SCHED_CPU_MASK} in your project
  * configuration.
+ *
+ * @note Not permitted when @kconfig{CONFIG_SCHED_CPU_MASK_PIN_ONLY} is
+ * enabled.  PIN_ONLY requires exactly one CPU bit to remain set; removing
+ * that bit would leave an empty mask and will trigger an assertion.
+ * Use :c:func:`k_thread_cpu_pin` to move a thread to a different CPU.
  *
  * @param thread Thread to operate upon
  * @param cpu CPU index
@@ -1489,10 +1512,13 @@ __syscall void *k_thread_custom_data_get(void);
  *
  * @param thread Thread to set name, or NULL to set the current thread
  * @param str Name string
+ * @note A name longer than CONFIG_THREAD_MAX_NAME_LEN is silently truncated,
+ * this is not reported as an error.
+ *
  * @retval 0 on success
  * @retval -EFAULT Memory access error with supplied string
  * @retval -ENOSYS Thread name configuration option not enabled
- * @retval -EINVAL Thread name too long
+ * @retval -EINVAL Invalid thread object (user mode only)
  */
 __syscall int k_thread_name_set(k_tid_t thread, const char *str);
 
@@ -1512,10 +1538,11 @@ const char *k_thread_name_get(k_tid_t thread);
  * @param thread Thread to obtain name information
  * @param buf Destination buffer
  * @param size Destination buffer size
- * @retval -ENOSPC Destination buffer too small
- * @retval -EFAULT Memory access error
- * @retval -ENOSYS Thread name feature not enabled
  * @retval 0 Success
+ * @retval -ENOSYS Thread name feature not enabled
+ * @retval -EINVAL Invalid thread object (user mode only)
+ * @retval -ENOSPC Destination buffer too small (user mode only)
+ * @retval -EFAULT Memory access error (user mode only)
  */
 __syscall int k_thread_name_copy(k_tid_t thread, char *buf,
 				 size_t size);
@@ -1836,9 +1863,7 @@ struct k_timer_observer {
 #define Z_TIMER_INITIALIZER(obj, expiry, stop) \
 	{ \
 	.timeout = { \
-		.node = {},\
 		.fn = z_timer_expiration_handler, \
-		.dticks = 0, \
 	}, \
 	.wait_q = Z_WAIT_Q_INIT(&obj.wait_q), \
 	.expiry_fn = expiry, \
@@ -2027,7 +2052,8 @@ __syscall uint32_t k_timer_status_sync(struct k_timer *timer);
  *
  * This routine returns the future system uptime reached at the next
  * time of expiration of the timer, in units of system ticks.  If the
- * timer is not running, current system time is returned.
+ * timer is not running, the last announced tick count is returned (which
+ * may lag the true current uptime by the elapsed sub-tick amount).
  *
  * @param timer The timer object
  * @return Uptime of expiration, in ticks
@@ -2070,7 +2096,7 @@ static inline k_ticks_t z_impl_k_timer_remaining_ticks(
  */
 static inline uint32_t k_timer_remaining_get(struct k_timer *timer)
 {
-	return k_ticks_to_ms_floor32(k_timer_remaining_ticks(timer));
+	return k_ticks_to_ms_ceil32(k_timer_remaining_ticks(timer));
 }
 
 #endif /* CONFIG_SYS_CLOCK_EXISTS */
@@ -2111,6 +2137,28 @@ static inline void *z_impl_k_timer_user_data_get(const struct k_timer *timer)
 {
 	return timer->user_data;
 }
+
+/**
+ * @brief Clean up a dynamically allocated timer before freeing it.
+ *
+ * If a k_timer object is dynamically allocated, its timeout must be
+ * cancelled and any in-flight expiration handler must complete before
+ * the storage may be freed -- otherwise the handler dereferences freed
+ * memory. This function performs both: it removes the timer from the
+ * timeout queue and waits for any in-flight handler on another CPU to
+ * finish.
+ *
+ * Unlike k_timer_stop(), this function does not invoke the user
+ * stop_fn callback and does not touch the wait queue: if the
+ * function returns 0 the caller assumes responsibility for the
+ * storage and there is no other consumer of the timer left.
+ *
+ * @param timer Address of the timer.
+ * @retval 0 on success.
+ * @retval -EAGAIN when threads are still pending on the timer's
+ *         wait queue (e.g. via k_timer_status_sync()).
+ */
+int k_timer_cleanup(struct k_timer *timer);
 
 /** @} */
 
@@ -2195,7 +2243,7 @@ static inline uint32_t k_uptime_seconds(void)
  * @param reftime Pointer to a reference time, which is updated to the current
  *                uptime upon return.
  *
- * @return Elapsed time.
+ * @return Elapsed time, in milliseconds.
  */
 static inline int64_t k_uptime_delta(int64_t *reftime)
 {
@@ -2226,6 +2274,9 @@ static inline uint32_t k_cycle_get_32(void)
  *
  * This routine returns the current time in 64-bits, as measured by the
  * system's hardware clock, if available.
+ *
+ * @note Requires @kconfig{CONFIG_TIMER_HAS_64BIT_CYCLE_COUNTER}. When that
+ * option is not enabled this routine asserts and returns 0.
  *
  * @see CONFIG_TIMER_HAS_64BIT_CYCLE_COUNTER
  *
@@ -2417,6 +2468,8 @@ int k_queue_append_list(struct k_queue *queue, void *head, void *tail);
  * This routine adds a list of data items to @a queue in one operation.
  * The data items must be in a singly-linked list implemented using a
  * sys_slist_t object. Upon completion, the original list is empty.
+ * The caller is responsible for ensuring that @a list is not concurrently
+ * accessed by other threads or ISRs.
  *
  * @isr_ok
  *
@@ -2453,8 +2506,6 @@ __syscall void *k_queue_get(struct k_queue *queue, k_timeout_t timeout);
  * This routine removes data item from @a queue. The first word of the
  * data item is reserved for the kernel's use. Removing elements from k_queue
  * rely on sys_slist_find_and_remove which is not a constant time operation.
- *
- * @note @a timeout must be set to K_NO_WAIT if called from ISR.
  *
  * @isr_ok
  *
@@ -2600,7 +2651,7 @@ struct z_futex_data {
  *		   will not wait on it.
  * @param timeout Waiting period on the futex, or one of the special values
  *                K_NO_WAIT or K_FOREVER.
- * @retval -EACCES Caller does not have read access to futex address.
+ * @retval -EACCES Caller does not have write access to futex address.
  * @retval -EAGAIN If the futex value did not match the expected parameter.
  * @retval -EINVAL Futex parameter address not recognized by the kernel.
  * @retval -ETIMEDOUT Thread woke up due to timeout and not a futex wakeup.
@@ -2703,7 +2754,8 @@ __syscall void k_event_init(struct k_event *event);
  * @param event Address of the event object
  * @param events Set of events to post to @a event
  *
- * @return Previous value of the events in @a event
+ * @return Previous value of the events that are being posted, i.e. the bits
+ *         of @a events that were already set in @a event before this call
  */
 __syscall uint32_t k_event_post(struct k_event *event, uint32_t events);
 
@@ -2755,7 +2807,8 @@ __syscall uint32_t k_event_set_masked(struct k_event *event, uint32_t events,
  * @param event Address of the event object
  * @param events Set of events to clear in @a event
  *
- * @return Previous value of the events in @a event
+ * @return Previous state of the events specified by @a events (any events
+ *         not selected by @a events are not reported)
  */
 __syscall uint32_t k_event_clear(struct k_event *event, uint32_t events);
 
@@ -3014,6 +3067,9 @@ struct k_fifo {
  * @param fifo Address of the FIFO queue.
  * @param head Pointer to first node in singly-linked list.
  * @param tail Pointer to last node in singly-linked list.
+ *
+ * @retval 0 on success
+ * @retval -EINVAL on invalid supplied data
  */
 #define k_fifo_put_list(fifo, head, tail) \
 	({ \
@@ -3034,6 +3090,9 @@ struct k_fifo {
  *
  * @param fifo Address of the FIFO queue.
  * @param list Pointer to sys_slist_t object.
+ *
+ * @retval 0 on success
+ * @retval -EINVAL on invalid supplied data
  */
 #define k_fifo_put_slist(fifo, list) \
 	({ \
@@ -3336,7 +3395,8 @@ void k_stack_init(struct k_stack *stack,
  * @param stack Address of the stack.
  * @param num_entries Maximum number of values that can be stacked.
  *
- * @return -ENOMEM if memory couldn't be allocated
+ * @retval 0 on success
+ * @retval -ENOMEM if memory couldn't be allocated
  */
 
 __syscall int32_t k_stack_alloc_init(struct k_stack *stack,
@@ -4189,14 +4249,18 @@ int k_work_queue_unplug(struct k_work_q *queue);
  * This call is blocking and guarantees that the work queue thread has terminated
  * cleanly if successful, no work will be processed past this point.
  *
+ * The queue must have been drained and plugged first (for example via
+ * k_work_queue_drain() with the @p plug option enabled); otherwise the call
+ * returns -EBUSY.
+ *
  * @param queue Pointer to the queue structure.
  * @param timeout Maximum time to wait for the work queue to stop.
  *
  * @retval 0 if the work queue was stopped
  * @retval -EALREADY if the work queue was not started (or already stopped)
- * @retval -EBUSY if the work queue is actively processing work items
+ * @retval -EBUSY if the work queue has not been plugged
  * @retval -ETIMEDOUT if the work queue did not stop within the stipulated timeout
- * @retval -ENOSUP if the work queue is essential
+ * @retval -ENOTSUP if the work queue is essential
  */
 int k_work_queue_stop(struct k_work_q *queue, k_timeout_t timeout);
 
@@ -4761,7 +4825,7 @@ struct k_work_q {
  * @cond INTERNAL_HIDDEN
  */
 	/* The thread that animates the work. */
-	struct k_thread thread;
+	__deprecated struct k_thread thread;
 
 	/* The thread ID that animates the work. This may be an external thread
 	 * if k_work_queue_run() is used.
@@ -5308,12 +5372,15 @@ __syscall int k_msgq_alloc_init(struct k_msgq *msgq, size_t msg_size,
 /**
  * @brief Release allocated buffer for a queue
  *
- * Releases memory allocated for the ring buffer.
+ * Releases memory allocated for the ring buffer. The buffer is only
+ * freed if it was allocated by k_msgq_alloc_init(); the call succeeds
+ * but frees nothing for a caller-provided buffer. Any messages still
+ * in the queue are discarded with the buffer.
  *
  * @param msgq message queue to cleanup
  *
  * @retval 0 on success
- * @retval -EBUSY Queue not empty
+ * @retval -EBUSY Threads are waiting on the message queue
  */
 int k_msgq_cleanup(struct k_msgq *msgq);
 
@@ -5898,6 +5965,30 @@ struct k_mem_slab {
 				  slab_num_blocks, slab_align)
 
 /**
+ * @brief Statically define and initialize a memory slab for blocks of a given type in a public
+ * (non-static) scope.
+ *
+ * The memory slab's buffer contains @a slab_num_blocks memory blocks
+ * that are the size of @a type. The buffer is aligned according to the
+ * alignment requirement of @a type.
+ *
+ * The memory slab can be accessed outside the module where it is defined
+ * using:
+ *
+ * @code extern struct k_mem_slab <name>; @endcode
+ *
+ * @note This macro cannot be used together with a static keyword.
+ *       If such a use-case is desired, use @ref K_MEM_SLAB_DEFINE_STATIC_TYPE
+ *       instead.
+ *
+ * @param name Name of the memory slab.
+ * @param type Type of each memory block.
+ * @param slab_num_blocks Number of memory blocks.
+ */
+#define K_MEM_SLAB_DEFINE_TYPE(name, type, slab_num_blocks)                                        \
+	K_MEM_SLAB_DEFINE(name, sizeof(type), slab_num_blocks, __alignof(type))
+
+/**
  * @brief Statically define and initialize a memory slab in a user-provided memory section with
  * private (static) scope.
  *
@@ -5943,6 +6034,21 @@ struct k_mem_slab {
 					 slab_block_size, slab_num_blocks, slab_align)
 
 /**
+ * @brief Statically define and initialize a memory slab for blocks of a given type in a private
+ * (static) scope.
+ *
+ * The memory slab's buffer contains @a slab_num_blocks memory blocks
+ * that are the size of @a type. The buffer is aligned according to the
+ * alignment requirement of @a type.
+ *
+ * @param name Name of the memory slab.
+ * @param type Type of each memory block.
+ * @param slab_num_blocks Number of memory blocks.
+ */
+#define K_MEM_SLAB_DEFINE_STATIC_TYPE(name, type, slab_num_blocks)                                 \
+	K_MEM_SLAB_DEFINE_STATIC(name, sizeof(type), slab_num_blocks, __alignof(type))
+
+/**
  * @brief Initialize a memory slab.
  *
  * Initializes a memory slab, prior to its first use.
@@ -5986,7 +6092,6 @@ int k_mem_slab_init(struct k_mem_slab *slab, void *buffer,
  *         is set to the starting address of the memory block.
  * @retval -ENOMEM Returned without waiting.
  * @retval -EAGAIN Waiting period timed out.
- * @retval -EINVAL Invalid data supplied
  */
 int k_mem_slab_alloc(struct k_mem_slab *slab, void **mem,
 			    k_timeout_t timeout);
@@ -6149,7 +6254,8 @@ void k_heap_init(struct k_heap *h, void *mem,
  * @param align Alignment in bytes, must be a power of two
  * @param bytes Number of bytes requested
  * @param timeout How long to wait, or K_NO_WAIT
- * @return Pointer to memory the caller can now use
+ * @return Pointer to memory the caller can now use, or NULL if the allocation
+ *         could not be satisfied within the timeout
  */
 void *k_heap_aligned_alloc(struct k_heap *h, size_t align, size_t bytes,
 			k_timeout_t timeout) __attribute_nonnull(1);
@@ -6769,15 +6875,14 @@ __syscall void k_poll_signal_check(struct k_poll_signal *sig,
  * passed again to k_poll() or k_poll() will consider it being signaled, and
  * will return immediately.
  *
- * @note The result is stored and the 'signaled' field is set even if
- * this function returns an error indicating that an expiring poll was
- * not notified.  The next k_poll() will detect the missed raise.
+ * @note The result is stored and the 'signaled' field is set even when the
+ * polling thread's timeout is already expiring and the poll is therefore not
+ * notified directly.  The next k_poll() will detect the missed raise.
  *
  * @param sig A poll signal.
  * @param result The value to store in the result field of the signal.
  *
  * @retval 0 The signal was delivered successfully.
- * @retval -EAGAIN The polling thread's timeout is in the process of expiring.
  */
 
 __syscall int k_poll_signal_raise(struct k_poll_signal *sig, int result);
@@ -6968,7 +7073,7 @@ __syscall int k_float_disable(struct k_thread *thread);
  *
  * @warning
  * This routine should only be used to enable floating point support for
- * a thread that currently has such support enabled.
+ * a thread that does not currently have such support enabled.
  *
  * @param thread  ID of thread.
  * @param options architecture dependent options
@@ -7031,6 +7136,16 @@ int k_thread_runtime_stats_enable(k_tid_t thread);
  * @return -EINVAL if invalid thread ID, otherwise 0
  */
 int k_thread_runtime_stats_disable(k_tid_t thread);
+
+/**
+ * @brief Check if runtime statistics gathering is enabled for a thread
+ *
+ * This routine checks whether the specified thread has enabled runtime statistics.
+ *
+ * @param thread ID of thread
+ * @return true if usage statistics are enabled for the given thread, otherwise false
+ */
+bool k_thread_runtime_stats_is_enabled(k_tid_t thread);
 
 /**
  * @brief Enable gathering of system runtime statistics

@@ -4,6 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * @file
+ * @brief MSPI devicetree helper macros.
+ * @ingroup mspi_devicetree
+ */
+
 #ifndef ZEPHYR_INCLUDE_DRIVERS_MSPI_DEVICETREE_H_
 #define ZEPHYR_INCLUDE_DRIVERS_MSPI_DEVICETREE_H_
 
@@ -306,7 +312,7 @@ extern "C" {
  * This is equivalent to
  * <tt>MSPI_CE_CONTROL_INIT(DT_DRV_INST(inst), delay)</tt>.
  *
- * Therefore, @p DT_DRV_COMPAT must already be defined before using
+ * Therefore, @c DT_DRV_COMPAT must already be defined before using
  * this macro.
  *
  * @param inst Devicetree node instance number

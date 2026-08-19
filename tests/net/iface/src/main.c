@@ -228,12 +228,14 @@ static int eth_fake_send(const struct device *dev,
 	return 0;
 }
 
-static enum ethernet_hw_caps eth_fake_get_capabilities(const struct device *dev)
+static enum ethernet_hw_caps eth_fake_get_capabilities(const struct device *dev __unused,
+						       struct net_if *iface __unused)
 {
 	return ETHERNET_PROMISC_MODE;
 }
 
 static int eth_fake_set_config(const struct device *dev,
+			       struct net_if *iface __unused,
 			       enum ethernet_config_type type,
 			       const struct ethernet_config *config)
 {
@@ -392,6 +394,17 @@ static void *iface_setup(void)
 	/* Mark the device ready and take the interface up */
 	dev->state->init_res = 0;
 	device_ok = true;
+
+	/* The interface init was skipped because device was not ready during
+	 * system initialization. Now that the device is ready, we need to
+	 * manually initialize the interface to set the link address and
+	 * enable IPv4/IPv6 support (which are normally set in init_iface()).
+	 */
+	net_if_flag_set(iface1, NET_IF_IPV4);
+	net_if_flag_set(iface1, NET_IF_IPV6);
+	k_mutex_init(&iface1->lock);
+	k_mutex_init(&iface1->tx_lock);
+	net_iface_init(iface1);
 
 	/* We need to sleep a bit to let the interface
 	 * operational state change time to be set.
@@ -1241,38 +1254,49 @@ ZTEST(net_iface, test_ipv4_maddr_foreach)
 	zassert_equal(count, 0, "Incorrect number of callback calls");
 }
 
+struct foreach_ipv6_ctx {
+	struct net_if *iface;
+	int count;
+};
+
 static void foreach_ipv6_addr_check(struct net_if *iface,
 				    struct net_if_addr *if_addr,
 				    void *user_data)
 {
-	int *count = (int *)user_data;
+	struct foreach_ipv6_ctx *ctx = user_data;
 
-	(*count)++;
+	ctx->count++;
 
-	zassert_equal_ptr(iface, iface1, "Callback called on wrong interface");
+	zassert_equal_ptr(iface, ctx->iface, "Callback called on wrong interface");
 
 	if (net_ipv6_is_ll_addr(&if_addr->address.in6_addr)) {
-		zassert_mem_equal(&if_addr->address.in6_addr, &ll_addr,
-				  sizeof(struct net_in6_addr), "Wrong IPv6 address");
-	} else {
-		zassert_mem_equal(&if_addr->address.in6_addr, &my_addr1,
-				  sizeof(struct net_in6_addr), "Wrong IPv6 address");
+		/* iface1 has both a manually configured link-local address and
+		 * the one autoconfigured on bring-up; accept any link-local.
+		 */
+		return;
 	}
+
+	zassert_mem_equal(&if_addr->address.in6_addr, &my_addr1,
+			  sizeof(struct net_in6_addr), "Wrong IPv6 address");
 }
 
 ZTEST(net_iface, test_ipv6_addr_foreach)
 {
-	int count = 0;
+	struct foreach_ipv6_ctx ctx;
 
-	/* iface1 has two IPv6 addresses configured */
-	net_if_ipv6_addr_foreach(iface1, foreach_ipv6_addr_check, &count);
-	zassert_equal(count, 2, "Incorrect number of callback calls");
+	/* iface1 has my_addr1, a manually configured link-local address and
+	 * the link-local address autoconfigured on bring-up.
+	 */
+	ctx.iface = iface1;
+	ctx.count = 0;
+	net_if_ipv6_addr_foreach(iface1, foreach_ipv6_addr_check, &ctx);
+	zassert_equal(ctx.count, 3, "Incorrect number of callback calls");
 
-	count = 0;
-
-	/* iface4 has no IPv6 address configured */
-	net_if_ipv6_addr_foreach(iface4, foreach_ipv6_addr_check, &count);
-	zassert_equal(count, 0, "Incorrect number of callback calls");
+	/* iface4 only has the link-local address autoconfigured on bring-up. */
+	ctx.iface = iface4;
+	ctx.count = 0;
+	net_if_ipv6_addr_foreach(iface4, foreach_ipv6_addr_check, &ctx);
+	zassert_equal(ctx.count, 1, "Incorrect number of callback calls");
 }
 
 static void foreach_ipv6_maddr_check(struct net_if *iface,
@@ -1349,7 +1373,7 @@ ZTEST(net_iface, test_interface_name)
 	zassert_equal(ret, -ERANGE, "Unexpected value (%d) returned", ret);
 
 	ret = net_if_get_name(iface, buf, sizeof(buf) - 1);
-	zassert_equal(ret, strlen(name), "Unexpected value (%d) returned, expected %d",
+	zassert_equal(ret, strlen(name), "Unexpected value (%d) returned, expected %zu",
 		      ret, strlen(name));
 
 	ret = net_if_get_by_name(name);

@@ -267,7 +267,8 @@ static struct net_pkt *dhcpv4_create_message(struct net_if *iface, uint8_t type,
 		size +=  DHCPV4_OLV_MSG_REQ_IPADDR;
 	}
 
-	if (type == NET_DHCPV4_MSG_TYPE_DISCOVER) {
+	if (type == NET_DHCPV4_MSG_TYPE_DISCOVER ||
+	    type == NET_DHCPV4_MSG_TYPE_REQUEST) {
 		size +=  DHCPV4_OLV_MSG_REQ_LIST + ARRAY_SIZE(min_req_options);
 #if defined(CONFIG_NET_DHCPV4_OPTION_CALLBACKS)
 		size += unique_types_in_callbacks;
@@ -340,7 +341,9 @@ static struct net_pkt *dhcpv4_create_message(struct net_if *iface, uint8_t type,
 		goto fail;
 	}
 
-	if (type == NET_DHCPV4_MSG_TYPE_DISCOVER && !dhcpv4_add_req_options(pkt)) {
+	if ((type == NET_DHCPV4_MSG_TYPE_DISCOVER ||
+	     type == NET_DHCPV4_MSG_TYPE_REQUEST) &&
+	    !dhcpv4_add_req_options(pkt)) {
 		goto fail;
 	}
 
@@ -1566,6 +1569,7 @@ static enum net_verdict net_dhcpv4_input(struct net_conn *conn,
 	enum net_dhcpv4_msg_type msg_type = 0;
 	struct dhcp_msg *msg;
 	struct net_if *iface;
+	int ret;
 
 	if (!conn) {
 		NET_DBG("Invalid connection");
@@ -1632,7 +1636,10 @@ static enum net_verdict net_dhcpv4_input(struct net_conn *conn,
 		goto drop;
 	}
 
-	net_pkt_acknowledge_data(pkt, &dhcp_access);
+	ret = net_pkt_acknowledge_data(pkt, &dhcp_access);
+	if (ret < 0) {
+		goto drop;
+	}
 
 	/* SNAME, FILE are not used at the moment, skip it */
 	if (net_pkt_skip(pkt, SIZE_OF_SNAME + SIZE_OF_FILE)) {
@@ -1793,7 +1800,7 @@ const char *net_dhcpv4_state_name(enum net_dhcpv4_state state)
 		"decline,"
 	};
 
-	__ASSERT_NO_MSG(state >= 0 && state < sizeof(name));
+	__ASSERT_NO_MSG(state >= 0 && state < ARRAY_SIZE(name));
 	return name[state];
 }
 
@@ -1810,7 +1817,7 @@ const char *net_dhcpv4_msg_type_name(enum net_dhcpv4_msg_type msg_type)
 		"inform"
 	};
 
-	if (msg_type >= 1 && msg_type <= sizeof(name)) {
+	if (msg_type >= 1 && msg_type <= ARRAY_SIZE(name)) {
 		return name[msg_type - 1];
 	}
 

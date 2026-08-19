@@ -27,18 +27,19 @@ except ImportError:
 if "ZEPHYR_BASE" not in os.environ:
     exit("$ZEPHYR_BASE environment variable undefined.")
 
-# These are globaly used variables. They are assigned in __main__ and are visible in further methods
-# however, pylint complains that it doesn't recognized them when used (used-before-assignment).
+# These are globally used variables. They are assigned in __main__ and are
+# visible in further methods however, pylint complains that it doesn't
+# recognized them when used (used-before-assignment).
 zephyr_base = Path(os.environ['ZEPHYR_BASE'])
 repository_path = zephyr_base
 repo_to_scan = Repo(zephyr_base)
 args = None
 logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.INFO)
-logging.getLogger("pykwalify.core").setLevel(50)
 
 sys.path.append(os.path.join(zephyr_base, 'scripts'))
+sys.path.append(os.path.join(zephyr_base, 'scripts', 'pylib', 'twister'))
 import list_boards  # noqa: E402
-from pylib.twister.twisterlib.statuses import TwisterStatus  # noqa: E402
+from twisterlib.statuses import TwisterStatus  # noqa: E402
 
 
 def _get_match_fn(globs, regexes):
