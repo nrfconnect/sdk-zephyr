@@ -83,7 +83,7 @@
  * the memory area specified by 'where' argument.
  *
  * This macro is intentionally undefined for CONFIG_MMU systems when
- * CONFIG_KERNEL_VM_BASE is not the same as DT_CHOSEN_SRAM_ADDR,
+ * CONFIG_KERNEL_VM_BASE is not the same as CONFIG_SRAM_BASE_ADDRESS,
  * as both the LMA and VMA destinations must be known for all sections
  * as this corresponds to physical vs. virtual location.
  *
