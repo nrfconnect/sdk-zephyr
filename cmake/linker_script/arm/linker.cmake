@@ -63,14 +63,8 @@ else()
   endif()
 endif()
 
-if(CONFIG_SRAM_DEPRECATED_KCONFIG_SET)
-  set(RAM_ADDR ${CONFIG_SRAM_BASE_ADDRESS})
-  math(EXPR RAM_SIZE "(${CONFIG_SRAM_SIZE} + 0) * 1024" OUTPUT_FORMAT HEXADECIMAL)
-else()
-  dt_chosen(chosen_sram_path PROPERTY "zephyr,sram")
-  dt_reg_addr(RAM_ADDR PATH "${chosen_sram_path}")
-  dt_reg_size(RAM_SIZE PATH "${chosen_sram_path}")
-endif()
+set(RAM_ADDR ${CONFIG_SRAM_BASE_ADDRESS})
+math(EXPR RAM_SIZE "(${CONFIG_SRAM_SIZE} + 0) * 1024" OUTPUT_FORMAT HEXADECIMAL)
 
 # ToDo: decide on the optimal location for this.
 # linker/ld/target.cmake based on arch, or directly in arch and scatter_script.cmake can ignore
