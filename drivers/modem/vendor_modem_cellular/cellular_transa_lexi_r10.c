@@ -10,8 +10,6 @@
 
 MODEM_CELLULAR_COMMON_CHAT_MATCHES();
 
-MODEM_CELLULAR_UNSOL_DEFINE(trasna_lexi_r10_unsol, MODEM_CELLULAR_COMMON_UNSOL_MATCHES);
-
 MODEM_CHAT_SCRIPT_CMDS_DEFINE(
 	trasna_lexi_r10_set_baudrate_chat_script_cmds, MODEM_CHAT_SCRIPT_CMD_RESP("ATE0", ok_match),
 	MODEM_CHAT_SCRIPT_CMD_RESP("AT+IPR=" STRINGIFY(CONFIG_MODEM_CELLULAR_NEW_BAUDRATE),
@@ -81,7 +79,6 @@ static const struct modem_cellular_config_scripts trasna_lexi_r10_scripts = {
                                                                                                    \
 	MODEM_CELLULAR_DEFINE_AND_INIT_USER_PIPES(inst, (user_pipe_0, 3))                          \
                                                                                                    \
-	MODEM_CELLULAR_DEFINE_INSTANCE(inst, 1500, 100, 9000, 5000, false,                         \
-				       &trasna_lexi_r10_scripts, &trasna_lexi_r10_unsol)
+	MODEM_CELLULAR_DEFINE_INSTANCE(inst, 1500, 100, 9000, 5000, false, &trasna_lexi_r10_scripts)
 
 DT_INST_FOREACH_STATUS_OKAY(MODEM_CELLULAR_DEVICE_TRASNA_LEXI_R10)
