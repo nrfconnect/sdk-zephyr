@@ -1,0 +1,43 @@
+# Copyright (c) 2026 Nordic Semiconductor ASA
+# SPDX-License-Identifier: Apache-2.0
+
+description: |
+  Reliable signalling wrapper for Nordic VEVIF-based MBOX channels.
+
+  This controller wraps raw TX/RX mailbox channels and augments them with a
+  tiny shared-memory protocol. The raw mailbox remains a doorbell only, while
+  shared counters track how many logical signals were produced and consumed.
+
+  The wrapper guarantees that consecutive sends are replayed as distinct RX
+  callbacks as long as both sides use the same shared memory region and the
+  receiver enables its RX channel before traffic starts.
+
+compatible: "nordic,nrf-vevif-reliable"
+
+include: [base.yaml, mailbox-controller.yaml]
+
+properties:
+  memory-region:
+    type: phandle
+    required: true
+    description: Phandle to shared memory region used for reliable state.
+
+  mboxes:
+    required: true
+    description: Raw MBOX channel specifiers. Must contain RX and TX entries.
+
+  mbox-names:
+    required: true
+    description: Raw MBOX channel names. Must be called "rx" and "tx".
+
+  nordic,local-id:
+    type: int
+    required: true
+    enum: [0, 1]
+    description: |
+      Local side identifier used to map shared counters. Side 0 transmits using
+      slot 0 and receives using slot 1. Side 1 transmits using slot 1 and
+      receives using slot 0.
+
+mbox-cells:
+  - channel
