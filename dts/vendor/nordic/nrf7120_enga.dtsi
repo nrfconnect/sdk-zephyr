@@ -314,6 +314,7 @@
 				status = "disabled";
 				endtx-stoptx-supported;
 				frame-timeout-supported;
+				dmaend-supported;
 			};
 
 			gpio2: gpio@50400 {
@@ -531,6 +532,7 @@
 				status = "disabled";
 				endtx-stoptx-supported;
 				frame-timeout-supported;
+				dmaend-supported;
 			};
 
 			spi21: spi@c7000 {
@@ -565,6 +567,7 @@
 				status = "disabled";
 				endtx-stoptx-supported;
 				frame-timeout-supported;
+				dmaend-supported;
 			};
 
 			spi22: spi@c8000 {
@@ -599,6 +602,7 @@
 				status = "disabled";
 				endtx-stoptx-supported;
 				frame-timeout-supported;
+				dmaend-supported;
 			};
 
 			egu20: egu@c9000 {
@@ -827,6 +831,7 @@
 				status = "disabled";
 				endtx-stoptx-supported;
 				frame-timeout-supported;
+				dmaend-supported;
 			};
 
 			spi24: spi@ee000 {
@@ -861,6 +866,7 @@
 				status = "disabled";
 				endtx-stoptx-supported;
 				frame-timeout-supported;
+				dmaend-supported;
 			};
 
 			dppic30: dppic@102000 {
@@ -910,6 +916,7 @@
 				status = "disabled";
 				endtx-stoptx-supported;
 				frame-timeout-supported;
+				dmaend-supported;
 			};
 
 			comp: comp@106000 {
