@@ -36,7 +36,7 @@ extern "C" {
  *
  * Used as the @c sys argument to the clock_control API.
  */
-enum clock_control_nrf_type {
+enum __deprecated clock_control_nrf_type {
 	CLOCK_CONTROL_NRF_TYPE_HFCLK, /**< High-frequency clock. */
 	CLOCK_CONTROL_NRF_TYPE_LFCLK, /**< Low-frequency clock. */
 #if NRF_CLOCK_HAS_HFCLK24M
@@ -59,63 +59,63 @@ enum clock_control_nrf_type {
  */
 /** @brief High-frequency clock subsystem. */
 #define CLOCK_CONTROL_NRF_SUBSYS_HF \
-	((clock_control_subsys_t)CLOCK_CONTROL_NRF_TYPE_HFCLK)
+	((clock_control_subsys_t)CLOCK_CONTROL_NRF_TYPE_HFCLK) __DEPRECATED_MACRO
 /** @brief Low-frequency clock subsystem. */
 #define CLOCK_CONTROL_NRF_SUBSYS_LF \
-	((clock_control_subsys_t)CLOCK_CONTROL_NRF_TYPE_LFCLK)
+	((clock_control_subsys_t)CLOCK_CONTROL_NRF_TYPE_LFCLK) __DEPRECATED_MACRO
 /** @brief 24 MHz high-frequency clock subsystem. */
 #define CLOCK_CONTROL_NRF_SUBSYS_HF24M \
-	((clock_control_subsys_t)CLOCK_CONTROL_NRF_TYPE_HFCLK24M)
+	((clock_control_subsys_t)CLOCK_CONTROL_NRF_TYPE_HFCLK24M) __DEPRECATED_MACRO
 /** @brief 192 MHz high-frequency clock subsystem. */
 #define CLOCK_CONTROL_NRF_SUBSYS_HF192M \
-	((clock_control_subsys_t)CLOCK_CONTROL_NRF_TYPE_HFCLK192M)
+	((clock_control_subsys_t)CLOCK_CONTROL_NRF_TYPE_HFCLK192M) __DEPRECATED_MACRO
 /** @brief High-frequency audio clock subsystem. */
 #define CLOCK_CONTROL_NRF_SUBSYS_HFAUDIO \
-	((clock_control_subsys_t)CLOCK_CONTROL_NRF_TYPE_HFCLKAUDIO)
+	((clock_control_subsys_t)CLOCK_CONTROL_NRF_TYPE_HFCLKAUDIO) __DEPRECATED_MACRO
 
 /** @cond INTERNAL_HIDDEN */
 
 /* Define 32KHz clock source */
 #ifdef CONFIG_CLOCK_CONTROL_NRF_K32SRC_RC
-#define CLOCK_CONTROL_NRF_K32SRC NRF_CLOCK_LFCLK_RC
+#define CLOCK_CONTROL_NRF_K32SRC NRF_CLOCK_LFCLK_RC __DEPRECATED_MACRO
 #endif
 #ifdef CONFIG_CLOCK_CONTROL_NRF_K32SRC_XTAL
-#define CLOCK_CONTROL_NRF_K32SRC NRF_CLOCK_LFCLK_XTAL
+#define CLOCK_CONTROL_NRF_K32SRC NRF_CLOCK_LFCLK_XTAL __DEPRECATED_MACRO
 #endif
 #ifdef CONFIG_CLOCK_CONTROL_NRF_K32SRC_SYNTH
-#define CLOCK_CONTROL_NRF_K32SRC NRF_CLOCK_LFCLK_SYNTH
+#define CLOCK_CONTROL_NRF_K32SRC NRF_CLOCK_LFCLK_SYNTH __DEPRECATED_MACRO
 #endif
 #ifdef CONFIG_CLOCK_CONTROL_NRF_K32SRC_EXT_LOW_SWING
-#define CLOCK_CONTROL_NRF_K32SRC NRF_CLOCK_LFCLK_XTAL_LOW_SWING
+#define CLOCK_CONTROL_NRF_K32SRC NRF_CLOCK_LFCLK_XTAL_LOW_SWING __DEPRECATED_MACRO
 #endif
 #ifdef CONFIG_CLOCK_CONTROL_NRF_K32SRC_EXT_FULL_SWING
-#define CLOCK_CONTROL_NRF_K32SRC NRF_CLOCK_LFCLK_XTAL_FULL_SWING
+#define CLOCK_CONTROL_NRF_K32SRC NRF_CLOCK_LFCLK_XTAL_FULL_SWING __DEPRECATED_MACRO
 #endif
 
 /* Define 32KHz clock accuracy */
 #ifdef CONFIG_CLOCK_CONTROL_NRF_K32SRC_500PPM
-#define CLOCK_CONTROL_NRF_K32SRC_ACCURACY 0
+#define CLOCK_CONTROL_NRF_K32SRC_ACCURACY 0 __DEPRECATED_MACRO
 #endif
 #ifdef CONFIG_CLOCK_CONTROL_NRF_K32SRC_250PPM
-#define CLOCK_CONTROL_NRF_K32SRC_ACCURACY 1
+#define CLOCK_CONTROL_NRF_K32SRC_ACCURACY 1 __DEPRECATED_MACRO
 #endif
 #ifdef CONFIG_CLOCK_CONTROL_NRF_K32SRC_150PPM
-#define CLOCK_CONTROL_NRF_K32SRC_ACCURACY 2
+#define CLOCK_CONTROL_NRF_K32SRC_ACCURACY 2 __DEPRECATED_MACRO
 #endif
 #ifdef CONFIG_CLOCK_CONTROL_NRF_K32SRC_100PPM
-#define CLOCK_CONTROL_NRF_K32SRC_ACCURACY 3
+#define CLOCK_CONTROL_NRF_K32SRC_ACCURACY 3 __DEPRECATED_MACRO
 #endif
 #ifdef CONFIG_CLOCK_CONTROL_NRF_K32SRC_75PPM
-#define CLOCK_CONTROL_NRF_K32SRC_ACCURACY 4
+#define CLOCK_CONTROL_NRF_K32SRC_ACCURACY 4 __DEPRECATED_MACRO
 #endif
 #ifdef CONFIG_CLOCK_CONTROL_NRF_K32SRC_50PPM
-#define CLOCK_CONTROL_NRF_K32SRC_ACCURACY 5
+#define CLOCK_CONTROL_NRF_K32SRC_ACCURACY 5 __DEPRECATED_MACRO
 #endif
 #ifdef CONFIG_CLOCK_CONTROL_NRF_K32SRC_30PPM
-#define CLOCK_CONTROL_NRF_K32SRC_ACCURACY 6
+#define CLOCK_CONTROL_NRF_K32SRC_ACCURACY 6 __DEPRECATED_MACRO
 #endif
 #ifdef CONFIG_CLOCK_CONTROL_NRF_K32SRC_20PPM
-#define CLOCK_CONTROL_NRF_K32SRC_ACCURACY 7
+#define CLOCK_CONTROL_NRF_K32SRC_ACCURACY 7 __DEPRECATED_MACRO
 #endif
 
 /** @endcond */
@@ -166,7 +166,7 @@ bool z_nrf_clock_calibration_is_in_progress(void);
  *
  * @return Service handler or NULL.
  */
-struct onoff_manager *z_nrf_clock_control_get_onoff(clock_control_subsys_t sys);
+struct onoff_manager __deprecated *z_nrf_clock_control_get_onoff(clock_control_subsys_t sys);
 #endif
 
 /** @brief Permanently enable low frequency clock.
