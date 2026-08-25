@@ -165,6 +165,20 @@ static void ipct_configuration(void)
 #if defined(CONFIG_SOC_NRF71_WIFI_BOOT)
 #if (defined(NRF_APPLICATION) && !defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)) || \
 	!defined(__ZEPHYR__)
+/* Antenna switch (ANTSW) GPIO setup, done before the Wi-Fi core is started. */
+#define ANTSW_P0_09_PIN_CNF	0x5010A0A4UL	/* NRF_P0->PIN_CNF[9] */
+#define ANTSW_P0_09_PULL_UP	0x40FUL		/* Output, pull-up, drive H1 */
+#define ANTSW_P0_05_PIN_CNF	0x5010A094UL	/* NRF_P0->PIN_CNF[5] */
+#define ANTSW_P0_05_PULL_DOWN	0x7UL		/* Output, pull-down */
+
+static void antsw_setup(void)
+{
+	/* P0.09 pull-up: power on ANTSW. */
+	*(volatile uint32_t *)ANTSW_P0_09_PIN_CNF = ANTSW_P0_09_PULL_UP;
+	/* P0.05 pull-down: place ANTSW towards WLAN. */
+	*(volatile uint32_t *)ANTSW_P0_05_PIN_CNF = ANTSW_P0_05_PULL_DOWN;
+}
+
 static void wifi_setup(void)
 {
 	/* Kickstart the LMAC processor */
@@ -205,6 +219,8 @@ void soc_early_init_hook(void)
 #endif
 
 #if defined(CONFIG_SOC_NRF71_WIFI_BOOT)
+	/* Configure ANTSW GPIOs before starting comms with the Wi-Fi core. */
+	antsw_setup();
 	wifi_setup();
 #endif
 
