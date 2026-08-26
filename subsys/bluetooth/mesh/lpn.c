@@ -20,7 +20,6 @@
 #include "beacon.h"
 #include "foundation.h"
 #include "lpn.h"
-#include "statistic.h"
 
 #define LOG_LEVEL CONFIG_BT_MESH_LOW_POWER_LOG_LEVEL
 #include <zephyr/logging/log.h>
@@ -420,10 +419,6 @@ static void req_send_end(int err, void *user_data)
 
 	lpn->req_attempts++;
 
-	if (IS_ENABLED(CONFIG_BT_MESH_STATISTIC)) {
-		bt_mesh_stat_lpn_timing_update_poll_tx();
-	}
-
 	if (lpn->established || IS_ENABLED(CONFIG_BT_MESH_LPN_ESTABLISHMENT)) {
 		lpn_set_state(BT_MESH_LPN_RECV_DELAY);
 		/* We start scanning a bit early to eliminate risk of missing
@@ -585,9 +580,6 @@ static void friend_response_received(struct bt_mesh_lpn *lpn)
 
 	k_work_reschedule(&lpn->timer, K_MSEC(timeout));
 	bt_mesh_scan_disable();
-	if (IS_ENABLED(CONFIG_BT_MESH_STATISTIC)) {
-		bt_mesh_stat_lpn_timing_update_response_rx();
-	}
 }
 
 void bt_mesh_lpn_msg_received(struct bt_mesh_net_rx *rx)
@@ -867,9 +859,6 @@ static void update_timeout(struct bt_mesh_lpn *lpn)
 		lpn_set_state(BT_MESH_LPN_ESTABLISHED);
 		k_work_reschedule(&lpn->timer, K_MSEC(POLL_RETRY_TIMEOUT));
 		bt_mesh_scan_disable();
-		if (IS_ENABLED(CONFIG_BT_MESH_STATISTIC)) {
-			bt_mesh_stat_lpn_timing_update_win_expired();
-		}
 	} else {
 		if (IS_ENABLED(CONFIG_BT_MESH_LPN_ESTABLISHMENT)) {
 			bt_mesh_scan_disable();
@@ -951,9 +940,6 @@ static void lpn_timeout(struct k_work *work)
 				  K_MSEC(SCAN_LATENCY + lpn->recv_win + RX_DELAY_CORRECTION(lpn)));
 		lpn_set_state(BT_MESH_LPN_WAIT_UPDATE);
 		bt_mesh_scan_enable();
-		if (IS_ENABLED(CONFIG_BT_MESH_STATISTIC)) {
-			bt_mesh_stat_lpn_timing_update_scan_start();
-		}
 		break;
 	case BT_MESH_LPN_WAIT_UPDATE:
 		update_timeout(lpn);
