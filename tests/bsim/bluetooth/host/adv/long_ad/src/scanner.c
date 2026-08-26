@@ -31,7 +31,11 @@ static bool data_parse_cb(struct bt_data *data, void *user_data)
 static void device_found(const bt_addr_le_t *addr, int8_t rssi, uint8_t type,
 			 struct net_buf_simple *ad)
 {
-	LOG_DBG("Device found: %s (RSSI %d)", bt_addr_le_str(addr), rssi);
+	char addr_str[BT_ADDR_LE_STR_LEN];
+
+	bt_addr_le_to_str(addr, addr_str, sizeof(addr_str));
+
+	LOG_DBG("Device found: %s (RSSI %d)", addr_str, rssi);
 
 	if (ad->len > 0) {
 		LOG_INF("Received AD of size %d", ad->len);
