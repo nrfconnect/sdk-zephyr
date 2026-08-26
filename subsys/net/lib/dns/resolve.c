@@ -1758,7 +1758,7 @@ int dns_resolve_cancel_with_name(struct dns_resolve_context *ctx,
 		/* Use net_buf as a temporary buffer to store the packed
 		 * DNS name.
 		 */
-		buf = net_buf_alloc(&dns_msg_pool, ctx->buf_timeout);
+		buf = net_buf_alloc(&dns_msg_pool, K_FOREVER);
 		if (!buf) {
 			return -ENOMEM;
 		}
@@ -2100,8 +2100,7 @@ try_resolve:
 	if (IS_ENABLED(CONFIG_MDNS_RESOLVER)) {
 		const char *ptr = strrchr(query, '.');
 
-		/* Note that we memcmp() the \0 here too */
-		if (ptr && !memcmp(ptr, (const void *){ ".local" }, 7)) {
+		if (ptr && strcmp(ptr, ".local") == 0) {
 			mdns_query = true;
 
 			ctx->queries[i].id = 0;
