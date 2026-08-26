@@ -24,25 +24,22 @@ sample:
   name: "TFM Regression Test"
 
 tests:
-  tf-m.regression.ipc.lvl1:
+  sample.tfm.regression_ipc_lvl1:
     extra_args:
       - CONFIG_TFM_IPC=y
       - CONFIG_TFM_ISOLATION_LEVEL=1
     timeout: 30
 
-  tf-m.regression.ipc.lvl2:
-    extra_args:
-      - CONFIG_TFM_IPC=y
-      - CONFIG_TFM_ISOLATION_LEVEL=2
+  sample.tfm.regression_ipc_lvl2:
     timeout: 30
 
-  tf-m.regression.sfn.profile.not_set:
+  sample.tfm.regression_sfn.profile_not_set:
     extra_args:
       - CONFIG_TFM_SFN=y
       - CONFIG_TFM_ISOLATION_LEVEL=1
     timeout: 30
 
-  tf-m.regression.sfn.profile.small:
+  sample.tfm.regression_sfn.profile_small:
     extra_args:
       - CONFIG_TFM_SFN=y
       - CONFIG_TFM_ISOLATION_LEVEL=1
