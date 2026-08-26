@@ -495,8 +495,12 @@ static void start_scan(void)
 
 static void connected_cb(struct bt_conn *conn, uint8_t err)
 {
+	char addr[BT_ADDR_LE_STR_LEN];
+
+	(void)bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+
 	if (err != 0) {
-		LOG_ERR("Failed to connect to %s: %u", bt_conn_dst_str(conn), err);
+		LOG_ERR("Failed to connect to %s: %u", addr, err);
 
 		bt_conn_unref(peer.conn);
 		peer.conn = NULL;
@@ -509,18 +513,21 @@ static void connected_cb(struct bt_conn *conn, uint8_t err)
 		return;
 	}
 
-	LOG_INF("Connected: %s", bt_conn_dst_str(conn));
+	LOG_INF("Connected: %s", addr);
 	k_sem_give(&sem_state_change);
 }
 
 static void disconnected_cb(struct bt_conn *conn, uint8_t reason)
 {
+	char addr[BT_ADDR_LE_STR_LEN];
+
 	if (conn != peer.conn) {
 		return;
 	}
 
-	LOG_INF("Disconnected: %s, reason 0x%02x %s", bt_conn_dst_str(conn),
-		reason, bt_hci_err_to_str(reason));
+	(void)bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+
+	LOG_INF("Disconnected: %s, reason 0x%02x %s", addr, reason, bt_hci_err_to_str(reason));
 
 	bt_conn_unref(peer.conn);
 	peer.conn = NULL;
@@ -558,6 +565,7 @@ BT_CONN_CB_DEFINE(conn_callbacks) = {
 
 static bool check_audio_support_and_connect_cb(struct bt_data *data, void *user_data)
 {
+	char addr_str[BT_ADDR_LE_STR_LEN];
 	bt_addr_le_t *addr = user_data;
 	const struct bt_uuid *uuid;
 	uint16_t uuid_val;
@@ -581,7 +589,8 @@ static bool check_audio_support_and_connect_cb(struct bt_data *data, void *user_
 		return true; /* Continue parsing to next AD data type */
 	}
 
-	LOG_INF("Attempt to connect to %s", bt_addr_le_str(addr));
+	bt_addr_le_to_str(addr, addr_str, sizeof(addr_str));
+	LOG_INF("Attempt to connect to %s", addr_str);
 
 	err = bt_le_scan_stop();
 	if (err != 0) {
