@@ -165,6 +165,143 @@ static void ipct_configuration(void)
 #if defined(CONFIG_SOC_NRF71_WIFI_BOOT)
 #if (defined(NRF_APPLICATION) && !defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)) || \
 	!defined(__ZEPHYR__)
+/*
+ * HFXO64M register offsets and bit fields, taken from the nRF71 datasheet. The MDK only
+ * describes the event and interrupt registers of this peripheral, so the configuration
+ * registers are accessed directly. Remove this block once the MDK covers them.
+ *
+ * NRF_HFXO64M resolves to the secure or the non-secure alias to match the build, the same way
+ * NRF_LFXO does for the sibling peripheral on this bus.
+ */
+#define HFXO64M_REG(offset)	(*(volatile uint32_t *)((uintptr_t)NRF_HFXO64M_NS + (offset)))
+#define HFXO64M_REG_TRIM_RTUNE		HFXO64M_REG(0x440UL)
+#define HFXO64M_REG_TRIM_CHIRPTUNE	HFXO64M_REG(0x444UL)
+#define HFXO64M_REG_TRIM_DOUBLERCOMP	HFXO64M_REG(0x448UL)
+#define HFXO64M_REG_MIRROR		HFXO64M_REG(0x480UL)
+#define HFXO64M_REG_PWRUPCTRL		HFXO64M_REG(0x484UL)
+#define HFXO64M_REG_MODE		HFXO64M_REG(0x488UL)
+#define HFXO64M_REG_XTALSETTLETIME	HFXO64M_REG(0x48CUL)
+#define HFXO64M_REG_CHIRPTIME		HFXO64M_REG(0x490UL)
+#define HFXO64M_REG_ENABLEDAMPING	HFXO64M_REG(0x494UL)
+#define HFXO64M_REG_CFG			HFXO64M_REG(0x49CUL)
+
+#define HFXO64M_TRIM_RTUNE_VAL_Pos		(0UL)
+#define HFXO64M_TRIM_CHIRPTUNE_VAL_Pos		(0UL)
+#define HFXO64M_TRIM_DOUBLERCOMP_VAL_Pos	(0UL)
+
+#define HFXO64M_MIRROR_LOCK_Pos			(0UL)
+#define HFXO64M_MIRROR_LOCK_Disabled		(0UL)
+
+#define HFXO64M_PWRUPCTRL_CTRL_Pos		(0UL)
+#define HFXO64M_PWRUPCTRL_CTRL_Auto		(0UL)
+
+#define HFXO64M_MODE_MODE_Pos			(0UL)
+#define HFXO64M_MODE_MODE_Normal		(0UL)
+
+#define HFXO64M_XTALSETTLETIME_VAL_Pos		(0UL)
+#define HFXO64M_XTALSETTLETIME_VAL_Settle300us	(1UL)
+
+#define HFXO64M_CHIRPTIME_VAL_Pos		(0UL)
+#define HFXO64M_CHIRPTIME_VAL_Chirp56us		(3UL)
+
+#define HFXO64M_ENABLEDAMPING_VAL_Pos		(0UL)
+#define HFXO64M_ENABLEDAMPING_VAL_Disabled	(0UL)
+
+#define HFXO64M_CFG_LEVELSELECT_Pos		(0UL)
+#define HFXO64M_CFG_LEVELSELECT_Normal		(0UL)
+#define HFXO64M_CFG_ENABLENORMALBIASMODE_Pos	(1UL)
+#define HFXO64M_CFG_ENABLENORMALBIASMODE_Normal	(1UL)
+#define HFXO64M_CFG_BYPASSREG0V8_Pos		(2UL)
+#define HFXO64M_CFG_BYPASSREG0V8_Normal		(0UL)
+#define HFXO64M_CFG_BYPASSREG1V5_Pos		(3UL)
+#define HFXO64M_CFG_BYPASSREG1V5_Normal		(0UL)
+#define HFXO64M_CFG_ENABLECMOS1DIVIDER_Pos	(4UL)
+#define HFXO64M_CFG_ENABLECMOS1DIVIDER_Enabled	(1UL)
+#define HFXO64M_CFG_ENABLECMOS2DIVIDER_Pos	(5UL)
+#define HFXO64M_CFG_ENABLECMOS2DIVIDER_Disabled	(0UL)
+#define HFXO64M_CFG_ENABLECMOS3DIVIDER_Pos	(6UL)
+#define HFXO64M_CFG_ENABLECMOS3DIVIDER_Enabled	(1UL)
+#define HFXO64M_CFG_ENABLETSDIVIDER_Pos		(7UL)
+#define HFXO64M_CFG_ENABLETSDIVIDER_Disabled	(0UL)
+#define HFXO64M_CFG_BUFFDRIVECMOS1_Msk		(0x3UL << 8UL)
+#define HFXO64M_CFG_BUFFDRIVECMOS2_Msk		(0x3UL << 10UL)
+#define HFXO64M_CFG_BUFFDRIVECMOS3_Msk		(0x3UL << 12UL)
+#define HFXO64M_CFG_BUFFDRIVETS_Msk		(0x3UL << 14UL)
+#define HFXO64M_CFG_CHIRPEN_Msk			(0x1UL << 16UL)
+
+/*
+ * Trim codes applied to HFXO64M. These are the default codes for the crystal, used until
+ * device specific values are available from FICR.
+ */
+#define HFXO64M_TRIM_RTUNE_DEFAULT		(0x0UL)
+#define HFXO64M_TRIM_CHIRPTUNE_DEFAULT		(0x2UL)
+#define HFXO64M_TRIM_DOUBLERCOMP_DEFAULT	(0x3UL)
+
+/*
+ * HFXO64M is disabled after cold boot and ignores hardware clock requests until software has
+ * applied the trim values, configured the oscillator, released the mirror lock and handed
+ * power control over to the HFXO64M controller. This must happen before the Wi-Fi core, which
+ * requests the 64 MHz clock, is started.
+ */
+static void hfxo64m_setup(void)
+{
+	HFXO64M_REG_TRIM_RTUNE =
+		HFXO64M_TRIM_RTUNE_DEFAULT << HFXO64M_TRIM_RTUNE_VAL_Pos;
+	HFXO64M_REG_TRIM_CHIRPTUNE =
+		HFXO64M_TRIM_CHIRPTUNE_DEFAULT << HFXO64M_TRIM_CHIRPTUNE_VAL_Pos;
+	HFXO64M_REG_TRIM_DOUBLERCOMP =
+		HFXO64M_TRIM_DOUBLERCOMP_DEFAULT << HFXO64M_TRIM_DOUBLERCOMP_VAL_Pos;
+
+	/* Keep the buffer drive strengths and the chirp enable as they come out of reset. */
+	HFXO64M_REG_CFG =
+		(HFXO64M_REG_CFG & (HFXO64M_CFG_BUFFDRIVECMOS1_Msk |
+				    HFXO64M_CFG_BUFFDRIVECMOS2_Msk |
+				    HFXO64M_CFG_BUFFDRIVECMOS3_Msk |
+				    HFXO64M_CFG_BUFFDRIVETS_Msk |
+				    HFXO64M_CFG_CHIRPEN_Msk)) |
+		(HFXO64M_CFG_LEVELSELECT_Normal << HFXO64M_CFG_LEVELSELECT_Pos) |
+		(HFXO64M_CFG_ENABLENORMALBIASMODE_Normal <<
+			HFXO64M_CFG_ENABLENORMALBIASMODE_Pos) |
+		(HFXO64M_CFG_BYPASSREG0V8_Normal << HFXO64M_CFG_BYPASSREG0V8_Pos) |
+		(HFXO64M_CFG_BYPASSREG1V5_Normal << HFXO64M_CFG_BYPASSREG1V5_Pos) |
+		(HFXO64M_CFG_ENABLECMOS1DIVIDER_Enabled << HFXO64M_CFG_ENABLECMOS1DIVIDER_Pos) |
+		(HFXO64M_CFG_ENABLECMOS2DIVIDER_Disabled << HFXO64M_CFG_ENABLECMOS2DIVIDER_Pos) |
+		(HFXO64M_CFG_ENABLECMOS3DIVIDER_Enabled << HFXO64M_CFG_ENABLECMOS3DIVIDER_Pos) |
+		(HFXO64M_CFG_ENABLETSDIVIDER_Disabled << HFXO64M_CFG_ENABLETSDIVIDER_Pos);
+
+	HFXO64M_REG_XTALSETTLETIME =
+		HFXO64M_XTALSETTLETIME_VAL_Settle300us << HFXO64M_XTALSETTLETIME_VAL_Pos;
+	HFXO64M_REG_ENABLEDAMPING =
+		HFXO64M_ENABLEDAMPING_VAL_Disabled << HFXO64M_ENABLEDAMPING_VAL_Pos;
+	HFXO64M_REG_CHIRPTIME =
+		HFXO64M_CHIRPTIME_VAL_Chirp56us << HFXO64M_CHIRPTIME_VAL_Pos;
+
+	/* A crystal is wired to XC1/XC2, so drive the core rather than bypass it for a TCXO. */
+	HFXO64M_REG_MODE = HFXO64M_MODE_MODE_Normal << HFXO64M_MODE_MODE_Pos;
+
+	/* Release the lock so that the mirrored registers above are taken into use. */
+	HFXO64M_REG_MIRROR = HFXO64M_MIRROR_LOCK_Disabled << HFXO64M_MIRROR_LOCK_Pos;
+
+	/* Power the oscillator automatically, following the hardware clock requests. */
+	HFXO64M_REG_PWRUPCTRL = HFXO64M_PWRUPCTRL_CTRL_Auto << HFXO64M_PWRUPCTRL_CTRL_Pos;
+}
+
+/*
+ * Start the HFXO once it has been configured. The crystal oscillator is started through the
+ * CLOCK peripheral (XOSTART task), not through HFXO64M itself, and CLOCK reports readiness via
+ * the XOSTARTED event. Both are modelled by the MDK, so use the generated symbols here.
+ */
+static void hfxo64m_start(void)
+{
+	NRF_CLOCK->EVENTS_XOSTARTED = 0;
+	NRF_CLOCK->TASKS_XOSTART =
+		(CLOCK_TASKS_XOSTART_TASKS_XOSTART_Trigger << CLOCK_TASKS_XOSTART_TASKS_XOSTART_Pos);
+
+	/* Wait until the crystal has started. */
+	while (NRF_CLOCK->EVENTS_XOSTARTED == 0) {
+	}
+}
+
 /* Antenna switch (ANTSW) GPIO setup, done before the Wi-Fi core is started. */
 #define ANTSW_P0_09_PIN_CNF	0x5010A0A4UL	/* NRF_P0->PIN_CNF[9] */
 #define ANTSW_P0_09_PULL_UP	0x40FUL		/* Output, pull-up, drive H1 */
@@ -219,6 +356,9 @@ void soc_early_init_hook(void)
 #endif
 
 #if defined(CONFIG_SOC_NRF71_WIFI_BOOT)
+	/* Bring up the 64 MHz crystal oscillator the Wi-Fi core depends on. */
+	hfxo64m_setup();
+	hfxo64m_start();
 	/* Configure ANTSW GPIOs before starting comms with the Wi-Fi core. */
 	antsw_setup();
 	wifi_setup();
