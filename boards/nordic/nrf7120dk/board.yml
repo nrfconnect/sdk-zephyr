@@ -36,6 +36,7 @@ runners:
     '--reset':
       - runners:
           - jlink
+          - nrf7120-pdk
           - nrfutil
         run: last
         groups:
