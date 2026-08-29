@@ -76,6 +76,19 @@ const int32_t z_sys_timer_irq_for_test = DT_IRQN(GRTC_NODE);
 
 static void sys_clock_timeout_handler(int32_t id, uint64_t cc_val, void *p_context);
 
+/* Temporary bring-up debug, read by the application. */
+volatile uint32_t z_grtc_dbg_fires;
+volatile uint64_t z_grtc_dbg_cc_val[4];
+volatile uint64_t z_grtc_dbg_last_count[4];
+volatile uint64_t z_grtc_dbg_now[4];
+volatile uint32_t z_grtc_dbg_dticks[4];
+volatile uint32_t z_grtc_dbg_sets;
+volatile uint32_t z_grtc_dbg_set_ticks[4];
+volatile uint64_t z_grtc_dbg_set_cc[4];
+volatile uint64_t z_grtc_dbg_set_now[4];
+volatile uint32_t z_grtc_dbg_set_rawl[4];
+volatile uint32_t z_grtc_dbg_set_rawh[4];
+
 static uint64_t last_count; /* Time (SYSCOUNTER value) @last sys_clock_announce() */
 static uint64_t last_elapsed;
 static uint64_t cc_value; /* Value that is expected to be in CC register. */
@@ -168,6 +181,19 @@ static void sys_clock_timeout_handler(int32_t id, uint64_t cc_val, void *p_conte
 
 	sys_event_unregister(false);
 	dticks = counter_sub(cc_val, last_count) / CYC_PER_TICK;
+
+	/* Temporary debug: record the first COMPARE fire so main() can print it
+	 * reliably (ISR printk over RTT gets dropped). A healthy fire has now
+	 * close to cc_val; an early/spurious one shows now far behind cc_val.
+	 */
+	z_grtc_dbg_fires++;
+	if (z_grtc_dbg_fires <= 4) {
+		z_grtc_dbg_cc_val[z_grtc_dbg_fires - 1] = cc_val;
+		z_grtc_dbg_last_count[z_grtc_dbg_fires - 1] = last_count;
+		z_grtc_dbg_now[z_grtc_dbg_fires - 1] = counter();
+		z_grtc_dbg_dticks[z_grtc_dbg_fires - 1] = dticks;
+	}
+
 	last_count += (dticks * CYC_PER_TICK);
 	expired_cc = cc_val;
 
@@ -680,6 +706,21 @@ void sys_clock_set_timeout(uint32_t ticks, bool idle)
 	bool sys_evt = ticks <= 30;
 	uint32_t ch = system_clock_channel_data.channel;
 
+	z_grtc_dbg_sets++;
+	if (z_grtc_dbg_sets <= 4) {
+		uint32_t rl, rh;
+
+		z_grtc_dbg_set_ticks[z_grtc_dbg_sets - 1] = ticks;
+		z_grtc_dbg_set_now[z_grtc_dbg_sets - 1] = counter();
+		/* Read the same GRTC_SYSCOUNTER alias that counter() uses, for a
+		 * side-by-side comparison with counter() at the same instant.
+		 */
+		rl = NRF_GRTC->GRTC_SYSCOUNTER.SYSCOUNTERL;
+		rh = NRF_GRTC->GRTC_SYSCOUNTER.SYSCOUNTERH;
+		z_grtc_dbg_set_rawl[z_grtc_dbg_sets - 1] = rl;
+		z_grtc_dbg_set_rawh[z_grtc_dbg_sets - 1] = rh;
+	}
+
 	sys_event_unregister(true);
 	if ((cc_value == expired_cc) && (ticks <= MAX_REL_TICKS)) {
 		uint32_t cyc = ticks * CYC_PER_TICK;
@@ -710,6 +751,10 @@ void sys_clock_set_timeout(uint32_t ticks, bool idle)
 	uint64_t now = last_count + last_elapsed;
 
 	cc_value = now + cyc;
+
+	if (z_grtc_dbg_sets <= 4 && z_grtc_dbg_sets >= 1) {
+		z_grtc_dbg_set_cc[z_grtc_dbg_sets - 1] = cc_value;
+	}
 
 	/* In case of timeout abort it may happen that CC is being set to a value
 	 * that later than previous CC. If previous CC value is not far in the
