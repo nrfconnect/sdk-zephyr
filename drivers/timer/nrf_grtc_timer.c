@@ -88,6 +88,11 @@ volatile uint64_t z_grtc_dbg_set_cc[4];
 volatile uint64_t z_grtc_dbg_set_now[4];
 volatile uint32_t z_grtc_dbg_set_rawl[4];
 volatile uint32_t z_grtc_dbg_set_rawh[4];
+volatile uint32_t z_grtc_dbg_gate_ran;
+volatile uint32_t z_grtc_dbg_gate_l0;
+volatile uint32_t z_grtc_dbg_gate_lexit;
+volatile uint32_t z_grtc_dbg_gate_iters;
+volatile uint64_t z_grtc_dbg_gate_anchor;
 
 static uint64_t last_count; /* Time (SYSCOUNTER value) @last sys_clock_announce() */
 static uint64_t last_elapsed;
@@ -639,24 +644,63 @@ static int grtc_post_init(void)
 #if NRF_GRTC_HAS_SYSCOUNTER_LOADED
 	/* On SoCs where the SYSCOUNTER is only clocked once the LF clock is
 	 * running, the tick base captured at init is latched from a counter
-	 * that has not loaded yet (the read path only retries on BUSY, not on
-	 * LOADED). Wait for the counter to load and re-base it before the
-	 * kernel schedules on it. NO_WAIT must not block on the LF clock.
+	 * that is not ticking yet, which permanently corrupts the tick math.
+	 * Wait for the counter to run and re-base it before the kernel
+	 * schedules on it. NO_WAIT must not block on the LF clock.
 	 */
 	if (mode != CLOCK_CONTROL_NRF_LF_START_NOWAIT) {
-		while (!(NRF_GRTC->GRTC_SYSCOUNTER.SYSCOUNTERH &
-			 GRTC_SYSCOUNTER_SYSCOUNTERH_LOADED_Msk)) {
-		}
+		uint64_t prev = 0;
+		uint64_t now_raw = 0;
+		int good = 0;
+		int32_t budget_us = 100000; /* Cap so a slow/dead LF can't hang boot. */
 
-		unsigned int key = irq_lock();
+		z_grtc_dbg_gate_ran = 1;
 
-		last_count = (counter() / CYC_PER_TICK) * CYC_PER_TICK;
-		grtc_start_value = last_count;
-		expired_cc = UINT64_MAX;
-		if (!IS_ENABLED(CONFIG_TICKLESS_KERNEL)) {
-			system_timeout_set_relative(CYC_PER_TICK);
+		/* The SYSCOUNTER lives in the LF (LFLPRC) clock domain. Until
+		 * that source is actually running, cross-domain reads flicker
+		 * between valid values and zero, so a single "is it advancing?"
+		 * check can latch a bogus base and permanently corrupt the tick
+		 * math. Wait for a run of consecutive valid (BUSY clear),
+		 * monotonically increasing samples before re-basing. Bounded by
+		 * a busy-wait budget (CPU based, independent of the GRTC).
+		 */
+		while (good < 8 && budget_us > 0) {
+			uint32_t l = NRF_GRTC->GRTC_SYSCOUNTER.SYSCOUNTERL;
+			uint32_t h = NRF_GRTC->GRTC_SYSCOUNTER.SYSCOUNTERH;
+			bool valid = !(h & NRF_GRTC_SYSCOUNTERH_BUSY_MASK);
+
+			now_raw = valid ? (((uint64_t)(h & GRTC_SYSCOUNTERH_VALUE_Msk) << 32) |
+					   (l & GRTC_SYSCOUNTERL_VALUE_Msk))
+					: 0;
+
+			if (valid && now_raw != 0 && now_raw > prev) {
+				good++;
+			} else {
+				good = 0;
+			}
+			prev = now_raw;
+			z_grtc_dbg_gate_iters++;
+			k_busy_wait(20);
+			budget_us -= 20;
 		}
-		irq_unlock(key);
+		z_grtc_dbg_gate_lexit = (uint32_t)now_raw;
+
+		/* Only re-base if the counter actually stabilised. Otherwise
+		 * leave the base from sys_clock_driver_init() untouched so we
+		 * are no worse than baseline and boot proceeds.
+		 */
+		if (good >= 8) {
+			unsigned int key = irq_lock();
+
+			last_count = (now_raw / CYC_PER_TICK) * CYC_PER_TICK;
+			z_grtc_dbg_gate_anchor = last_count;
+			grtc_start_value = last_count;
+			expired_cc = UINT64_MAX;
+			if (!IS_ENABLED(CONFIG_TICKLESS_KERNEL)) {
+				system_timeout_set_relative(CYC_PER_TICK);
+			}
+			irq_unlock(key);
+		}
 	}
 #endif /* NRF_GRTC_HAS_SYSCOUNTER_LOADED */
 #endif

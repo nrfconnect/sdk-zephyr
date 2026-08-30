@@ -321,6 +321,7 @@ static void wifi_setup(void)
 	/* Kickstart the LMAC processor */
 	NRF_WIFICORE_LRCCONF_LRC0->POWERON =
 		(LRCCONF_POWERON_MAIN_AlwaysOn << LRCCONF_POWERON_MAIN_Pos);
+	k_busy_wait(USEC_PER_SEC);
 	NRF_WIFICORE_LMAC_VPR->INITPC = (uint32_t)(uintptr_t)NRF_WICR->FIRMWARE.LMACINITPC;
 	NRF_WIFICORE_LMAC_VPR->CPURUN = (VPR_CPURUN_EN_Running << VPR_CPURUN_EN_Pos);
 }
@@ -359,6 +360,7 @@ void soc_early_init_hook(void)
 	/* Bring up the 64 MHz crystal oscillator the Wi-Fi core depends on. */
 	hfxo64m_setup();
 	hfxo64m_start();
+	k_busy_wait(USEC_PER_SEC);
 	/* Configure ANTSW GPIOs before starting comms with the Wi-Fi core. */
 	antsw_setup();
 	wifi_setup();
