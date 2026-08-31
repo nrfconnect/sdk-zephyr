@@ -25,7 +25,7 @@ jobs:
     steps:
     - name: Download artifacts
       id: download-artifacts
-      uses: dawidd6/action-download-artifact@b6e2e70617bc3265edd6dab6c906732b2f1ae151 # v21
+      uses: dawidd6/action-download-artifact@d63b86af1b34672e53c440b1b83979861906bad7 # v24
       with:
         workflow: doc-build.yml
         run_id: ${{ github.event.workflow_run.id }}
@@ -43,7 +43,7 @@ jobs:
     - name: Check PR number
       if: steps.download-artifacts.outputs.found_artifact == 'true'
       id: check-pr
-      uses: carpentries/actions/check-valid-pr@fa5cbc13e070631ea381ad87388f5dc470f14363 # v0.18.0
+      uses: carpentries/actions/check-valid-pr@24898f898388e129d2bbc1f2d8634d7f79cc356b # v1.0.0
       with:
         pr: ${{ env.PR_NUM }}
         sha: ${{ github.event.workflow_run.head_sha }}
@@ -66,7 +66,7 @@ jobs:
 
     - name: Configure AWS Credentials
       if: steps.download-artifacts.outputs.found_artifact == 'true'
-      uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b # v6.2.0
+      uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
       with:
         aws-access-key-id: ${{ vars.AWS_BUILDS_ZEPHYR_PR_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_BUILDS_ZEPHYR_PR_SECRET_ACCESS_KEY }}
