@@ -67,7 +67,8 @@ class Nrf7120PdkBinaryRunner(ZephyrBinaryRunner):
 
     def __init__(self, cfg, dev_id=None, speed=1000, erase_timeout=10,
                  mram_waitstates=6, reset=True, dry_run=False, hex_files=None,
-                 startup=None):
+                 startup=None, remote_jlink=None, tunnel_port=19020,
+                 remote_ip=None):
         super().__init__(cfg)
         self.dev_id = dev_id
         self.speed = speed
@@ -77,6 +78,9 @@ class Nrf7120PdkBinaryRunner(ZephyrBinaryRunner):
         self.dry_run = dry_run
         self.hex_files = list(hex_files or [])
         self.startup = startup
+        self.remote_jlink = remote_jlink
+        self.tunnel_port = tunnel_port
+        self.remote_ip = remote_ip
 
     @classmethod
     def name(cls):
@@ -101,6 +105,18 @@ class Nrf7120PdkBinaryRunner(ZephyrBinaryRunner):
         parser.add_argument('--mram-waitstates',
                             type=lambda value: int(value, 0), default=6,
                             help='MRAMC.WAITSTATENUM before start (default: 6)')
+        parser.add_argument('--remote-jlink', metavar='SERIAL',
+                            help='connect to a remote J-Link over the SEGGER '
+                                 'tunnel server (J-Link Remote Server) using '
+                                 'the given tunnel serial number, mirroring '
+                                 "nrfutil's --remote-jlink option")
+        parser.add_argument('--tunnel-port', type=int, default=19020,
+                            help='tunnel server port for --remote-jlink '
+                                 '(default: 19020)')
+        parser.add_argument('--remote-ip', metavar='HOST[:PORT]',
+                            help='connect to a J-Link Remote Server reachable '
+                                 'by IP (default port 19020), e.g. '
+                                 '192.168.1.10 or 192.168.1.10:19020')
         parser.set_defaults(reset=True)
 
     @classmethod
@@ -110,7 +126,10 @@ class Nrf7120PdkBinaryRunner(ZephyrBinaryRunner):
                    mram_waitstates=args.mram_waitstates, reset=args.reset,
                    dry_run=args.dry_run,
                    hex_files=getattr(args, 'nrf7120_pdk_hex_files', None),
-                   startup=getattr(args, 'nrf7120_pdk_startup', None))
+                   startup=getattr(args, 'nrf7120_pdk_startup', None),
+                   remote_jlink=args.remote_jlink,
+                   tunnel_port=args.tunnel_port,
+                   remote_ip=args.remote_ip)
 
     @classmethod
     def args_from_previous_runner(cls, previous_runner, args):
@@ -154,6 +173,10 @@ class Nrf7120PdkBinaryRunner(ZephyrBinaryRunner):
             self.startup = (vtor, sp, pc & ~1)
 
     def _select_probe(self, jlink):
+        if self.remote_ip is not None:
+            return None
+        if self.remote_jlink is not None:
+            return int(self.remote_jlink)
         if self.dev_id is not None:
             return int(self.dev_id)
 
@@ -280,11 +303,28 @@ class Nrf7120PdkBinaryRunner(ZephyrBinaryRunner):
         if IntelHex is None:
             raise RuntimeError('Python dependency intelhex is required')
 
+        if self.remote_jlink is not None and self.remote_ip is not None:
+            raise RuntimeError(
+                '--remote-jlink and --remote-ip are mutually exclusive')
+
         jlink = pylink.JLink()
         serial = self._select_probe(jlink)
         mram_enabled = False
         try:
-            jlink.open(serial_no=serial)
+            if self.remote_ip is not None:
+                ip_addr = self.remote_ip
+                if ':' not in ip_addr:
+                    ip_addr = f'{ip_addr}:19020'
+                self.logger.info(
+                    f'Connecting to J-Link Remote Server at {ip_addr}')
+                jlink.open(ip_addr=ip_addr)
+            elif self.remote_jlink is not None:
+                self.logger.info(
+                    f'Connecting to remote J-Link {serial} over tunnel '
+                    f'server (port {self.tunnel_port})')
+                jlink.open_tunnel(serial, port=self.tunnel_port)
+            else:
+                jlink.open(serial_no=serial)
             jlink.set_tif(pylink.enums.JLinkInterfaces.SWD)
             jlink.coresight_configure()
             jlink.exec_command('CORESIGHT_SetIndexAHBAPToUse=0')
