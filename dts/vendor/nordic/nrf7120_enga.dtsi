@@ -216,8 +216,8 @@
 			#size-cells = <0>;
 
 			/* Default entry point when no ROM patch is applied. */
-			wifi_lmac_rom_entry: entry@28080172 {
-				reg = <0x28080172>;
+			wifi_lmac_rom_entry: entry@2808016a {
+				reg = <0x2808016a>;
 			};
 		};
 
