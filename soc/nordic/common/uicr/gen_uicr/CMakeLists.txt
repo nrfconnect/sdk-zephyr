@@ -77,6 +77,10 @@ if(CONFIG_SOC_NRF54H20)
   set(IRONSIDE_SE_PERIPHCONF_REGISTERS_FILE
     "${IRONSIDE_SUPPORT_DIR}/se/resources/periphconf_registers-nrf54h20_xxaa-v23.4.0+27.json"
   )
+elseif(CONFIG_SOC_NRF9220)
+  set(IRONSIDE_SE_PERIPHCONF_REGISTERS_FILE
+    "${IRONSIDE_SUPPORT_DIR}/se/resources/periphconf_registers-nrf9220_xxaa-v23.7.1+32.json"
+  )
 endif()
 
 # Use CMAKE_VERBOSE_MAKEFILE to silence an unused-variable warning.
