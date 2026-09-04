@@ -6,9 +6,14 @@
 
 #include <stdio.h>
 
+#include <zephyr/kernel.h>
 int main(void)
 {
 	printf("Hello World! %s\n", CONFIG_BOARD_TARGET);
+
+	while (1) {
+		k_yield();
+	};
 
 	return 0;
 }
