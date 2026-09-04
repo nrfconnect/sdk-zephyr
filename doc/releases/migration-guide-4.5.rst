@@ -26,6 +26,11 @@ Common
 Build System
 ************
 
+* The minimum required CMake version is now 3.28.0. CMake 3.28.3 is shipped in the Ubuntu 24.04 LTS
+  package repositories. Users of distributions providing an older CMake, such as Ubuntu 22.04 LTS,
+  can get a recent version from the `Kitware APT repository <https://apt.kitware.com/>`_ or with
+  ``pip install cmake``.
+
 * :kconfig:option:`CONFIG_LEGACY_GENERATED_INCLUDE_PATH` has been deprecated, and disabled by
   default, includes must now be prefixed with ``zephyr/`` for zephyr files.
 
@@ -1087,6 +1092,14 @@ Other subsystems
      ZTEST_BENCHMARK_TIMED(suite, my_bench, 1000, NULL, NULL) { /* ... */ }
      ZTEST_BENCHMARK(suite, my_bench, 100, setup, teardown) { /* ... */ }
      ZTEST_BENCHMARK_TIMED(suite, my_bench, 1000, setup, teardown) { /* ... */ }
+
+* The CPU load metric module has been merged into the unified :ref:`cpu_load` module. The
+  :kconfig:option:`CONFIG_CPU_LOAD_METRIC` option is deprecated; enable
+  :kconfig:option:`CONFIG_CPU_LOAD` with the :kconfig:option:`CONFIG_CPU_LOAD_BACKEND_RUNTIME_STATS`
+  backend instead. The ``<zephyr/sys/cpu_load_metric.h>`` header now simply includes
+  ``<zephyr/sys/cpu_load.h>``, and :c:func:`cpu_load_metric_get` is a deprecated wrapper around
+  :c:func:`cpu_load_get_cpu`. Note that :c:func:`cpu_load_get_cpu` returns the load in per mille
+  (0...1000) rather than percent; use :c:macro:`CPU_LOAD_PERMILLE_TO_PERCENT` to convert.
 
 Random
 ======
