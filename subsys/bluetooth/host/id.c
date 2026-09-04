@@ -247,7 +247,11 @@ static void adv_rpa_expired(struct bt_le_ext_adv *adv, void *data)
 
 static void adv_rpa_invalidate(struct bt_le_ext_adv *adv, void *data)
 {
-	if (atomic_test_bit(adv->flags, BT_ADV_RPA_UPDATE)) {
+	/* RPA of Advertisers limited by timeout or number of packets only expire
+	 * when they are stopped.
+	 */
+	if (!atomic_test_bit(adv->flags, BT_ADV_LIMITED) &&
+	    !atomic_test_bit(adv->flags, BT_ADV_USE_IDENTITY)) {
 		adv_rpa_expired(adv, data);
 	}
 }
