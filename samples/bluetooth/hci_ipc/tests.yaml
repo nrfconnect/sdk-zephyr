@@ -17,6 +17,7 @@ tests:
     tags: bluetooth
     extra_args:
       - EXTRA_CONF_FILE="extra-iso_broadcast-bt_ll_sw_split.conf"
+      - SNIPPET="bt-ll-sw-split"
     platform_allow:
       - nrf5340dk/nrf5340/cpunet
       - nrf5340_audio_dk/nrf5340/cpunet
@@ -28,6 +29,7 @@ tests:
     tags: bluetooth
     extra_args:
       - EXTRA_CONF_FILE="extra-iso_receive-bt_ll_sw_split.conf"
+      - SNIPPET="bt-ll-sw-split"
     platform_allow:
       - nrf5340dk/nrf5340/cpunet
       - nrf5340_audio_dk/nrf5340/cpunet
@@ -39,6 +41,7 @@ tests:
     tags: bluetooth
     extra_args:
       - EXTRA_CONF_FILE="extra-bis-bt_ll_sw_split.conf"
+      - SNIPPET="bt-ll-sw-split"
     platform_allow:
       - nrf5340dk/nrf5340/cpunet
       - nrf5340_audio_dk/nrf5340/cpunet
@@ -50,6 +53,7 @@ tests:
     tags: bluetooth
     extra_args:
       - EXTRA_CONF_FILE="extra-iso_central-bt_ll_sw_split.conf"
+      - SNIPPET="bt-ll-sw-split"
     platform_allow:
       - nrf5340dk/nrf5340/cpunet
       - nrf5340_audio_dk/nrf5340/cpunet
@@ -61,6 +65,7 @@ tests:
     tags: bluetooth
     extra_args:
       - EXTRA_CONF_FILE="extra-iso_peripheral-bt_ll_sw_split.conf"
+      - SNIPPET="bt-ll-sw-split"
     platform_allow:
       - nrf5340dk/nrf5340/cpunet
       - nrf5340_audio_dk/nrf5340/cpunet
@@ -72,6 +77,7 @@ tests:
     tags: bluetooth
     extra_args:
       - EXTRA_CONF_FILE="extra-cis-bt_ll_sw_split.conf"
+      - SNIPPET="bt-ll-sw-split"
     platform_allow:
       - nrf5340dk/nrf5340/cpunet
       - nrf5340_audio_dk/nrf5340/cpunet
@@ -83,6 +89,7 @@ tests:
     tags: bluetooth
     extra_args:
       - EXTRA_CONF_FILE="extra-iso-bt_ll_sw_split.conf"
+      - SNIPPET="bt-ll-sw-split"
     platform_allow:
       - nrf5340dk/nrf5340/cpunet
       - nrf5340_audio_dk/nrf5340/cpunet
@@ -105,6 +112,7 @@ tests:
     extra_args:
       - EXTRA_CONF_FILE="extra-df-bt_ll_sw_split.conf"
       - DTC_OVERLAY_FILE="nrf5340_cpunet_df-bt_ll_sw_split.overlay"
+      - SNIPPET="bt-ll-sw-split"
     platform_allow: nrf5340dk/nrf5340/cpunet
     integration_platforms:
       - nrf5340dk/nrf5340/cpunet
@@ -115,6 +123,7 @@ tests:
       - EXTRA_CONF_FILE="extra-df-bt_ll_sw_split.conf"
       - DTC_OVERLAY_FILE="nrf5340_cpunet_df-bt_ll_sw_split.overlay"
       - CONFIG_BT_CTLR_PHY_CODED=n
+      - SNIPPET="bt-ll-sw-split"
     platform_allow: nrf5340dk/nrf5340/cpunet
     integration_platforms:
       - nrf5340dk/nrf5340/cpunet
@@ -123,6 +132,7 @@ tests:
     tags: bluetooth
     extra_args:
       - EXTRA_CONF_FILE="extra-bt_mesh-bt_ll_sw_split.conf"
+      - SNIPPET="bt-ll-sw-split"
     platform_allow: nrf5340dk/nrf5340/cpunet
     integration_platforms:
       - nrf5340dk/nrf5340/cpunet
