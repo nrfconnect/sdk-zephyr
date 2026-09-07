@@ -14,6 +14,7 @@
 #include <zephyr/irq.h>
 #include <zephyr/sys/barrier.h>
 #include <hal/nrf_rramc.h>
+#include <hal/nrf_common.h>
 
 #include <zephyr/../../drivers/flash/soc_flash_nrf.h>
 
@@ -115,6 +116,20 @@ static inline bool is_within_bounds(off_t addr, size_t len, off_t boundary_start
 		(len <= (boundary_start + boundary_size - addr)));
 }
 
+static inline bool is_regular_addr_valid(off_t addr, size_t len)
+{
+	return is_within_bounds(addr, len, 0, RRAM_SIZE);
+}
+
+static inline bool is_uicr_addr_valid(off_t addr, size_t len)
+{
+#ifdef CONFIG_SOC_FLASH_NRF_RRAM_UICR
+	return is_within_bounds(addr, len, (off_t)NRF_UICR, sizeof(NRF_UICR_Type));
+#else
+	return false;
+#endif /* CONFIG_SOC_FLASH_NRF_UICR */
+}
+
 #if WRITE_BUFFER_ENABLE
 static void commit_changes(off_t addr, size_t len)
 {
@@ -172,7 +187,22 @@ static void rram_write(off_t addr, const void *data, size_t len)
 	while (len > 0) {
 		chunk_len = MIN(len, CONFIG_NRF_RRAM_THROTTLING_DATA_BLOCK * WRITE_LINE_SIZE);
 #endif /* CONFIG_SOC_FLASH_NRF_THROTTLING */
-		if (data) {
+		if (is_uicr_addr_valid(addr, len) && (len % sizeof(uint32_t) == 0)) {
+			chunk_len = sizeof(uint32_t);
+			uint32_t *uicr_mem = (uint32_t *)addr;
+			uint32_t fill_val_32 = 0;
+
+			/* The UICR memory can be written once, in 32-bit chunks.
+			 * Enforce the writes to be 32-bit long by using direct accesses
+			 * to the memory location instead of using memcpy()/memset().
+			 */
+			if (data) {
+				*uicr_mem = *((uint32_t *)data);
+			} else {
+				memset((void *)&fill_val_32, ERASE_VALUE, chunk_len);
+				*uicr_mem = fill_val_32;
+			}
+		} else if (data) {
 			memcpy((void *)addr, data, chunk_len);
 		} else {
 			memset((void *)addr, ERASE_VALUE, chunk_len);
@@ -263,11 +293,6 @@ static int nrf_write(off_t addr, const void *data, size_t len)
 {
 	int ret = 0;
 
-	if (!is_within_bounds(addr, len, 0, RRAM_SIZE)) {
-		return -EINVAL;
-	}
-	addr += RRAM_START;
-
 	if (!len) {
 		return 0;
 	}
@@ -294,10 +319,12 @@ static int nrf_rram_read(const struct device *dev, off_t addr, void *data, size_
 {
 	ARG_UNUSED(dev);
 
-	if (!is_within_bounds(addr, len, 0, RRAM_SIZE)) {
+	if (is_regular_addr_valid(addr, len)) {
+		addr += RRAM_START;
+	} else if (!is_uicr_addr_valid(addr, len)) {
+		LOG_ERR("invalid address: 0x%08lx:%zu", (unsigned long)addr, len);
 		return -EINVAL;
 	}
-	addr += RRAM_START;
 
 #if CONFIG_TRUSTED_EXECUTION_NONSECURE
 #if USE_PARTITION_MANAGER && PM_APP_ADDRESS
@@ -324,10 +351,30 @@ static int nrf_rram_write(const struct device *dev, off_t addr, const void *data
 		return -EINVAL;
 	}
 
-	if ((addr % WRITE_LINE_SIZE) != 0 || (len % WRITE_LINE_SIZE) != 0) {
+	if (is_regular_addr_valid(addr, len)) {
+		if ((addr % WRITE_LINE_SIZE) != 0 || (len % WRITE_LINE_SIZE) != 0) {
+			return -EINVAL;
+		}
+
+		addr += RRAM_START;
+#ifdef CONFIG_SOC_FLASH_NRF_RRAM_UICR
+	} else if (is_uicr_addr_valid(addr, len)) {
+		/* UICR accesses must be aligned to 4 bytes. */
+		if ((addr % sizeof(uint32_t)) != 0 || (len % sizeof(uint32_t)) != 0) {
+			return -EINVAL;
+		}
+
+		/* If the UICR is not erased, return an error.
+		 * Otherwise - it will result in bus fault.
+		 */
+		if (*((uint32_t *)addr) != 0xFFFFFFFF) {
+			return -EIO;
+		}
+#endif /* CONFIG_SOC_FLASH_NRF_RRAM_UICR */
+	} else {
+		LOG_ERR("invalid address: 0x%08lx:%zu", (unsigned long)addr, len);
 		return -EINVAL;
 	}
-
 
 	return nrf_write(addr, data, len);
 }
@@ -339,6 +386,12 @@ static int nrf_rram_erase(const struct device *dev, off_t addr, size_t len)
 	if ((addr % PAGE_SIZE) != 0 || (len % PAGE_SIZE) != 0) {
 		return -EINVAL;
 	}
+
+	if (!is_regular_addr_valid(addr, len)) {
+		return -EINVAL;
+	}
+
+	addr += RRAM_START;
 
 	return nrf_write(addr, NULL, len);
 }
