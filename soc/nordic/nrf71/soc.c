@@ -36,6 +36,7 @@
 #include <hal/nrf_spu.h>
 #include <hal/nrf_mpc.h>
 #include <hal/nrf_lfxo.h>
+#include <hal/nrf_gpio.h>
 
 #include <wicr_setup.h>
 
@@ -302,6 +303,28 @@ static void hfxo64m_start(void)
 	}
 }
 
+#if DT_HAS_COMPAT_STATUS_OKAY(nordic_nrf71_wifi_antsw)
+#define WIFI_ANTSW_NODE DT_COMPAT_GET_ANY_STATUS_OKAY(nordic_nrf71_wifi_antsw)
+
+/* Steering an unpowered switch is meaningless: require pwr_antswc to power it. */
+BUILD_ASSERT(DT_HAS_COMPAT_STATUS_OKAY(nordic_nrf_pwr_antswc),
+	     "wifi-antsw steering requires pwr_antswc to power the antenna switch");
+
+/*
+ * Steer the antenna switch (ANTSW) towards WLAN before the Wi-Fi core is
+ * started. This runs before the GPIO driver is up, so the pin (described in
+ * devicetree) is configured directly through the nrf_gpio HAL, which keeps the
+ * access on the P0 alias that matches the build's security state. Powering the
+ * switch is handled separately by pwr_antswc.
+ */
+static void antsw_setup(void)
+{
+	nrf_gpio_cfg(NRF_DT_GPIOS_TO_PSEL(WIFI_ANTSW_NODE, wlan_gpios),
+		     NRF_GPIO_PIN_DIR_OUTPUT, NRF_GPIO_PIN_INPUT_DISCONNECT,
+		     NRF_GPIO_PIN_PULLDOWN, NRF_GPIO_PIN_S0S1, NRF_GPIO_PIN_NOSENSE);
+}
+#endif /* DT_HAS_COMPAT_STATUS_OKAY(nordic_nrf71_wifi_antsw) */
+
 static void wifi_setup(void)
 {
 	/* Kickstart the LMAC processor */
@@ -351,6 +374,10 @@ void soc_early_init_hook(void)
 	*(volatile uint32_t *)PWR_ANTSWC_REG |= PWR_ANTSWC_ENABLE;
 #endif
 
+#if DT_HAS_COMPAT_STATUS_OKAY(nordic_nrf71_wifi_antsw)
+	/* Steer the (now powered) antenna switch towards WLAN before Wi-Fi boot. */
+	antsw_setup();
+#endif
 	wifi_setup();
 #endif
 
