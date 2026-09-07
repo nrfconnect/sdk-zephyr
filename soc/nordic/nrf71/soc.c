@@ -175,7 +175,6 @@ static void wifi_setup(void)
 	NRF_WIFICORE_LMAC_VPR->CPURUN = (VPR_CPURUN_EN_Running << VPR_CPURUN_EN_Pos);
 }
 #endif
-#endif
 
 /**
  * This function is used by TF-M (see target_cfg_71.c, nrf71_init.c). You must align the TF-M
@@ -219,7 +218,11 @@ int nordicsemi_nrf71_init(void)
 #endif
 
 #if DT_HAS_COMPAT_STATUS_OKAY(nordic_nrf_pwr_antswc)
+	/* Power on the antenna switch before starting the Wi-Fi core. */
 	*(volatile uint32_t *)PWR_ANTSWC_REG |= PWR_ANTSWC_ENABLE;
+#endif
+
+	wifi_setup();
 #endif
 
 	/* Configure LFXO capacitive load if internal load capacitors are used */
@@ -227,7 +230,6 @@ int nordicsemi_nrf71_init(void)
 	nrf_lfxo_cload_set(NRF_LFXO,
 			(uint8_t)(DT_PROP(LFXO_NODE, load_capacitance_femtofarad) / 1000));
 #endif
-#endif /* (NRF_APPLICATION && !CONFIG_TRUSTED_EXECUTION_NONSECURE) || !__ZEPHYR__  */
 
 #ifdef __ZEPHYR__
 	sys_cache_instr_enable();
