@@ -345,11 +345,13 @@ void soc_early_init_hook(void)
 	/* Bring up the 64 MHz crystal oscillator the Wi-Fi core depends on. */
 	hfxo64m_setup();
 	hfxo64m_start();
-	wifi_setup();
-#endif
 
 #if DT_HAS_COMPAT_STATUS_OKAY(nordic_nrf_pwr_antswc)
+	/* Power on the antenna switch before starting the Wi-Fi core. */
 	*(volatile uint32_t *)PWR_ANTSWC_REG |= PWR_ANTSWC_ENABLE;
+#endif
+
+	wifi_setup();
 #endif
 
 	/* Configure LFXO capacitive load if internal load capacitors are used */
