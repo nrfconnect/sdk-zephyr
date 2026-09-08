@@ -374,6 +374,7 @@
   - "subsys/settings/**/*"
 
 "CI-wifi":
+  - "drivers/wifi/**/*"
   - "subsys/net/l2/wifi/**/*"
   - "subsys/net/l2/ethernet/**/*"
 
