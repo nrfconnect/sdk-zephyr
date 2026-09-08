@@ -65,7 +65,7 @@ SRAM_MASK = 0xFFF00000
 class Nrf7120PdkBinaryRunner(ZephyrBinaryRunner):
     '''Erase, program, verify, and start an nRF7120 PDK through PyLink.'''
 
-    def __init__(self, cfg, dev_id=None, speed=1000, erase_timeout=10,
+    def __init__(self, cfg, dev_id=None, speed=8000, erase_timeout=10,
                  mram_waitstates=6, reset=True, dry_run=False, hex_files=None,
                  startup=None, remote_jlink=None, tunnel_port=19020,
                  remote_ip=None):
