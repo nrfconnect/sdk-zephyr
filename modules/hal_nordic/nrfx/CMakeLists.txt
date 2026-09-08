@@ -65,7 +65,7 @@ zephyr_library_sources(nrfx_glue.c)
 zephyr_library_sources(${HELPERS_DIR}/nrfx_flag32_allocator.c)
 zephyr_library_sources_ifdef(CONFIG_HAS_NORDIC_RAM_CTRL       ${HELPERS_DIR}/nrfx_ram_ctrl.c)
 
-if(CONFIG_NRFX_GPPI AND NOT CONFIG_NRFX_GPPI_V1)
+if(CONFIG_NRFX_GPPI)
   zephyr_library_sources_ifdef(CONFIG_HAS_HW_NRF_PPI ${HELPERS_DIR}/nrfx_gppi_ppi.c)
   zephyr_library_sources_ifndef(CONFIG_HAS_HW_NRF_PPI ${HELPERS_DIR}/nrfx_gppi_dppi.c)
   if(NOT CONFIG_NRF_DONT_USE_STABLE_BSP)
@@ -130,6 +130,61 @@ if(CONFIG_SOC_SERIES_NRF54H AND CONFIG_NRFX_GPPI_V1)
   zephyr_library_sources(${HELPERS_DIR}/internal/nrfx_gppiv1_ipct.c)
   zephyr_library_sources(${HELPERS_DIR}/internal/nrfx_gppiv1_shim.c)
 endif()
+
+# Inject HAL "NFCT_PINS_AS_GPIOS" definition if user requests to
+# configure the NFCT pins as GPIOS. Do the same with "CONFIG_GPIO_AS_PINRESET"
+# to configure the reset GPIO as nRESET. This way, the HAL will take care of
+# doing the proper configuration sequence during system init
+
+dt_nodelabel(uicr_path NODELABEL "uicr")
+if(DEFINED uicr_path)
+  dt_prop(nfct_pins_as_gpios PATH ${uicr_path} PROPERTY "nfct-pins-as-gpios")
+  dt_prop(gpio_as_nreset PATH ${uicr_path} PROPERTY "gpio-as-nreset")
+endif()
+
+dt_nodelabel(nfct_path NODELABEL "nfct")
+if(DEFINED nfct_path AND NOT nfct_pins_as_gpios)
+  dt_prop(nfct_pins_as_gpios PATH ${nfct_path} PROPERTY "nfct-pins-as-gpios")
+endif()
+
+if(${nfct_pins_as_gpios})
+  zephyr_library_compile_definitions(NRF_CONFIG_NFCT_PINS_AS_GPIOS)
+endif()
+
+if(${gpio_as_nreset})
+  zephyr_library_compile_definitions(NRF_CONFIG_GPIO_AS_PINRESET)
+endif()
+
+dt_nodelabel(tampc_path NODELABEL "tampc")
+if(DEFINED tampc_path)
+  dt_prop(swd_pins_as_gpios PATH ${tampc_path} PROPERTY "swd-pins-as-gpios")
+  if(${swd_pins_as_gpios})
+    zephyr_library_compile_definitions(
+      NRF_CONFIG_SWD_PINS_AS_GPIOS
+    )
+  endif()
+endif()
+
+if(CONFIG_SOC_NRF54L_CPUAPP_COMMON)
+  # Ideally, hfpll should taken as a phandle from clocks property from cpu but it
+  # seems that there is no such option in DT cmake functions. Assuming that nrf54l
+  # is using hfpll as CPU clock source (true for all existing devices).
+  dt_prop(clock_frequency PATH "/clocks/hfpll" PROPERTY "clock-frequency")
+  math(EXPR clock_frequency_mhz "${clock_frequency} / 1000000")
+  zephyr_compile_definitions("NRF_CONFIG_CPU_FREQ_MHZ=${clock_frequency_mhz}")
+endif()
+
+if(CONFIG_SOC_NRF7120_ENGA_CPUAPP)
+  dt_prop(clock_frequency PATH "/cpus/cpu@0" PROPERTY "clock-frequency")
+  math(EXPR clock_frequency_mhz "${clock_frequency} / 1000000")
+  zephyr_compile_definitions("NRF_CONFIG_CPU_FREQ_MHZ=${clock_frequency_mhz}")
+endif()
+
+zephyr_compile_definitions_ifdef(CONFIG_NRF_SKIP_CLOCK_CONFIG NRF_SKIP_CLOCK_CONFIGURATION)
+zephyr_compile_definitions_ifdef(CONFIG_SOC_NRF54LX_DISABLE_FICR_TRIMCNF NRF_DISABLE_FICR_TRIMCNF)
+zephyr_compile_definitions_ifdef(CONFIG_SOC_NRF54LX_SKIP_TAMPC_SETUP NRF_SKIP_TAMPC_SETUP)
+zephyr_compile_definitions_ifdef(CONFIG_SOC_NRF54LX_SKIP_GLITCHDETECTOR_DISABLE NRF_SKIP_GLITCHDETECTOR_DISABLE)
+zephyr_compile_definitions_ifndef(CONFIG_SOC_NRF54L_ANOMALY_56_WORKAROUND NRF54L_CONFIGURATION_56_ENABLE=0)
 
 # Get the SVD file for the current SoC
 macro(mdk_svd_ifdef feature_toggle filename)
