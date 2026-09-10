@@ -392,6 +392,7 @@ struct adxl367_dev_config {
 	bool autosleep;
 	bool low_noise;
 	bool temp_en;
+	bool self_test_enable;
 
 	struct adxl367_activity_threshold activity_th;
 	struct adxl367_activity_threshold inactivity_th;
