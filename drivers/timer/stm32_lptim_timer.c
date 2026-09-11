@@ -23,17 +23,16 @@
 
 #include <zephyr/spinlock.h>
 
+/* Define for grep-ability, even though this will not be used */
 #define DT_DRV_COMPAT st_stm32_lptim
 
-#if DT_NUM_INST_STATUS_OKAY(DT_DRV_COMPAT) > 1
-#error Only one LPTIM instance should be enabled
-#endif
+#define LPTIM_SYSTIMER_NODE DT_CHOSEN(zephyr_system_timer)
 
-#if DT_INST_NUM_CLOCKS(0) <= 1
+#if DT_NUM_CLOCKS(LPTIM_SYSTIMER_NODE) <= 1
 #error "LPTIM source clock must be provided in Device Tree"
 #endif
 
-#define LPTIM (LPTIM_TypeDef *) DT_INST_REG_ADDR(0)
+#define LPTIM ((LPTIM_TypeDef *)DT_REG_ADDR(LPTIM_SYSTIMER_NODE))
 
 #if defined(CONFIG_SOC_SERIES_STM32MP1X)
 #define LL_LPTIM_ClearFlag_ARRM  LL_LPTIM_ClearFLAG_ARRM
@@ -52,11 +51,11 @@
 #define STM32_LPTIM_PRELOAD_ENABLED    LL_LPTIM_UPDATE_MODE_ENDOFPERIOD
 #endif /* CONFIG_STM32_HAL2 */
 
-static const struct stm32_pclken lptim_clk[] = STM32_DT_INST_CLOCKS(0);
+static const struct stm32_pclken lptim_clk[] = STM32_DT_CLOCKS(LPTIM_SYSTIMER_NODE);
 
 static const struct device *const clk_ctrl = DEVICE_DT_GET(STM32_CLOCK_CONTROL_NODE);
 
-static const struct reset_dt_spec lptim_reset = RESET_DT_SPEC_INST_GET(0);
+static const struct reset_dt_spec lptim_reset = RESET_DT_SPEC_GET(LPTIM_SYSTIMER_NODE);
 
 /*
  * Assumptions and limitations:
@@ -76,7 +75,7 @@ static const struct reset_dt_spec lptim_reset = RESET_DT_SPEC_INST_GET(0);
 static int32_t lptim_time_base;
 static uint32_t lptim_clock_freq = CONFIG_STM32_LPTIM_CLOCK;
 /* The prescaler given by the DTS and to apply to the lptim_clock_freq */
-static uint32_t lptim_clock_presc = DT_PROP(DT_DRV_INST(0), st_prescaler);
+static uint32_t lptim_clock_presc = DT_PROP(LPTIM_SYSTIMER_NODE, st_prescaler);
 
 /* Minimum nb of clock cycles to have to set autoreload register correctly */
 #define LPTIM_GUARD_VALUE 2
@@ -316,14 +315,20 @@ static inline uint32_t z_clock_lptim_getcounter(void)
 	return lp_time;
 }
 
-void sys_clock_set_timeout(uint32_t ticks, bool idle)
+void sys_clock_unused(void)
 {
-	/* new LPTIM AutoReload value to set (aligned on Kernel ticks) */
-	uint32_t next_arr = 0;
-	int err;
+	if (!IS_ENABLED(CONFIG_TICKLESS_KERNEL)) {
+		return;
+	}
 
-	ARG_UNUSED(idle);
+	/* No timeout pending: turn the LPTIM off entirely (unclocked, never
+	 * waking up). It is restored by the next sys_clock_set_timeout().
+	 */
+	clock_control_off(clk_ctrl, (clock_control_subsys_t)&lptim_clk[0]);
+}
 
+void sys_clock_idle_enter(uint32_t ticks)
+{
 #ifdef CONFIG_STM32_LPTIM_STDBY_TIMER
 	const struct pm_state_info *next;
 
@@ -331,7 +336,7 @@ void sys_clock_set_timeout(uint32_t ticks, bool idle)
 
 	/* Check if STANBY or STOP3 is requested */
 	timeout_stdby = false;
-	if ((next != NULL) && idle) {
+	if (next != NULL) {
 #ifdef CONFIG_PM_S2RAM
 		if (next->state == PM_STATE_SUSPEND_TO_RAM) {
 			timeout_stdby = true;
@@ -370,7 +375,7 @@ void sys_clock_set_timeout(uint32_t ticks, bool idle)
 
 		LL_LPTIM_DisableIT_ARROK(LPTIM);
 		LL_LPTIM_ClearFlag_ARROK(LPTIM);
-		NVIC_ClearPendingIRQ(DT_INST_IRQN(0));
+		NVIC_ClearPendingIRQ(DT_IRQN(LPTIM_SYSTIMER_NODE));
 		/* Stop clocks for LPTIM, since RTC is used instead */
 		clock_control_off(clk_ctrl, (clock_control_subsys_t) &lptim_clk[0]);
 
@@ -378,21 +383,24 @@ void sys_clock_set_timeout(uint32_t ticks, bool idle)
 	}
 #endif /* CONFIG_STM32_LPTIM_STDBY_TIMER */
 
+	sys_clock_set_timeout(ticks, false);
+}
+
+void sys_clock_set_timeout(uint32_t ticks, bool idle)
+{
+	ARG_UNUSED(idle);
+	/* new LPTIM AutoReload value to set (aligned on Kernel ticks) */
+	uint32_t next_arr = 0;
+	int err;
+
+#ifdef CONFIG_STM32_LPTIM_STDBY_TIMER
+	timeout_stdby = false;
+#endif
+
 	if (!IS_ENABLED(CONFIG_TICKLESS_KERNEL)) {
 		return;
 	}
 
-	/*
-	 * The kernel has no pending timeout, which it signals with
-	 * ticks == SYS_CLOCK_MAX_WAIT. Under sloppy idle the LPTIM can be
-	 * turned off entirely (never waking up, not clocked anymore).
-	 * Without sloppy idle we fall through and schedule the (capped)
-	 * timeout so the uptime tick count stays correct.
-	 */
-	if (IS_ENABLED(CONFIG_SYSTEM_CLOCK_SLOPPY_IDLE) && ticks == SYS_CLOCK_MAX_WAIT) {
-		clock_control_off(clk_ctrl, (clock_control_subsys_t) &lptim_clk[0]);
-		return;
-	}
 	/*
 	 * When CONFIG_SYSTEM_CLOCK_SLOPPY_IDLE = n, ticks equals to INT_MAX
 	 * is treated as a maximum possible value LPTIM_MAX_TIMEBASE (16bit counter)
@@ -577,8 +585,8 @@ static int sys_clock_driver_init(void)
 	}
 #endif
 
-#if DT_NODE_HAS_PROP(DT_NODELABEL(stm32_lp_tick_source), st_timeout)
-	uint32_t timeout = DT_PROP(DT_NODELABEL(stm32_lp_tick_source), st_timeout);
+#if DT_NODE_HAS_PROP(LPTIM_SYSTIMER_NODE, st_timeout)
+	uint32_t timeout = DT_PROP(LPTIM_SYSTIMER_NODE, st_timeout);
 
 	if (timeout > (lptim_clock_presc * 0xFFFF) / lptim_clock_freq) {
 		__ASSERT(0,
@@ -624,10 +632,10 @@ static int sys_clock_driver_init(void)
 	lptim_clock_freq = lptim_clock_freq / lptim_clock_presc;
 
 	/* Clear the event flag and possible pending interrupt */
-	IRQ_CONNECT(DT_INST_IRQN(0),
-		    DT_INST_IRQ(0, priority),
+	IRQ_CONNECT(DT_IRQN(LPTIM_SYSTIMER_NODE),
+		    DT_IRQ(LPTIM_SYSTIMER_NODE, priority),
 		    lptim_irq_handler, 0, 0);
-	irq_enable(DT_INST_IRQN(0));
+	irq_enable(DT_IRQN(LPTIM_SYSTIMER_NODE));
 
 #ifdef CONFIG_SOC_SERIES_STM32WLX
 	/* Enable the LPTIM wakeup EXTI line */

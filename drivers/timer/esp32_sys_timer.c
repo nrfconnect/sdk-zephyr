@@ -40,7 +40,6 @@ static uint64_t lptim_pre_idle;
 static bool timeout_idle;
 #endif
 
-static struct k_spinlock lock;
 static uint64_t last_count;
 
 /* Systimer HAL layer object */
@@ -79,7 +78,7 @@ static void IRAM_ATTR sys_timer_isr(void *arg)
 	ARG_UNUSED(arg);
 	systimer_ll_clear_alarm_int(systimer_hal.dev, SYSTIMER_ALARM_OS_TICK_CORE0);
 
-	k_spinlock_key_t key = k_spin_lock(&lock);
+	k_spinlock_key_t key = sys_clock_lock();
 
 	uint64_t now = get_systimer_alarm();
 	uint64_t dticks = sys_timer_elapsed_ticks(now);
@@ -93,12 +92,14 @@ static void IRAM_ATTR sys_timer_isr(void *arg)
 		set_systimer_alarm(next);
 	}
 
-	k_spin_unlock(&lock, key);
-	sys_clock_announce(dticks);
+	sys_clock_announce_locked(dticks, key);
 }
 
 void sys_clock_set_timeout(uint32_t ticks, bool idle)
 {
+	ARG_UNUSED(idle);
+	__ASSERT(sys_clock_is_locked(), "system clock lock not held");
+
 #if defined(CONFIG_TICKLESS_KERNEL)
 	if (systimer_hal.dev == NULL) {
 		return;
@@ -106,7 +107,6 @@ void sys_clock_set_timeout(uint32_t ticks, bool idle)
 
 	ticks = CLAMP(ticks, 1, MAX_TICKS) - 1;
 
-	k_spinlock_key_t key = k_spin_lock(&lock);
 	uint64_t now = get_systimer_alarm();
 	uint32_t adj, cyc = ticks * CYC_PER_TICK;
 
@@ -124,26 +124,30 @@ void sys_clock_set_timeout(uint32_t ticks, bool idle)
 	}
 
 	set_systimer_alarm(cyc + last_count);
-
-#if defined(CONFIG_PM)
-	if (idle) {
-		uint64_t timeout_us =
-			((uint64_t)ticks * USEC_PER_SEC) / CONFIG_SYS_CLOCK_TICKS_PER_SEC;
-
-		lptim_pre_idle = esp32_lptim_hook_on_lpm_entry(timeout_us);
-		systimer_pre_idle = get_systimer_alarm();
-		timeout_idle = true;
-	}
-#else
-	ARG_UNUSED(idle);
-#endif
-
-	k_spin_unlock(&lock, key);
 #endif
 }
 
+#if defined(CONFIG_PM)
+void sys_clock_idle_enter(uint32_t ticks)
+{
+	sys_clock_set_timeout(ticks, false);
+
+	if (!IS_ENABLED(CONFIG_TICKLESS_KERNEL) || systimer_hal.dev == NULL) {
+		return;
+	}
+
+	uint64_t timeout_us = ((uint64_t)ticks * USEC_PER_SEC) / CONFIG_SYS_CLOCK_TICKS_PER_SEC;
+
+	lptim_pre_idle = esp32_lptim_hook_on_lpm_entry(timeout_us);
+	systimer_pre_idle = get_systimer_alarm();
+	timeout_idle = true;
+}
+#endif
+
 uint32_t sys_clock_elapsed(void)
 {
+	__ASSERT(sys_clock_is_locked(), "system clock lock not held");
+
 	if (!IS_ENABLED(CONFIG_TICKLESS_KERNEL)) {
 		return 0;
 	}
@@ -152,11 +156,7 @@ uint32_t sys_clock_elapsed(void)
 		return 0;
 	}
 
-	k_spinlock_key_t key = k_spin_lock(&lock);
-	uint32_t ret = ((uint32_t)get_systimer_alarm() - (uint32_t)last_count) / CYC_PER_TICK;
-
-	k_spin_unlock(&lock, key);
-	return ret;
+	return ((uint32_t)get_systimer_alarm() - (uint32_t)last_count) / CYC_PER_TICK;
 }
 
 uint32_t sys_clock_cycle_get_32(void)
@@ -189,7 +189,7 @@ void sys_clock_idle_exit(void)
 		return;
 	}
 
-	k_spinlock_key_t key = k_spin_lock(&lock);
+	k_spinlock_key_t key = sys_clock_lock();
 
 	uint64_t lptim_now = esp32_lptim_hook_on_lpm_exit();
 	uint64_t systimer_now = get_systimer_alarm();
@@ -216,10 +216,8 @@ void sys_clock_idle_exit(void)
 
 	timeout_idle = false;
 
-	k_spin_unlock(&lock, key);
-
 	/* Announce OS ticks as systimer remained stalled while in light sleep */
-	sys_clock_announce(dticks);
+	sys_clock_announce_locked(dticks, key);
 }
 #endif
 

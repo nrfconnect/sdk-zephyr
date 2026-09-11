@@ -9,7 +9,7 @@
 #include <zephyr/devicetree.h>
 #include <zephyr/irq.h>
 #if (defined(CONFIG_CLOCK_CONTROL_NRF) || defined(CONFIG_CLOCK_CONTROL_NRF_COMMON)) &&             \
-	!(defined(CONFIG_SOC_SERIES_NRF54H) || defined(CONFIG_SOC_SERIES_NRF92))
+	!IS_ENABLED(CONFIG_HAS_MULTI_OPTION_CLOCKS)
 #include <zephyr/drivers/clock_control/nrf_clock_control.h>
 #endif
 #include <zephyr/drivers/pinctrl.h>
@@ -514,28 +514,25 @@ ISR_DIRECT_DECLARE(nrfx_grtc_direct_irq_handler)
 
 void sys_clock_disable(void)
 {
-	nrfx_grtc_uninit();
+	int err __maybe_unused;
 #if defined(CONFIG_CLOCK_CONTROL_NRF)
-	int err;
 	struct onoff_manager *mgr =
 		z_nrf_clock_control_get_onoff((clock_control_subsys_t)CLOCK_CONTROL_NRF_TYPE_LFCLK);
 
 	err = onoff_release(mgr);
+	__ASSERT_NO_MSG(err >= 0);
+
+	nrfx_grtc_uninit();
+	nrfx_coredep_delay_us(1000);
+#elif defined(CONFIG_CLOCK_CONTROL_NRF_COMMON) && !IS_ENABLED(CONFIG_HAS_MULTI_OPTION_CLOCKS)
+	err = nrf_clock_control_release(DEVICE_DT_GET_ONE(nordic_nrf_clock_lfclk), NULL);
 
 	__ASSERT_NO_MSG(err >= 0);
-#if !IS_ENABLED(__ASSERT_ON)
-	(void)err;
-#endif
-	nrfx_coredep_delay_us(1000);
-#elif defined(CONFIG_CLOCK_CONTROL_NRF_COMMON) &&                                                  \
-	!(defined(CONFIG_SOC_SERIES_NRF54H) || defined(CONFIG_SOC_SERIES_NRF92))
-	int err = nrf_clock_control_release(DEVICE_DT_GET_ONE(nordic_nrf_clock_lfclk), NULL);
 
-	__ASSERT_NO_MSG(err >= 0);
-#if !IS_ENABLED(__ASSERT_ON)
-	(void)err;
-#endif
+	nrfx_grtc_uninit();
 	nrfx_coredep_delay_us(1000);
+#else
+	nrfx_grtc_uninit();
 #endif
 }
 
@@ -599,8 +596,7 @@ static int sys_clock_driver_init(void)
 static int grtc_post_init(void)
 {
 #if defined(CONFIG_CLOCK_CONTROL_NRF) ||                                                           \
-	(defined(CONFIG_CLOCK_CONTROL_NRF_COMMON) &&                                               \
-	 !(defined(CONFIG_SOC_SERIES_NRF54H) || defined(CONFIG_SOC_SERIES_NRF92)))
+	(defined(CONFIG_CLOCK_CONTROL_NRF_COMMON) && !IS_ENABLED(CONFIG_HAS_MULTI_OPTION_CLOCKS))
 	static const enum nrf_lfclk_start_mode mode =
 		IS_ENABLED(CONFIG_SYSTEM_CLOCK_NO_WAIT)
 			? CLOCK_CONTROL_NRF_LF_START_NOWAIT

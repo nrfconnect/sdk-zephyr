@@ -315,67 +315,24 @@ __attribute__((interrupt("IRQ"))) void sys_clock_isr(void)
 }
 ARCH_ISR_DIAG_ON
 
+void sys_clock_unused(void)
+{
+	if (!IS_ENABLED(CONFIG_TICKLESS_KERNEL)) {
+		return;
+	}
+
+	/* Fast CPUs and a 24 bit counter mean that even idle systems need to
+	 * wake up multiple times per second. With no timeout pending and sloppy
+	 * idle allowing the uptime to drift, shut off the counter entirely.
+	 */
+	SysTick->CTRL &= ~SysTick_CTRL_ENABLE_Msk;
+	last_load = TIMER_STOPPED;
+}
+
 void sys_clock_set_timeout(uint32_t ticks, bool idle)
 {
+	ARG_UNUSED(idle);
 	__ASSERT(sys_clock_is_locked(), "system clock lock not held");
-
-	/* Fast CPUs and a 24 bit counter mean that even idle systems
-	 * need to wake up multiple times per second.  If the kernel
-	 * allows us to miss tick announcements while nothing is pending
-	 * (sloppy idle), then shut off the counter.
-	 */
-	if (IS_ENABLED(CONFIG_TICKLESS_KERNEL) && IS_ENABLED(CONFIG_SYSTEM_CLOCK_SLOPPY_IDLE) &&
-	    ticks == SYS_CLOCK_MAX_WAIT) {
-		SysTick->CTRL &= ~SysTick_CTRL_ENABLE_Msk;
-		last_load = TIMER_STOPPED;
-		return;
-	}
-
-#if !defined(CONFIG_SYSTEM_TIMER_LPM_COMPANION_NONE)
-	if (idle) {
-		uint64_t timeout_us =
-			((uint64_t)ticks * USEC_PER_SEC) / CONFIG_SYS_CLOCK_TICKS_PER_SEC;
-
-		timeout_idle = true;
-
-		/**
-		 * Invoke platform-specific layer to configure LPTIM
-		 * such that system wakes up after timeout elapses.
-		 */
-		z_sys_clock_lpm_enter(timeout_us);
-
-#if !defined(CONFIG_SYSTEM_TIMER_RESET_BY_LPM)
-		/* Store current value of SysTick counter to be able to
-		 * calculate a difference in measurements after exiting
-		 * the low-power state.
-		 */
-		cycle_pre_idle = cycle_count + elapsed();
-#else /* CONFIG_SYSTEM_TIMER_RESET_BY_LPM */
-		/**
-		 * SysTick will be placed under reset once we enter
-		 * low-power mode. Turn it off right now then update
-		 * the cycle counter now, since we won't be able to
-		 * to it after waking up.
-		 */
-		sys_clock_disable();
-		/* Ensure the SysTick interrupt is not pending. This is safe
-		 * as we just did the ISR's job, and MUST be done because
-		 * a pending interrupt could inhibit low-power mode entry.
-		 * Note: On Armv8-M, ICSR.STTNS is R/W, so preserve it while
-		 * writing the write-1-to-clear PENDSTCLR bit.
-		 */
-#ifdef SCB_ICSR_STTNS_Msk
-		SCB->ICSR = (SCB->ICSR & SCB_ICSR_STTNS_Msk) | SCB_ICSR_PENDSTCLR_Msk;
-#else
-		SCB->ICSR = SCB_ICSR_PENDSTCLR_Msk;
-#endif
-
-		cycle_count += elapsed();
-		overflow_cyc = 0;
-#endif /* !CONFIG_SYSTEM_TIMER_RESET_BY_LPM */
-		return;
-	}
-#endif /* !CONFIG_SYSTEM_TIMER_LPM_COMPANION_NONE */
 
 #if defined(CONFIG_TICKLESS_KERNEL)
 	/*
@@ -474,6 +431,56 @@ void sys_clock_set_timeout(uint32_t ticks, bool idle)
 		cycle_count += val1 - val2;
 	}
 #endif
+}
+
+void sys_clock_idle_enter(uint32_t ticks)
+{
+#if !defined(CONFIG_SYSTEM_TIMER_LPM_COMPANION_NONE)
+	uint64_t timeout_us =
+		((uint64_t)ticks * USEC_PER_SEC) / CONFIG_SYS_CLOCK_TICKS_PER_SEC;
+
+	__ASSERT(sys_clock_is_locked(), "system clock lock not held");
+
+	timeout_idle = true;
+
+	/**
+	 * Invoke platform-specific layer to configure LPTIM
+	 * such that system wakes up after timeout elapses.
+	 */
+	z_sys_clock_lpm_enter(timeout_us);
+
+#if !defined(CONFIG_SYSTEM_TIMER_RESET_BY_LPM)
+	/* Store current value of SysTick counter to be able to
+	 * calculate a difference in measurements after exiting
+	 * the low-power state.
+	 */
+	cycle_pre_idle = cycle_count + elapsed();
+#else /* CONFIG_SYSTEM_TIMER_RESET_BY_LPM */
+	/**
+	 * SysTick will be placed under reset once we enter
+	 * low-power mode. Turn it off right now then update
+	 * the cycle counter now, since we won't be able to
+	 * to it after waking up.
+	 */
+	sys_clock_disable();
+	/* Ensure the SysTick interrupt is not pending. This is safe
+	 * as we just did the ISR's job, and MUST be done because
+	 * a pending interrupt could inhibit low-power mode entry.
+	 * Note: On Armv8-M, ICSR.STTNS is R/W, so preserve it while
+	 * writing the write-1-to-clear PENDSTCLR bit.
+	 */
+#ifdef SCB_ICSR_STTNS_Msk
+	SCB->ICSR = (SCB->ICSR & SCB_ICSR_STTNS_Msk) | SCB_ICSR_PENDSTCLR_Msk;
+#else
+	SCB->ICSR = SCB_ICSR_PENDSTCLR_Msk;
+#endif
+
+	cycle_count += elapsed();
+	overflow_cyc = 0;
+#endif /* !CONFIG_SYSTEM_TIMER_RESET_BY_LPM */
+#else /* CONFIG_SYSTEM_TIMER_LPM_COMPANION_NONE */
+	sys_clock_set_timeout(ticks, false);
+#endif /* !CONFIG_SYSTEM_TIMER_LPM_COMPANION_NONE */
 }
 
 uint32_t sys_clock_elapsed(void)
