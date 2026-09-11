@@ -50,6 +50,7 @@ _names = [
     'mpcli',
     'mplab_ipe',
     'native',
+    'nrf7120_pdk',
     'nrfjprog',
     'nrfutil',
     'nsim',
