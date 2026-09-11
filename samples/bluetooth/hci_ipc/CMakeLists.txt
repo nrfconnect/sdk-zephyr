@@ -6,3 +6,14 @@ find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(hci_ipc)
 
 target_sources(app PRIVATE src/main.c)
+
+# The fault injection hook is kept with the test that uses it so that it cannot end up in a
+# production image by accident.
+if(CONFIG_HCI_IPC_FATAL_ERROR_TEST_HOOK)
+  target_sources(app PRIVATE
+    ${ZEPHYR_NRF_MODULE_DIR}/tests/bluetooth/hci_vs_fatal_error/src/fatal_error_test_hook.c
+  )
+  target_include_directories(app PRIVATE
+    ${ZEPHYR_NRF_MODULE_DIR}/tests/bluetooth/hci_vs_fatal_error/src
+  )
+endif()

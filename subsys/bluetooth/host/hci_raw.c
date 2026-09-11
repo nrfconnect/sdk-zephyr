@@ -211,3 +211,20 @@ int bt_enable_raw(struct k_fifo *rx_queue)
 
 	return 0;
 }
+
+int bt_disable_raw(void)
+{
+	int err;
+
+	LOG_DBG("");
+
+	err = bt_hci_close(bt_dev.hci);
+	if (err) {
+		LOG_ERR("HCI driver close failed (%d)", err);
+		return err;
+	}
+
+	LOG_INF("Bluetooth disabled in RAW mode");
+
+	return 0;
+}

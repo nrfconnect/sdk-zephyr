@@ -1,0 +1,41 @@
+# Copyright (c) 2026 Nordic Semiconductor ASA
+#
+# SPDX-License-Identifier: Apache-2.0
+
+mainmenu "Bluetooth: HCI IPC"
+
+config HCI_IPC_FATAL_ERROR_TEST_HOOK
+	bool "Fatal error test hook"
+	depends on ZEPHYR_NRF_MODULE
+	depends on IRQ_OFFLOAD
+	help
+	  Let the fault injection hook of the Vendor Specific fatal error reporting test consume
+	  the Vendor Specific HCI command that raises a fatal error in the requested execution
+	  context, before the command reaches the controller. The hook is implemented by the test
+	  in the nrf module, must never be enabled in a production image, and relies on
+	  irq_offload() to raise the fatal error from an interrupt context, so the image also has
+	  to be marked as a test with the TEST Kconfig option.
+
+if HCI_IPC_FATAL_ERROR_TEST_HOOK
+
+config HCI_IPC_FATAL_ERROR_TEST_HOOK_ZLI
+	bool "Fatal error test hook zero latency interrupt context"
+	default y
+	depends on ZERO_LATENCY_IRQS
+	depends on SOC_COMPATIBLE_NRF53X || SOC_SERIES_NRF54H
+	help
+	  Allow injecting the fatal error from a zero-latency interrupt context.
+
+config HCI_IPC_FATAL_ERROR_TEST_HOOK_ZLI_IRQN
+	int "Zero latency interrupt line used by the fatal error test hook"
+	depends on HCI_IPC_FATAL_ERROR_TEST_HOOK_ZLI
+	default 27 if SOC_COMPATIBLE_NRF53X # SWI1
+	default 89 if SOC_SERIES_NRF54H # SWI1
+	help
+	  Software interrupt line used to raise the fatal error from a zero-latency interrupt
+	  context. It must not be used by any other component, in particular not by the
+	  MPSL_LOW_PRIO_IRQN interrupt line.
+
+endif # HCI_IPC_FATAL_ERROR_TEST_HOOK
+
+source "Kconfig.zephyr"
