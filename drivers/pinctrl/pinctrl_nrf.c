@@ -110,7 +110,9 @@ static const nrf_gpio_pin_drive_t drive_modes[NRF_DRIVE_COUNT] = {
 #define NRF_PSEL_TDM(reg, line) ((NRF_TDM_Type *)reg)->PSEL.line
 #endif
 
-#if DT_ANY_COMPAT_HAS_PROP_STATUS_OKAY(nordic_nrf_vpr_coprocessor, pinctrl_0)
+#if DT_HAS_COMPAT_STATUS_OKAY(nordic_hpf_mspi_controller) || \
+	defined(CONFIG_MSPI_HPF) || \
+	DT_ANY_COMPAT_HAS_PROP_STATUS_OKAY(nordic_nrf_vpr_coprocessor, pinctrl_0)
 #if NRF_GPIO_HAS_SEL
 #define NRF_PSEL_VPR_VIO(psel) \
 	nrf_gpio_pin_control_select(psel, NRF_GPIO_PIN_SEL_VPR);
@@ -118,7 +120,7 @@ static const nrf_gpio_pin_drive_t drive_modes[NRF_DRIVE_COUNT] = {
 /* Pin routing is controlled by the secure domain, via UICR. */
 #define NRF_PSEL_VPR_VIO(psel)
 #endif
-#endif /* DT_ANY_COMPAT_HAS_PROP_STATUS_OKAY(nordic_nrf_vpr_coprocessor, pinctrl_0) */
+#endif /* DT_HAS_COMPAT_STATUS_OKAY(nordic_hpf_mspi_controller) || ... */
 
 #if NRF_GPIO_HAS_RETENTION_SETCLEAR
 
@@ -510,6 +512,20 @@ int pinctrl_configure_pins(const pinctrl_soc_pin_t *pins, uint8_t pin_cnt,
 			break;
 #endif /* DT_HAS_COMPAT_STATUS_OKAY(nordic_nrf_mspi) */
 #if defined(NRF_PSEL_VPR_VIO)
+		case NRF_FUN_SDP_MSPI_CS0:
+		case NRF_FUN_SDP_MSPI_CS1:
+		case NRF_FUN_SDP_MSPI_CS2:
+		case NRF_FUN_SDP_MSPI_CS3:
+		case NRF_FUN_SDP_MSPI_CS4:
+		case NRF_FUN_SDP_MSPI_SCK:
+		case NRF_FUN_SDP_MSPI_DQ0:
+		case NRF_FUN_SDP_MSPI_DQ1:
+		case NRF_FUN_SDP_MSPI_DQ2:
+		case NRF_FUN_SDP_MSPI_DQ3:
+		case NRF_FUN_SDP_MSPI_DQ4:
+		case NRF_FUN_SDP_MSPI_DQ5:
+		case NRF_FUN_SDP_MSPI_DQ6:
+		case NRF_FUN_SDP_MSPI_DQ7:
 		case NRF_FUN_VPR_VIO:
 			NRF_PSEL_VPR_VIO(psel);
 			dir = NRF_GPIO_PIN_DIR_OUTPUT;
