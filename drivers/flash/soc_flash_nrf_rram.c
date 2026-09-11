@@ -14,6 +14,7 @@
 #include <zephyr/irq.h>
 #include <zephyr/sys/barrier.h>
 #include <hal/nrf_rramc.h>
+#include <hal/nrf_common.h>
 
 #include <zephyr/../../drivers/flash/soc_flash_nrf.h>
 #include <soc_secure.h>
@@ -109,6 +110,20 @@ static inline bool is_within_bounds(off_t addr, size_t len, off_t boundary_start
 		(len <= (boundary_start + boundary_size - addr)));
 }
 
+static inline bool is_regular_addr_valid(off_t addr, size_t len)
+{
+	return is_within_bounds(addr, len, 0, RRAM_SIZE);
+}
+
+static inline bool is_uicr_addr_valid(off_t addr, size_t len)
+{
+#ifdef CONFIG_SOC_FLASH_NRF_RRAM_UICR
+	return is_within_bounds(addr, len, (off_t)NRF_UICR, sizeof(NRF_UICR_Type));
+#else
+	return false;
+#endif /* CONFIG_SOC_FLASH_NRF_UICR */
+}
+
 #if WRITE_BUFFER_ENABLE
 static void commit_changes(off_t addr, size_t len)
 {
@@ -152,46 +167,45 @@ static void commit_changes(off_t addr, size_t len)
 }
 #endif
 
+/*
+ * Write a single block of @p len bytes at @p addr.
+ * This primitive never sleeps, so it is safe to call from the
+ * radio-sync timeslot (interrupt) context via write_op().
+ */
 static void rram_write(off_t addr, const void *data, uint8_t fill_val, size_t len)
 {
-	size_t chunk_len = len;
-#if WRITE_BUFFER_ENABLE
-	/* Preserve the original write start address and length for commit_changes(). */
-	const off_t commit_addr = addr;
-	const size_t commit_len = len;
-#endif
+	if (is_uicr_addr_valid(addr, len) && (len % sizeof(uint32_t) == 0)) {
+		const size_t chunk_len = sizeof(uint32_t);
+		uint32_t *uicr_mem = (uint32_t *)addr;
+		uint32_t fill_val_32 = 0;
 
-#ifdef CONFIG_SOC_FLASH_NRF_THROTTLING
-	while (len > 0) {
-		chunk_len = MIN(len, CONFIG_NRF_RRAM_THROTTLING_DATA_BLOCK * WRITE_LINE_SIZE);
-#endif /* CONFIG_SOC_FLASH_NRF_THROTTLING */
-		if (data) {
-			memcpy((void *)addr, data, chunk_len);
-		} else {
-			memset((void *)addr, fill_val, chunk_len);
-		}
-#ifdef CONFIG_SOC_FLASH_NRF_THROTTLING
-		addr += chunk_len;
-		/* Only advance the source pointer when we are actually
-		 * copying user data. The erase emulation path enters this
-		 * loop with data == NULL and relies on the if (data) test
-		 * above to keep dispatching to memset() for every chunk.
-		 * Unconditionally adding chunk_len would turn data into a
-		 * non-NULL bogus pointer for the next iteration and cause
-		 * memcpy() to read random bytes from low memory into RRAM.
+		/* The UICR memory can be written once, in 32-bit chunks.
+		 * Enforce the writes to be 32-bit long by using direct accesses
+		 * to the memory location instead of using memcpy()/memset().
 		 */
-		if (data != NULL) {
+		memset((void *)&fill_val_32, fill_val, chunk_len);
+
+		while (len > 0) {
+			if (data) {
+				*uicr_mem = *((uint32_t *)data);
+			} else {
+				*uicr_mem = fill_val_32;
+			}
+
+			uicr_mem += 1;
 			data = (const uint8_t *)data + chunk_len;
+			len -= chunk_len;
 		}
-		len -= chunk_len;
-		k_usleep(CONFIG_NRF_RRAM_THROTTLING_DELAY);
+	} else if (data) {
+		memcpy((void *)addr, data, len);
+	} else {
+		memset((void *)addr, fill_val, len);
 	}
-#endif /* CONFIG_SOC_FLASH_NRF_THROTTLING */
 
 	barrier_dmem_fence_full(); /* Barrier following our last write. */
 
 #if WRITE_BUFFER_ENABLE
-	commit_changes(commit_addr, commit_len);
+	commit_changes(addr, len);
 #endif
 }
 
@@ -213,7 +227,9 @@ static int write_op(void *context)
 	struct flash_context *w_ctx = context;
 	size_t len;
 
+#ifndef CONFIG_SOC_FLASH_NRF_THROTTLING
 	uint32_t i = 0U;
+#endif
 
 #if !defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)
 	/* Defensive re-program of RRAMC write mode at the start of every radio time slot.
@@ -236,15 +252,26 @@ static int write_op(void *context)
 
 		shift_write_context(len, w_ctx);
 
-		if (w_ctx->len > 0) {
-			i++;
+		if (w_ctx->len == 0) {
+			break;
+		}
 
-			if (w_ctx->enable_time_limit) {
-				if (nrf_flash_sync_check_time_limit(i)) {
-					return FLASH_OP_ONGOING;
-				}
+#ifdef CONFIG_SOC_FLASH_NRF_THROTTLING
+		/* Throttling: emit exactly one write block per timeslot and let
+		 * the sync backend space the next timeslot by the throttling
+		 * delay.
+		 */
+		nrf_flash_sync_set_delay(CONFIG_NRF_RRAM_THROTTLING_DELAY);
+		return FLASH_OP_ONGOING;
+#else
+		i++;
+
+		if (w_ctx->enable_time_limit) {
+			if (nrf_flash_sync_check_time_limit(i)) {
+				return FLASH_OP_ONGOING;
 			}
 		}
+#endif /* CONFIG_SOC_FLASH_NRF_THROTTLING */
 	}
 
 	return FLASH_OP_DONE;
@@ -266,6 +293,14 @@ static int write_synchronously(off_t addr, const void *data, uint8_t fill_val, s
 	return nrf_flash_sync_exe(&flash_op_desc);
 }
 
+#ifdef CONFIG_SOC_FLASH_NRF_THROTTLING
+/* Weak fallback for sync backends that cannot control inter-timeslot spacing */
+__weak void nrf_flash_sync_set_delay(uint32_t delay_us)
+{
+	ARG_UNUSED(delay_us);
+}
+#endif /* CONFIG_SOC_FLASH_NRF_THROTTLING */
+
 #endif /* !CONFIG_SOC_FLASH_NRF_RADIO_SYNC_NONE */
 
 /* Internal write workhorse. Callers (nrf_rram_write / nrf_rram_fill_impl)
@@ -276,7 +311,6 @@ static int write_synchronously(off_t addr, const void *data, uint8_t fill_val, s
 static int nrf_write(off_t addr, const void *data, uint8_t fill_val, size_t len)
 {
 	int ret = 0;
-	addr += RRAM_START;
 
 	if (!len) {
 		return 0;
@@ -304,7 +338,36 @@ static int nrf_write(off_t addr, const void *data, uint8_t fill_val, size_t len)
 	} else
 #endif /* !CONFIG_SOC_FLASH_NRF_RADIO_SYNC_NONE */
 	{
+#ifdef CONFIG_SOC_FLASH_NRF_THROTTLING
+		/* Thread-context throttling: write one block at a time and
+		 * sleep after each block to spread the RRAM write current over
+		 * time.
+		 */
+		while (len > 0) {
+			size_t chunk_len =
+				MIN(len, CONFIG_NRF_RRAM_THROTTLING_DATA_BLOCK * WRITE_LINE_SIZE);
+
+			rram_write(addr, data, fill_val, chunk_len);
+
+			addr += chunk_len;
+			/* Only advance the source pointer for real data. The
+			 * erase-emulation path passes data == NULL and relies on
+			 * rram_write() dispatching to memset() for every chunk;
+			 * advancing NULL would fabricate a bogus pointer and turn
+			 * later chunks into memcpy() from low memory.
+			 */
+			if (data != NULL) {
+				data = (const uint8_t *)data + chunk_len;
+			}
+			len -= chunk_len;
+
+			if (!k_is_in_isr()) {
+				k_usleep(CONFIG_NRF_RRAM_THROTTLING_DELAY);
+			}
+		}
+#else
 		rram_write(addr, data, fill_val, len);
+#endif /* CONFIG_SOC_FLASH_NRF_THROTTLING */
 	}
 
 #if !defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)
@@ -382,10 +445,12 @@ static int nrf_rram_read(const struct device *dev, off_t addr, void *data, size_
 {
 	ARG_UNUSED(dev);
 
-	if (!is_within_bounds(addr, len, 0, RRAM_SIZE)) {
+	if (is_regular_addr_valid(addr, len)) {
+		addr += RRAM_START;
+	} else if (!is_uicr_addr_valid(addr, len)) {
+		LOG_ERR("invalid address: 0x%08lx:%zu", (unsigned long)addr, len);
 		return -EINVAL;
 	}
-	addr += RRAM_START;
 
 #if defined(CONFIG_TRUSTED_EXECUTION_NONSECURE) && DT_NODE_EXISTS(DT_NODELABEL(slot0_ns_partition))
 	if ((uintptr_t)addr < DT_REG_ADDR(DT_NODELABEL(slot0_ns_partition))) {
@@ -409,11 +474,28 @@ static int nrf_rram_write(const struct device *dev, off_t addr, const void *data
 		return -EINVAL;
 	}
 
-	if ((addr % WRITE_LINE_SIZE) != 0 || (len % WRITE_LINE_SIZE) != 0) {
-		return -EINVAL;
-	}
+	if (is_regular_addr_valid(addr, len)) {
+		if ((addr % WRITE_LINE_SIZE) != 0 || (len % WRITE_LINE_SIZE) != 0) {
+			return -EINVAL;
+		}
 
-	if (!is_within_bounds(addr, len, 0, RRAM_SIZE)) {
+		addr += RRAM_START;
+#ifdef CONFIG_SOC_FLASH_NRF_RRAM_UICR
+	} else if (is_uicr_addr_valid(addr, len)) {
+		/* UICR accesses must be aligned to 4 bytes. */
+		if ((addr % sizeof(uint32_t)) != 0 || (len % sizeof(uint32_t)) != 0) {
+			return -EINVAL;
+		}
+
+		/* If the UICR is not erased, return an error.
+		 * Otherwise - it will result in bus fault.
+		 */
+		if (*((uint32_t *)addr) != 0xFFFFFFFF) {
+			return -EIO;
+		}
+#endif /* CONFIG_SOC_FLASH_NRF_RRAM_UICR */
+	} else {
+		LOG_ERR("invalid address: 0x%08lx:%zu", (unsigned long)addr, len);
 		return -EINVAL;
 	}
 
@@ -432,9 +514,11 @@ static int nrf_rram_erase(const struct device *dev, off_t addr, size_t len)
 		return -EINVAL;
 	}
 
-	if (!is_within_bounds(addr, len, 0, RRAM_SIZE)) {
+	if (!is_regular_addr_valid(addr, len)) {
 		return -EINVAL;
 	}
+
+	addr += RRAM_START;
 
 	return nrf_rram_fill_impl(addr, ERASE_VALUE, len);
 }
@@ -452,9 +536,11 @@ static int nrf_rram_fill(const struct device *dev, uint8_t val, off_t addr, size
 		return -EINVAL;
 	}
 
-	if (!is_within_bounds(addr, len, 0, RRAM_SIZE)) {
+	if (!is_regular_addr_valid(addr, len)) {
 		return -EINVAL;
 	}
+
+	addr += RRAM_START;
 
 	return nrf_rram_fill_impl(addr, val, len);
 }
