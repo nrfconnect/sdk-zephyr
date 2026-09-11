@@ -105,6 +105,18 @@ Deprecated APIs and options
   * The :c:struct:`audio_codec_api` struct has been deprecated. Audio codec drivers are now
     expected to use the :c:macro:`DEVICE_API` macro to declare their driver API.
 
+* Build system
+
+  * The ``zephyr_file_copy()`` CMake function has been deprecated. Use the native
+    ``file(COPY_FILE ...)`` CMake command instead.
+
+* CPU Load
+
+  * :kconfig:option:`CONFIG_CPU_LOAD_METRIC` and :c:func:`cpu_load_metric_get` are deprecated. The
+    CPU load metric module has been merged into the unified :ref:`cpu_load` module; use
+    :kconfig:option:`CONFIG_CPU_LOAD` with the
+    :kconfig:option:`CONFIG_CPU_LOAD_BACKEND_RUNTIME_STATS` backend and :c:func:`cpu_load_get_cpu`.
+
 * :abbr:`DMIC (Digital Microphone Interface)`
 
   * The :c:struct:`_dmic_ops` struct has been deprecated. DMIC drivers are now expected to use the
@@ -348,6 +360,12 @@ Devicetree
 
 Other notable changes
 *********************
+
+* Build system
+
+  * The minimum required CMake version has been raised to 3.28.0, a version satisfied by the CMake package in the
+    Ubuntu 24.04 LTS package repositories. See the :ref:`migration guide <migration_4.5>` for
+    options if your distribution ships an older version.
 
 * Kernel
 
