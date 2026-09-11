@@ -37,7 +37,9 @@
 #include <zephyr/usb/usbd.h>
 
 #if defined(CONFIG_SOC_NRF5340_CPUAPP)
-#include <nrfx_clock.h>
+#include <zephyr/drivers/clock_control/nrf_clock_control.h>
+
+static const uint32_t hfclk_requested_frequency = MHZ(128);
 #endif /* CONFIG_SOC_NRF5340_CPUAPP */
 
 BUILD_ASSERT(strlen(CONFIG_BROADCAST_CODE) <= BT_ISO_BROADCAST_CODE_SIZE, "Invalid broadcast code");
@@ -553,13 +555,13 @@ int main(void)
 	/* Use this to turn on 128 MHz clock for the nRF5340 cpu_app */
 #if defined(CONFIG_CLOCK_CONTROL_NRF)
 	err = nrfx_clock_divider_set(NRF_CLOCK_DOMAIN_HFCLK, NRF_CLOCK_HFCLK_DIV_1);
-
+#else
+	err = clock_control_set_rate(DEVICE_DT_GET_ONE(nordic_nrf_clock_hfclk), NULL,
+				     &hfclk_requested_frequency);
+#endif
 	if (err != 0) {
 		LOG_WRN("Failed to set 128 MHz: %d", err);
 	}
-#else
-	nrfx_clock_hfclk_divider_set(NRF_CLOCK_HFCLK_DIV_1);
-#endif
 #endif /* CONFIG_SOC_NRF5340_CPUAPP */
 
 	err = bt_enable(NULL);
