@@ -48,7 +48,7 @@
 extern "C" {
 #endif
 
-/** @rfc{7527,section-4} Enhanced DAD nonce payload length in bytes. */
+/** RFC7527 section 4: Enhanced DAD nonce payload length in bytes. */
 #define NET_IF_IPV6_DAD_NONCE_LEN 6U
 
 /**
@@ -109,7 +109,7 @@ struct net_if_addr {
 			/** How many times we have done DAD */
 			uint8_t dad_count;
 
-			/** @rfc{7527,section-4} Enhanced DAD nonce payload (6 bytes). */
+			/** RFC7527 section 4: Enhanced DAD nonce payload (6 bytes). */
 			uint8_t dad_nonce[NET_IF_IPV6_DAD_NONCE_LEN];
 		};
 #endif /* CONFIG_NET_IPV6_DAD */
