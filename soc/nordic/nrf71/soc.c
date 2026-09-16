@@ -302,6 +302,23 @@ static void hfxo64m_start(void)
 	while (NRF_CLOCK->EVENTS_XOSTARTED == 0) {
 	}
 }
+
+static void hfxo64m_dump_regs(void)
+{
+	LOG_INF("=== HFXO64M Register Dump ===");
+	LOG_INF("TRIM_RTUNE:        0x%08x", HFXO64M_REG_TRIM_RTUNE);
+	LOG_INF("TRIM_CHIRPTUNE:    0x%08x", HFXO64M_REG_TRIM_CHIRPTUNE);
+	LOG_INF("TRIM_DOUBLERCOMP:  0x%08x", HFXO64M_REG_TRIM_DOUBLERCOMP);
+	LOG_INF("MIRROR:            0x%08x", HFXO64M_REG_MIRROR);
+	LOG_INF("PWRUPCTRL:         0x%08x", HFXO64M_REG_PWRUPCTRL);
+	LOG_INF("MODE:              0x%08x", HFXO64M_REG_MODE);
+	LOG_INF("XTALSETTLETIME:    0x%08x", HFXO64M_REG_XTALSETTLETIME);
+	LOG_INF("CHIRPTIME:         0x%08x", HFXO64M_REG_CHIRPTIME);
+	LOG_INF("ENABLEDAMPING:     0x%08x", HFXO64M_REG_ENABLEDAMPING);
+	LOG_INF("CFG:               0x%08x", HFXO64M_REG_CFG);
+	LOG_INF("===========================");
+}
+
 #if DT_HAS_COMPAT_STATUS_OKAY(nordic_nrf71_wifi_antsw)
 #define WIFI_ANTSW_NODE DT_COMPAT_GET_ANY_STATUS_OKAY(nordic_nrf71_wifi_antsw)
 
@@ -375,7 +392,7 @@ int nordicsemi_nrf71_init(void)
 	/* Bring up the 64 MHz crystal oscillator the Wi-Fi core depends on. */
 	hfxo64m_setup();
 	hfxo64m_start();
-
+	hfxo64m_dump_regs();
 #if DT_HAS_COMPAT_STATUS_OKAY(nordic_nrf_pwr_antswc)
 	/* Power on the antenna switch before starting the Wi-Fi core. */
 	*(volatile uint32_t *)PWR_ANTSWC_REG |= PWR_ANTSWC_ENABLE;
