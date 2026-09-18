@@ -236,6 +236,7 @@ config COAP_SERVER
 	bool "CoAP server support [EXPERIMENTAL]"
 	select EXPERIMENTAL
 	select NET_SOCKETS
+	select NET_CONTEXT_RECV_PKTINFO if NET_UDP
 	select ZVFS
 	select ZVFS_EVENTFD
 	help
