@@ -104,4 +104,11 @@ config NRF_RRAM_THROTTLING_DATA_BLOCK
 	  This is the number of data blocks (in number of 128-bit words) for flash write
 	  operations when throttling is enabled.
 
+config SOC_FLASH_NRF_RRAM_UICR
+	bool "Access to UICR"
+	depends on !TRUSTED_EXECUTION_NONSECURE
+	help
+	  Enable operations on UICR. Once enabled UICR are written or read as
+	  ordinary flash memory. Erase is not supported.
+
 endif # SOC_FLASH_NRF_RRAM
