@@ -50,6 +50,15 @@ int bt_send(struct net_buf *buf);
  */
 int bt_enable_raw(struct k_fifo *rx_queue);
 
+/** @brief Disable Bluetooth RAW channel:
+ *
+ *  Disable Bluetooth RAW HCI channel, closing the lower HCI transport. Any packet still queued
+ *  on the rx_queue passed to bt_enable_raw() stays there and remains owned by the caller.
+ *
+ *  @return Zero on success or (negative) error code otherwise.
+ */
+int bt_disable_raw(void);
+
 #ifdef __cplusplus
 }
 #endif

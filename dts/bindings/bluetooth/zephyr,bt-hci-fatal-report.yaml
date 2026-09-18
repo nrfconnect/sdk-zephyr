@@ -1,0 +1,46 @@
+# Copyright (c) 2026 Nordic Semiconductor ASA
+# SPDX-License-Identifier: Apache-2.0
+
+description: |
+  One-way channel carrying a Bluetooth fatal error report from a controller
+  running on another core to the host.
+
+  The controller writes its report from a fault handler, where the kernel can no
+  longer be relied upon and where blocking is not allowed, so this channel is
+  driven with nothing but plain memory accesses and a mailbox signal. It has no
+  session handshake and no acknowledgement, because a core that is about to be
+  reset cannot take part in either. That is also why it is kept separate from the
+  IPC instance carrying HCI: a general purpose IPC backend is free to take locks
+  and to defer work to a thread, neither of which survives a fault.
+
+  Both cores must describe the same memory region and the same mailbox channel.
+
+compatible: "zephyr,bt-hci-fatal-report"
+
+include: base.yaml
+
+properties:
+  memory-region:
+    type: phandle
+    required: true
+    description: |
+      Memory shared between the two cores, written by the controller and read by
+      the host. It has to hold one report plus eight bytes of packet buffer
+      overhead.
+
+  mboxes:
+    type: phandle-array
+    required: true
+    description: |
+      The single mailbox channel of this channel. The controller signals it after
+      writing a report, and the host reads the report when signalled.
+
+  mbox-names:
+    type: string-array
+    required: true
+
+  dcache-alignment:
+    type: int
+    description: |
+      Data cache line size of the cores sharing the memory region. Leave unset
+      when neither core caches the region.

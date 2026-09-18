@@ -16,6 +16,10 @@
 
 #include <zephyr/ipc/ipc_service.h>
 
+#if defined(CONFIG_BT_HCI_FATAL_REPORT)
+#include <zephyr/bluetooth/hci_fatal_report.h>
+#endif /* CONFIG_BT_HCI_FATAL_REPORT */
+
 #include <zephyr/net_buf.h>
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/l2cap.h>
@@ -26,6 +30,10 @@
 
 #include <zephyr/logging/log_ctrl.h>
 #include <zephyr/logging/log.h>
+
+#if defined(CONFIG_HCI_IPC_FATAL_ERROR_TEST_HOOK)
+#include "fatal_error_test_hook.h"
+#endif /* CONFIG_HCI_IPC_FATAL_ERROR_TEST_HOOK */
 
 LOG_MODULE_REGISTER(hci_ipc, CONFIG_BT_LOG_LEVEL);
 
@@ -209,6 +217,17 @@ static void tx_thread(void *p1, void *p2, void *p3)
 
 		/* Wait until a buffer is available */
 		buf = k_fifo_get(&tx_queue, K_FOREVER);
+
+#if defined(CONFIG_HCI_IPC_FATAL_ERROR_TEST_HOOK)
+		/* The controller does not know the fault injection opcode, so the hook has to
+		 * take the buffer out of the stream before it is forwarded.
+		 */
+		if (fatal_error_test_hook_cmd(buf)) {
+			net_buf_unref(buf);
+			continue;
+		}
+#endif /* CONFIG_HCI_IPC_FATAL_ERROR_TEST_HOOK */
+
 		/* Pass buffer to the stack */
 		err = bt_send(buf);
 		if (err) {
@@ -273,35 +292,75 @@ static void hci_ipc_send(struct net_buf *buf, bool is_fatal_err)
 	net_buf_unref(buf);
 }
 
-#if defined(CONFIG_BT_CTLR_ASSERT_HANDLER)
-void bt_ctlr_assert_handle(char *file, uint32_t line)
+#if defined(CONFIG_BT_HCI_FATAL_REPORT)
+/* A fatal error is reported with interrupts locked, and possibly from an interrupt or a
+ * zero-latency interrupt context. The HCI endpoint cannot carry the report from there, because its
+ * backend takes a mutex and may hand the message to a thread on the way to the shared memory.
+ * The dedicated channel is a shared memory write followed by a mailbox signal and nothing else,
+ * so it works wherever the fault happens to be raised.
+ */
+static bool fatal_report_enabled;
+
+static bool fatal_report_ready(void)
 {
-	/* Disable interrupts, this is unrecoverable */
-	(void)irq_lock();
+	return fatal_report_enabled;
+}
 
-#if defined(CONFIG_BT_HCI_VS_FATAL_ERROR)
-	/* Generate an error event only when IPC service endpoint is already bound. */
-	if (ipc_ept_ready) {
-		/* Prepare vendor specific HCI debug event */
-		struct net_buf *buf;
+static void fatal_report_send(struct net_buf *buf)
+{
+	int ret;
 
-		buf = hci_vs_err_assert(file, line);
-		if (buf != NULL) {
-			/* Send the event over ipc */
-			hci_ipc_send(buf, HCI_FATAL_ERR_MSG);
-		} else {
-			LOG_ERR("Can't create Fatal Error HCI event: %s at %d", __FILE__, __LINE__);
-		}
-	} else {
-		LOG_ERR("IPC endpoint is not ready yet: %s at %d", __FILE__, __LINE__);
+	ret = bt_hci_fatal_report_send(buf->data, buf->len);
+	if (ret < 0) {
+		LOG_ERR("Fatal error report send failed: %d", ret);
 	}
 
+	net_buf_unref(buf);
+}
+
+static void fatal_report_init(void)
+{
+	int err;
+
+	err = bt_hci_fatal_report_tx_enable();
+	if (err) {
+		LOG_ERR("Preparing the fatal error report channel failed with %d", err);
+		return;
+	}
+
+	fatal_report_enabled = true;
+}
+#else /* !CONFIG_BT_HCI_FATAL_REPORT */
+/* Without a channel of its own the report has to take the HCI endpoint, which is only safe from a
+ * thread context.
+ */
+#if defined(CONFIG_BT_CTLR_ASSERT_HANDLER) || defined(CONFIG_BT_HCI_VS_FATAL_ERROR)
+static bool fatal_report_ready(void)
+{
+	return ipc_ept_ready;
+}
+
+static void fatal_report_send(struct net_buf *buf)
+{
+	hci_ipc_send(buf, HCI_FATAL_ERR_MSG);
+}
+#endif /* CONFIG_BT_CTLR_ASSERT_HANDLER || CONFIG_BT_HCI_VS_FATAL_ERROR */
+
+static void fatal_report_init(void)
+{
+}
+#endif /* !CONFIG_BT_HCI_FATAL_REPORT */
+
+#if defined(CONFIG_BT_CTLR_ASSERT_HANDLER) || defined(CONFIG_BT_HCI_VS_FATAL_ERROR)
+static FUNC_NORETURN void hci_ipc_fatal_error_end(void)
+{
+#if defined(CONFIG_RESET_ON_FATAL_ERROR)
+	/* Provided by the fatal error library of the nrf module. */
+	extern FUNC_NORETURN void fatal_error_reset(void);
+
+	fatal_error_reset();
+#else /* !CONFIG_RESET_ON_FATAL_ERROR */
 	LOG_ERR("Halting system");
-
-#else /* !CONFIG_BT_HCI_VS_FATAL_ERROR */
-	LOG_ERR("Controller assert in: %s at %d", file, line);
-
-#endif /* !CONFIG_BT_HCI_VS_FATAL_ERROR */
 
 	/* Flush the logs before locking the CPU */
 	LOG_PANIC();
@@ -309,8 +368,42 @@ void bt_ctlr_assert_handle(char *file, uint32_t line)
 	while (true) {
 		k_cpu_idle();
 	};
+#endif /* !CONFIG_RESET_ON_FATAL_ERROR */
 
 	CODE_UNREACHABLE;
+}
+#endif /* CONFIG_BT_CTLR_ASSERT_HANDLER || CONFIG_BT_HCI_VS_FATAL_ERROR */
+
+#if defined(CONFIG_BT_CTLR_ASSERT_HANDLER)
+void bt_ctlr_assert_handle(char *file, uint32_t line)
+{
+	/* Disable interrupts, this is unrecoverable */
+	(void)irq_lock();
+
+#if defined(CONFIG_BT_HCI_VS_FATAL_ERROR)
+	/* Generate an error event only when the report channel is already bound. */
+	if (fatal_report_ready()) {
+		/* Prepare vendor specific HCI debug event */
+		struct net_buf *buf;
+
+		buf = hci_vs_err_assert(file, line);
+		if (buf != NULL) {
+			/* Send the event over ipc */
+			LOG_WRN("Send from bt ctlr assert handler over ipc.");
+			fatal_report_send(buf);
+		} else {
+			LOG_ERR("Can't create bt ctlr error HCI event.");
+		}
+	} else {
+		LOG_ERR("IPC endpoint is not ready yet.");
+	}
+
+#else /* !CONFIG_BT_HCI_VS_FATAL_ERROR */
+	LOG_ERR("Controller assert in: %s at %d", file, line);
+
+#endif /* !CONFIG_BT_HCI_VS_FATAL_ERROR */
+
+	hci_ipc_fatal_error_end();
 }
 #endif /* CONFIG_BT_CTLR_ASSERT_HANDLER */
 
@@ -323,30 +416,47 @@ void k_sys_fatal_error_handler(unsigned int reason, const struct arch_esf *esf)
 	/* Generate an error event only when there is a stack frame and IPC service endpoint is
 	 * already bound.
 	 */
-	if (esf != NULL && ipc_ept_ready) {
+	if (esf != NULL && fatal_report_ready()) {
 		/* Prepare vendor specific HCI debug event */
 		struct net_buf *buf;
 
 		buf = hci_vs_err_stack_frame(reason, esf);
 		if (buf != NULL) {
-			hci_ipc_send(buf, HCI_FATAL_ERR_MSG);
+			LOG_WRN("Send from fatal error handler over ipc.");
+			fatal_report_send(buf);
 		} else {
-			LOG_ERR("Can't create Fatal Error HCI event.\n");
+			LOG_ERR("Can't create Fatal Error HCI event.");
 		}
 	}
 
-	LOG_ERR("Halting system");
-
-	/* Flush the logs before locking the CPU */
-	LOG_PANIC();
-
-	while (true) {
-		k_cpu_idle();
-	};
-
-	CODE_UNREACHABLE;
+	hci_ipc_fatal_error_end();
 }
 #endif /* CONFIG_BT_HCI_VS_FATAL_ERROR */
+
+#if defined(CONFIG_BT_WAIT_NOP)
+/* Announce that the controller is ready to receive commands. The host has no other way of
+ * telling that the controller has booted, since the IPC endpoint binds before that.
+ */
+static void hci_ipc_send_nop(void)
+{
+	struct bt_hci_evt_cmd_complete *cc;
+	struct bt_hci_evt_hdr *hdr;
+	struct net_buf *buf;
+
+	buf = bt_buf_get_rx(BT_BUF_EVT, K_FOREVER);
+
+	hdr = net_buf_add(buf, sizeof(*hdr));
+	hdr->evt = BT_HCI_EVT_CMD_COMPLETE;
+	hdr->len = sizeof(*cc);
+
+	cc = net_buf_add(buf, sizeof(*cc));
+	cc->ncmd = 1U;
+	cc->opcode = sys_cpu_to_le16(BT_OP_NOP);
+
+	LOG_INF("Sending NOP message of %u bytes.", buf->len);
+	hci_ipc_send(buf, HCI_REGULAR_MSG);
+}
+#endif /* CONFIG_BT_WAIT_NOP */
 
 static void hci_ept_bound(void *priv)
 {
@@ -403,7 +513,13 @@ int main(void)
 		LOG_ERR("Registering endpoint failed with %d", err);
 	}
 
+	fatal_report_init();
+
 	k_sem_take(&ipc_bound_sem, K_FOREVER);
+
+#if defined(CONFIG_BT_WAIT_NOP)
+	hci_ipc_send_nop();
+#endif /* CONFIG_BT_WAIT_NOP */
 
 	while (1) {
 		struct net_buf *buf;

@@ -225,6 +225,31 @@ config BT_HCI_VS_FATAL_ERROR
 	  Enable emitting HCI Vendor-Specific events for system and Controller
 	  errors that are unrecoverable.
 
+config BT_HCI_FATAL_REPORT
+	bool "Channel carrying fatal error reports out of the controller"
+	depends on DT_HAS_ZEPHYR_BT_HCI_FATAL_REPORT_ENABLED
+	default y
+	select MBOX
+	help
+	  Carry the vendor specific Zephyr Fatal Error event from a controller
+	  running on another core over a channel of its own, described by the
+	  zephyr,bt-hci-fatal-report devicetree binding.
+
+	  A controller raises that event from a fault handler, where it cannot
+	  block and where the kernel is no longer trustworthy, so the IPC
+	  instance carrying HCI is of no use: a general purpose IPC backend may
+	  take a lock or defer the message to a thread. This channel is written
+	  with plain memory accesses and a mailbox signal instead, so a faulted
+	  core can still get its report out.
+
+if BT_HCI_FATAL_REPORT
+
+module = BT_HCI_FATAL_REPORT
+module-str = bt_hci_fatal_report
+source "subsys/logging/Kconfig.template.log_config"
+
+endif # BT_HCI_FATAL_REPORT
+
 config BT_HCI_VS_EXT_DETECT
 	bool "Use heuristics to guess HCI vendor extensions support in advance"
 	depends on BT_HCI_VS && !HAS_BT_CTLR
