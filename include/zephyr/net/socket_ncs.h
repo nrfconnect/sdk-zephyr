@@ -18,6 +18,7 @@ extern "C" {
 
 #include <stddef.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 /* When CONFIG_NET_SOCKETS_OFFLOAD is enabled, offloaded sockets take precedence
  * when creating a new socket. Combine this flag with a socket type when
@@ -90,6 +91,30 @@ extern "C" {
  *  @note The user data size in send requests also becomes limited to a maximum of 1024 bytes.
  */
 #define DTLS_FRAG_EXT_1024_ENABLED 2
+
+/** Socket option to configure the minimum and maximum TLS version advertised during the
+ *  handshake.
+ *  This option takes a @ref socket_ncs_tls_versions structure.
+ *
+ *  @note This is only supported by the following modem firmware:
+ *        - lpwa-cellular_nrf92
+ */
+#define TLS_SUPPORTED_VERSION (NET_SOCKET_NCS_BASE + 23)
+
+/** Option value for the @ref TLS_SUPPORTED_VERSION socket option.
+ *  Allowed version values are: @ref TLS_SUPPORTED_VERSION_1_2 and @ref TLS_SUPPORTED_VERSION_1_3.
+ */
+struct socket_ncs_tls_versions {
+	/** Minimum supported TLS version advertised in the handshake. */
+	uint8_t min_tls_version;
+	/** Maximum supported TLS version advertised in the handshake. */
+	uint8_t max_tls_version;
+};
+
+/** TLS version 1.2 */
+#define TLS_SUPPORTED_VERSION_1_2 0
+/** TLS version 1.3 */
+#define TLS_SUPPORTED_VERSION_1_3 1
 
 /* NCS specific socket options */
 
