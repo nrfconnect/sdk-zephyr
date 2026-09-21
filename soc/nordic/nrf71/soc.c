@@ -37,6 +37,7 @@
 #include <hal/nrf_mpc.h>
 #include <hal/nrf_lfxo.h>
 
+#include <approtect_setup.h>
 #include <wicr_setup.h>
 
 LOG_MODULE_REGISTER(soc, CONFIG_SOC_LOG_LEVEL);
@@ -200,6 +201,10 @@ int nordicsemi_nrf71_init(void)
 
 #if (defined(NRF_APPLICATION) && !defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)) || \
 	!defined(__ZEPHYR__)
+#if defined(CONFIG_SOC_NRF7120_APPROTECT_BOOT_WORKAROUND)
+	approtect_setup();
+#endif
+
 #if defined(CONFIG_SOC_NRF7120_WICR_SETUP)
 	int ret = wicr_setup();
 
