@@ -165,6 +165,14 @@ static void ipct_configuration(void)
 #endif /* CONFIG_TRUSTED_EXECUTION_NONSECURE */
 
 #if defined(CONFIG_SOC_NRF71_WIFI_BOOT)
+/*
+ * These helpers poke the Wi-Fi core and CLOCK registers, so they only exist in the domain that
+ * owns that setup: the Zephyr secure/application image, or the non-Zephyr (TF-M) build. Guarding
+ * the definitions with the same condition as the call site keeps the non-secure Zephyr build from
+ * compiling them unused.
+ */
+#if (defined(NRF_APPLICATION) && !defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)) || \
+	!defined(__ZEPHYR__)
 
 #if DT_HAS_COMPAT_STATUS_OKAY(nordic_nrf71_wifi_antsw)
 #define WIFI_ANTSW_NODE DT_COMPAT_GET_ANY_STATUS_OKAY(nordic_nrf71_wifi_antsw)
@@ -200,7 +208,8 @@ static void wifi_setup(void)
 	NRF_WIFICORE_LMAC_VPR->INITPC = (uint32_t)(uintptr_t)NRF_WICR->FIRMWARE.LMACINITPC;
 	NRF_WIFICORE_LMAC_VPR->CPURUN = (VPR_CPURUN_EN_Running << VPR_CPURUN_EN_Pos);
 }
-#endif
+#endif /* (NRF_APPLICATION && !CONFIG_TRUSTED_EXECUTION_NONSECURE) || !__ZEPHYR__ */
+#endif /* CONFIG_SOC_NRF71_WIFI_BOOT */
 
 /**
  * This function is used by TF-M (see target_cfg_71.c, nrf71_init.c). You must align the TF-M
@@ -240,9 +249,6 @@ int nordicsemi_nrf71_init(void)
 #endif
 
 #if defined(CONFIG_SOC_NRF71_WIFI_BOOT)
-	wifi_setup();
-#endif
-
 #if DT_HAS_COMPAT_STATUS_OKAY(nordic_nrf_pwr_antswc)
 	/* Power on the antenna switch before starting the Wi-Fi core. */
 	*(volatile uint32_t *)PWR_ANTSWC_REG |= PWR_ANTSWC_ENABLE;
@@ -252,8 +258,10 @@ int nordicsemi_nrf71_init(void)
 	/* Steer the (now powered) antenna switch towards WLAN before Wi-Fi boot. */
 	antsw_setup();
 #endif
+
 	wifi_setup();
 #endif /* CONFIG_SOC_NRF71_WIFI_BOOT */
+#endif /* (NRF_APPLICATION && !CONFIG_TRUSTED_EXECUTION_NONSECURE) || !__ZEPHYR__ */
 
 	/* Configure LFXO capacitive load if internal load capacitors are used */
 #if DT_ENUM_HAS_VALUE(LFXO_NODE, load_capacitors, internal)
