@@ -16,6 +16,10 @@
 #include <zephyr/device.h>
 #include <zephyr/ipc/ipc_service.h>
 
+#if defined(CONFIG_BT_HCI_FATAL_REPORT)
+#include <zephyr/bluetooth/hci_fatal_report.h>
+#endif
+
 #define LOG_LEVEL CONFIG_BT_HCI_DRIVER_LOG_LEVEL
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(bt_hci_driver);
@@ -383,6 +387,40 @@ static void hci_ept_recv(const void *data, size_t len, void *priv)
 	bt_ipc_rx(dev, data, len);
 }
 
+#if defined(CONFIG_BT_HCI_FATAL_REPORT)
+static void fatal_report_recv(const void *data, size_t len, void *user_data)
+{
+	const struct device *dev = user_data;
+
+	/* The report is an ordinary HCI event, it only takes a different route to get here. */
+	bt_ipc_rx(dev, data, len);
+}
+
+static int fatal_report_open(const struct device *dev)
+{
+	return bt_hci_fatal_report_rx_enable(fatal_report_recv, (void *)dev);
+}
+
+static int fatal_report_close(const struct device *dev)
+{
+	ARG_UNUSED(dev);
+
+	return bt_hci_fatal_report_rx_disable();
+}
+#else /* !CONFIG_BT_HCI_FATAL_REPORT */
+static int fatal_report_open(const struct device *dev)
+{
+	ARG_UNUSED(dev);
+	return 0;
+}
+
+static int fatal_report_close(const struct device *dev)
+{
+	ARG_UNUSED(dev);
+	return 0;
+}
+#endif /* !CONFIG_BT_HCI_FATAL_REPORT */
+
 int __weak bt_hci_transport_setup(const struct device *dev)
 {
 	ARG_UNUSED(dev);
@@ -426,6 +464,12 @@ static int bt_ipc_open(const struct device *dev)
 		return err;
 	}
 
+	err = fatal_report_open(dev);
+	if (err) {
+		LOG_ERR("Opening the fatal error report channel failed with %d", err);
+		return err;
+	}
+
 	return 0;
 }
 
@@ -433,6 +477,12 @@ static int bt_ipc_close(const struct device *dev)
 {
 	struct ipc_data *ipc = dev->data;
 	int err;
+
+	err = fatal_report_close(dev);
+	if (err) {
+		LOG_ERR("Closing the fatal error report channel failed with %d", err);
+		return err;
+	}
 
 	err = ipc_service_deregister_endpoint(&ipc->hci_ept);
 	if (err) {
