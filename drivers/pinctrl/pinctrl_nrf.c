@@ -116,9 +116,12 @@ static const nrf_gpio_pin_drive_t drive_modes[NRF_DRIVE_COUNT] = {
 #if defined(CONFIG_SOC_SERIES_NRF54L)
 #define NRF_PSEL_SDP_MSPI(psel) \
 	nrf_gpio_pin_control_select(psel, NRF_GPIO_PIN_SEL_VPR);
+#define NRF_PSEL_SDP_MSPI_LP(psel) \
+	nrf_gpio_pin_control_select(psel, NRF_GPIO_PIN_SEL_GPIO);
 #elif defined(CONFIG_SOC_SERIES_NRF54H)
 /* On nRF54H, pin routing is controlled by secure domain, via UICR. */
 #define NRF_PSEL_SDP_MSPI(psel)
+#define NRF_PSEL_SDP_MSPI_LP(psel)
 #endif
 #endif /* DT_HAS_COMPAT_STATUS_OKAY(nordic_hpf_mspi_controller) || ... */
 
@@ -526,7 +529,11 @@ int pinctrl_configure_pins(const pinctrl_soc_pin_t *pins, uint8_t pin_cnt,
 		case NRF_FUN_SDP_MSPI_DQ5:
 		case NRF_FUN_SDP_MSPI_DQ6:
 		case NRF_FUN_SDP_MSPI_DQ7:
-			NRF_PSEL_SDP_MSPI(psel);
+			if (NRF_GET_LP(pins[i]) == NRF_LP_ENABLE) {
+				NRF_PSEL_SDP_MSPI_LP(psel);
+			} else {
+				NRF_PSEL_SDP_MSPI(psel);
+			}
 			dir = NRF_GPIO_PIN_DIR_OUTPUT;
 			input = NRF_GPIO_PIN_INPUT_CONNECT;
 			break;
