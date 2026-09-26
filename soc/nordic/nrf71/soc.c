@@ -36,6 +36,7 @@
 #include <hal/nrf_spu.h>
 #include <hal/nrf_mpc.h>
 #include <hal/nrf_lfxo.h>
+#include <hal/nrf_gpio.h>
 
 #include <approtect_setup.h>
 #include <wicr_setup.h>
@@ -146,6 +147,23 @@ static inline NRF_SPU_Type *spu_instance_from_peripheral_addr(uint32_t periphera
 	return (NRF_SPU_Type *)(0x50000000 | apb_bus_number);
 }
 
+static void oscillators_configuration(void)
+{
+	NRF_SPU_Type *spu_instance =
+		spu_instance_from_peripheral_addr(NRF_OSCILLATORS_S_BASE);
+	uint16_t periph_id = NRFX_PERIPHERAL_ID_GET(NRF_OSCILLATORS_S_BASE);
+	uint16_t spu_id = NRFX_PERIPHERAL_ID_GET(spu_instance);
+	uint8_t index = (uint8_t)(periph_id - spu_id);
+
+	/*
+	 * Wi-Fi is non-secure and configures the PLL in NRF_OSCILLATORS.
+	 * NRF_OSCILLATORS and NRF_REGULATORS share a peripheral ID and must
+	 * therefore have the same security configuration.
+	 */
+	nrf_spu_periph_perm_secattr_set(spu_instance, index, false);
+	nrf_spu_periph_perm_lock_enable(spu_instance, index);
+}
+
 static void grtc_configuration(void)
 {
 	/* Split security configuration to let Wi-Fi access GRTC */
@@ -163,9 +181,41 @@ static void ipct_configuration(void)
 }
 #endif /* CONFIG_TRUSTED_EXECUTION_NONSECURE */
 
-#if defined(CONFIG_SOC_NRF71_WIFI_BOOT)
 #if (defined(NRF_APPLICATION) && !defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)) || \
 	!defined(__ZEPHYR__)
+#if DT_HAS_COMPAT_STATUS_OKAY(nordic_nrf71_antsw)
+#define ANTSW_NODE DT_COMPAT_GET_ANY_STATUS_OKAY(nordic_nrf71_antsw)
+
+/* Steering an unpowered switch is meaningless: require pwr_antswc to power it. */
+BUILD_ASSERT(DT_HAS_COMPAT_STATUS_OKAY(nordic_nrf_pwr_antswc),
+	     "antsw steering requires pwr_antswc to power the antenna switch");
+
+/*
+ * Steer the antenna switch (ANTSW) towards its Kconfig-selected default
+ * radio (CONFIG_SOC_NRF71_ANTSW_DEFAULT) before either radio that shares it
+ * starts using it. This runs before the GPIO driver is up, so the pin
+ * (described in devicetree) is configured directly through the nrf_gpio
+ * HAL, which keeps the access on the P0 alias that matches the build's
+ * security state. Powering the switch is handled separately by pwr_antswc.
+ */
+static void antsw_setup(void)
+{
+	uint32_t sel_psel = NRF_DT_GPIOS_TO_PSEL(ANTSW_NODE, sel_gpios);
+
+	/* Drive the pin to the WLAN or BLE position before enabling the output,
+	 * then configure it as a plain output. No pull is needed on a driven
+	 * output.
+	 */
+	if (IS_ENABLED(CONFIG_SOC_NRF71_ANTSW_DEFAULT_BLE)) {
+		nrf_gpio_pin_set(sel_psel);
+	} else {
+		nrf_gpio_pin_clear(sel_psel);
+	}
+	nrf_gpio_cfg_output(sel_psel);
+}
+#endif /* DT_HAS_COMPAT_STATUS_OKAY(nordic_nrf71_antsw) */
+
+#if defined(CONFIG_SOC_NRF71_WIFI_BOOT)
 static void wifi_setup(void)
 {
 	/* Kickstart the LMAC processor */
@@ -194,6 +244,7 @@ int nordicsemi_nrf71_init(void)
 
 #if !defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)
 	/* Skip for tf-m, configuration exist in target_cfg_71.c */
+	oscillators_configuration();
 	mpc_configuration();
 	grtc_configuration();
 	ipct_configuration();
@@ -214,12 +265,18 @@ int nordicsemi_nrf71_init(void)
 	}
 #endif
 
-#if defined(CONFIG_SOC_NRF71_WIFI_BOOT)
-	wifi_setup();
+#if DT_HAS_COMPAT_STATUS_OKAY(nordic_nrf_pwr_antswc)
+	/* Power on the antenna switch before steering it or starting the Wi-Fi core. */
+	*(volatile uint32_t *)PWR_ANTSWC_REG |= PWR_ANTSWC_ENABLE;
 #endif
 
-#if DT_HAS_COMPAT_STATUS_OKAY(nordic_nrf_pwr_antswc)
-	*(volatile uint32_t *)PWR_ANTSWC_REG |= PWR_ANTSWC_ENABLE;
+#if DT_HAS_COMPAT_STATUS_OKAY(nordic_nrf71_antsw)
+	/* Steer the (now powered) antenna switch towards its default radio. */
+	antsw_setup();
+#endif
+
+#if defined(CONFIG_SOC_NRF71_WIFI_BOOT)
+	wifi_setup();
 #endif
 
 	/* Configure LFXO capacitive load if internal load capacitors are used */

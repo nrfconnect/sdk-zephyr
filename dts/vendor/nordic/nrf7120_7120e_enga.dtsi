@@ -124,6 +124,17 @@
 		status = "disabled";
 	};
 
+	antsw: antsw {
+		compatible = "nordic,nrf71-antsw";
+		/*
+		 * Steers the antenna switch towards its default radio, driven from
+		 * soc_early_init_hook() before Wi-Fi or BLE starts using it. Hardwired
+		 * to P0.05 in nRF7120. Powering the switch is handled by pwr_antswc.
+		 */
+		sel-gpios = <&gpio0 5 GPIO_ACTIVE_LOW>;
+		status = "disabled";
+	};
+
 	soc {
 		#address-cells = <1>;
 		#size-cells = <1>;
