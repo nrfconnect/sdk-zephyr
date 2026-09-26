@@ -1,6 +1,7 @@
 # CoAP implementation for Zephyr
 
 # Copyright (c) 2017 Intel Corporation
+# Copyright (c) 2026 Siemens AG
 # SPDX-License-Identifier: Apache-2.0
 
 config COAP
@@ -235,6 +236,7 @@ config COAP_SERVER
 	bool "CoAP server support [EXPERIMENTAL]"
 	select EXPERIMENTAL
 	select NET_SOCKETS
+	select NET_CONTEXT_RECV_PKTINFO if NET_UDP
 	select ZVFS
 	select ZVFS_EVENTFD
 	help
@@ -338,6 +340,8 @@ config COAP_SERVER_SHELL
 	  Enable CoAP service shell commands.
 
 endif
+
+rsource "Kconfig.oscore"
 
 module = COAP
 module-dep = NET_LOG

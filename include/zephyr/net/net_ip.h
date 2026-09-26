@@ -647,6 +647,29 @@ struct net_udp_hdr {
 	uint16_t chksum;
 } __packed;
 
+/** @brief UDP Options Maximum Reassembled Datagram Size (MRDS), RFC 9868.
+ *
+ * Value type for the @c ZSOCK_UDP_OPT_MRDS socket option and the
+ * @c ZSOCK_UDP_OPT_CMSG_MRDS ancillary control message.
+ */
+struct net_udp_opt_mrds {
+	/** Maximum reassembled datagram size in bytes. */
+	uint16_t size;
+	/** Maximum number of fragments, or 0 if unspecified. */
+	uint8_t segs;
+};
+
+/** @brief UDP Options Timestamp (TIME), RFC 9868.
+ *
+ * Value type for the @c ZSOCK_UDP_OPT_CMSG_TIME ancillary control message.
+ */
+struct net_udp_opt_time {
+	/** Timestamp value of the sender. */
+	uint32_t tsval;
+	/** Timestamp echo reply (last @c tsval received from the peer). */
+	uint32_t tsecr;
+};
+
 struct net_tcp_hdr {
 	uint16_t src_port;
 	uint16_t dst_port;
@@ -2147,6 +2170,46 @@ int net_port_set(struct net_sockaddr *addr, uint16_t port);
  * @return 0 if ok, < 0 if error
  */
 int net_port_get(struct net_sockaddr *addr, uint16_t *port);
+
+/**
+ * @brief Compare socket addresses.
+ *
+ * @param a First address
+ * @param b Second address
+ *
+ * @return true if a and b are equal, false otherwise.
+ */
+static inline bool net_sockaddr_cmp(const struct net_sockaddr *a, const struct net_sockaddr *b)
+{
+	if (a->sa_family != b->sa_family) {
+		return false;
+	}
+
+	if (a->sa_family == NET_AF_INET) {
+		const struct net_sockaddr_in *a4 = net_sin(a);
+		const struct net_sockaddr_in *b4 = net_sin(b);
+
+		if (a4->sin_port != b4->sin_port) {
+			return false;
+		}
+
+		return net_ipv4_addr_cmp(&a4->sin_addr, &b4->sin_addr);
+	}
+
+	if (b->sa_family == NET_AF_INET6) {
+		const struct net_sockaddr_in6 *a6 = net_sin6(a);
+		const struct net_sockaddr_in6 *b6 = net_sin6(b);
+
+		if (a6->sin6_port != b6->sin6_port) {
+			return false;
+		}
+
+		return net_ipv6_addr_cmp(&a6->sin6_addr, &b6->sin6_addr);
+	}
+
+	/* Invalid address family */
+	return false;
+}
 
 /**
  * @brief Compare TCP sequence numbers.
