@@ -624,29 +624,12 @@ int eswifi_socket_create(int family, int type, int proto)
 
 static int eswifi_socket_ioctl(void *obj, unsigned int request, va_list args)
 {
-	switch (request) {
-	case ZFD_IOCTL_POLL_PREPARE:
-		return -EXDEV;
+	ARG_UNUSED(obj);
+	ARG_UNUSED(request);
+	ARG_UNUSED(args);
 
-	case ZFD_IOCTL_POLL_UPDATE:
-		return -EOPNOTSUPP;
-
-	case ZFD_IOCTL_POLL_OFFLOAD: {
-		struct zsock_pollfd *fds;
-		int nfds;
-		int timeout;
-
-		fds = va_arg(args, struct zsock_pollfd *);
-		nfds = va_arg(args, int);
-		timeout = va_arg(args, int);
-
-		return eswifi_socket_poll(fds, nfds, timeout);
-	}
-
-	default:
-		errno = EINVAL;
-		return -1;
-	}
+	errno = EINVAL;
+	return -1;
 }
 
 static ssize_t eswifi_socket_read(void *obj, void *buffer, size_t count)

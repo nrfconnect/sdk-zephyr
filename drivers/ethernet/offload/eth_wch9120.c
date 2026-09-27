@@ -390,15 +390,10 @@ static int ch9120_close(void *obj)
 static int ch9120_ioctl(void *obj, unsigned int request, va_list args)
 {
 	ARG_UNUSED(obj);
+	ARG_UNUSED(request);
 	ARG_UNUSED(args);
 
-	switch (request) {
-	case ZFD_IOCTL_POLL_PREPARE:
-	case ZFD_IOCTL_POLL_UPDATE:
-		return -EXDEV;
-	default:
-		return -EINVAL;
-	}
+	return -EINVAL;
 }
 
 static int ch9120_connect(void *obj, const struct net_sockaddr *addr, net_socklen_t addrlen)
