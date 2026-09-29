@@ -49,6 +49,7 @@ def test_runner_imports():
         'mpcli',
         'mplab_ipe',
         'native',
+        'nrf7120-pdk',
         'nrfjprog',
         'nrfutil',
         'nxp_s32dbg',

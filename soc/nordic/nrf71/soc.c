@@ -36,6 +36,7 @@
 #include <hal/nrf_spu.h>
 #include <hal/nrf_mpc.h>
 #include <hal/nrf_lfxo.h>
+#include <hal/nrf_gpio.h>
 
 #include <approtect_setup.h>
 #include <wicr_setup.h>
@@ -43,6 +44,9 @@
 LOG_MODULE_REGISTER(soc, CONFIG_SOC_LOG_LEVEL);
 
 #define LFXO_NODE DT_NODELABEL(lfxo)
+
+#define NRF7120_FICR_SOCINFO_HWREVISION_OFFSET 0x344U
+#define NRF7120_HWREVISION_1_0                  0x0U
 
 #if !defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)
 
@@ -146,6 +150,28 @@ static inline NRF_SPU_Type *spu_instance_from_peripheral_addr(uint32_t periphera
 	return (NRF_SPU_Type *)(0x50000000 | apb_bus_number);
 }
 
+static void oscillators_configuration(void)
+{
+	NRF_SPU_Type *spu_instance =
+		spu_instance_from_peripheral_addr(NRF_OSCILLATORS_S_BASE);
+	uint8_t periph_id = NRFX_PERIPHERAL_ID_GET(NRF_OSCILLATORS_S_BASE);
+	uint8_t spu_id = NRFX_PERIPHERAL_ID_GET(spu_instance);
+	uint8_t index = periph_id - spu_id;
+	uint32_t hw_revision = *(volatile const uint32_t *)
+		(NRF_FICR_NS_BASE + NRF7120_FICR_SOCINFO_HWREVISION_OFFSET);
+	bool secure = hw_revision != NRF7120_HWREVISION_1_0;
+
+	/*
+	 * On nRF7120 1.0, Wi-Fi is non-secure and configures the PLL in
+	 * NRF_OSCILLATORS. Keep the peripheral secure on all other revisions.
+	 *
+	 * NRF_OSCILLATORS and NRF_REGULATORS share a peripheral ID and must
+	 * therefore have the same security configuration.
+	 */
+	nrf_spu_periph_perm_secattr_set(spu_instance, index, secure);
+	nrf_spu_periph_perm_lock_enable(spu_instance, index);
+}
+
 static void grtc_configuration(void)
 {
 	/* Split security configuration to let Wi-Fi access GRTC */
@@ -164,8 +190,81 @@ static void ipct_configuration(void)
 #endif /* CONFIG_TRUSTED_EXECUTION_NONSECURE */
 
 #if defined(CONFIG_SOC_NRF71_WIFI_BOOT)
+/*
+ * These helpers poke the Wi-Fi core and CLOCK registers, so they only exist in the domain that
+ * owns that setup: the Zephyr secure/application image, or the non-Zephyr (TF-M) build. Guarding
+ * the definitions with the same condition as the call site keeps the non-secure Zephyr build from
+ * compiling them unused.
+ */
 #if (defined(NRF_APPLICATION) && !defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)) || \
 	!defined(__ZEPHYR__)
+
+#if DT_HAS_COMPAT_STATUS_OKAY(nordic_nrf71_wifi_antsw)
+#define WIFI_ANTSW_NODE DT_COMPAT_GET_ANY_STATUS_OKAY(nordic_nrf71_wifi_antsw)
+
+/* Steering an unpowered switch is meaningless: require pwr_antswc to power it. */
+BUILD_ASSERT(DT_HAS_COMPAT_STATUS_OKAY(nordic_nrf_pwr_antswc),
+	     "wifi-antsw steering requires pwr_antswc to power the antenna switch");
+
+/*
+ * Steer the antenna switch (ANTSW) towards WLAN before the Wi-Fi core is
+ * started. This runs before the GPIO driver is up, so the pin (described in
+ * devicetree) is configured directly through the nrf_gpio HAL, which keeps the
+ * access on the P0 alias that matches the build's security state. Powering the
+ * switch is handled separately by pwr_antswc.
+ */
+static void antsw_setup(void)
+{
+	uint32_t wlan_psel = NRF_DT_GPIOS_TO_PSEL(WIFI_ANTSW_NODE, wlan_gpios);
+
+	/* Drive the pin low (WLAN) before enabling the output, then configure it
+	 * as a plain output. No pull is needed on a driven output.
+	 */
+	nrf_gpio_pin_clear(wlan_psel);
+	nrf_gpio_cfg_output(wlan_psel);
+}
+#endif /* DT_HAS_COMPAT_STATUS_OKAY(nordic_nrf71_wifi_antsw) */
+
+/*
+ * CLOCK is a split-security peripheral, so the XOSTART task and XOSTARTED event must be reached
+ * through the alias matching the domain that owns CLOCK when this code runs. The Zephyr secure
+ * image drives it through the _S alias, while the non-Zephyr (TF-M) build runs after CLOCK has
+ * been handed to the non-secure domain and must use the _NS alias to avoid a secure bus fault.
+ */
+#if defined(__ZEPHYR__)
+#define NRF_CLOCK_REG NRF_CLOCK_S
+#else
+#define NRF_CLOCK_REG NRF_CLOCK_NS
+#endif
+
+/* Generous bound versus the ~450 us the crystal typically needs to reach Running. */
+#define HFXO64M_START_TIMEOUT_US 10000U
+
+/*
+ * The boot ROM configures HFXO64M (trims, mirror, auto power) but does not start it, so kick
+ * the CLOCK XOSTART task and wait until the crystal is running. XO.STAT.STATE is the barrier
+ * the Wi-Fi core depends on: releasing the core before it reads Running brings it up against
+ * an unsettled clock, which shows up as intermittent, poor Wi-Fi performance.
+ */
+static int hfxo64m_start(void)
+{
+	NRF_CLOCK_REG->EVENTS_XOSTARTED = 0;
+	NRF_CLOCK_REG->TASKS_XOSTART =
+		(CLOCK_TASKS_XOSTART_TASKS_XOSTART_Trigger << CLOCK_TASKS_XOSTART_TASKS_XOSTART_Pos);
+
+	/* Runs before the kernel, so bound the wait with the coredep busy-wait, not kernel timing. */
+	for (uint32_t elapsed_us = 0U; elapsed_us < HFXO64M_START_TIMEOUT_US; elapsed_us++) {
+		if ((NRF_CLOCK_REG->XO.STAT & CLOCK_XO_STAT_STATE_Msk) ==
+		    (CLOCK_XO_STAT_STATE_Running << CLOCK_XO_STAT_STATE_Pos)) {
+			return 0;
+		}
+		nrfx_coredep_delay_us(1);
+	}
+
+	LOG_ERR("HFXO64M did not start within %u us", HFXO64M_START_TIMEOUT_US);
+	return -ETIMEDOUT;
+}
+
 static void wifi_setup(void)
 {
 	/* Kickstart the LMAC processor */
@@ -174,8 +273,8 @@ static void wifi_setup(void)
 	NRF_WIFICORE_LMAC_VPR->INITPC = (uint32_t)(uintptr_t)NRF_WICR->FIRMWARE.LMACINITPC;
 	NRF_WIFICORE_LMAC_VPR->CPURUN = (VPR_CPURUN_EN_Running << VPR_CPURUN_EN_Pos);
 }
-#endif
-#endif
+#endif /* (NRF_APPLICATION && !CONFIG_TRUSTED_EXECUTION_NONSECURE) || !__ZEPHYR__ */
+#endif /* CONFIG_SOC_NRF71_WIFI_BOOT */
 
 /**
  * This function is used by TF-M (see target_cfg_71.c, nrf71_init.c). You must align the TF-M
@@ -194,6 +293,7 @@ int nordicsemi_nrf71_init(void)
 
 #if !defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)
 	/* Skip for tf-m, configuration exist in target_cfg_71.c */
+	oscillators_configuration();
 	mpc_configuration();
 	grtc_configuration();
 	ipct_configuration();
@@ -215,19 +315,31 @@ int nordicsemi_nrf71_init(void)
 #endif
 
 #if defined(CONFIG_SOC_NRF71_WIFI_BOOT)
-	wifi_setup();
-#endif
-
 #if DT_HAS_COMPAT_STATUS_OKAY(nordic_nrf_pwr_antswc)
+	/* Power on the antenna switch before starting the Wi-Fi core. */
 	*(volatile uint32_t *)PWR_ANTSWC_REG |= PWR_ANTSWC_ENABLE;
 #endif
+
+#if DT_HAS_COMPAT_STATUS_OKAY(nordic_nrf71_wifi_antsw)
+	/* Steer the (now powered) antenna switch towards WLAN before Wi-Fi boot. */
+	antsw_setup();
+#endif
+	/* Start the 64 MHz crystal and wait for it before releasing the Wi-Fi core. */
+	int err = hfxo64m_start();
+
+	if (err != 0) {
+		return err;
+	}
+
+	wifi_setup();
+#endif /* CONFIG_SOC_NRF71_WIFI_BOOT */
+#endif /* (NRF_APPLICATION && !CONFIG_TRUSTED_EXECUTION_NONSECURE) || !__ZEPHYR__ */
 
 	/* Configure LFXO capacitive load if internal load capacitors are used */
 #if DT_ENUM_HAS_VALUE(LFXO_NODE, load_capacitors, internal)
 	nrf_lfxo_cload_set(NRF_LFXO,
 			(uint8_t)(DT_PROP(LFXO_NODE, load_capacitance_femtofarad) / 1000));
 #endif
-#endif /* (NRF_APPLICATION && !CONFIG_TRUSTED_EXECUTION_NONSECURE) || !__ZEPHYR__  */
 
 #ifdef __ZEPHYR__
 	sys_cache_instr_enable();
