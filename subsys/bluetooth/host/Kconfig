@@ -164,11 +164,13 @@ rsource "../audio/Kconfig"
 
 config BT_BUF_EVT_DISCARDABLE_SIZE
 	int "Maximum supported discardable HCI Event buffer length"
+	range 44 $(UINT8_MAX) if !BT_EXT_ADV && BT_HCI_ADV_REPORT_CHAN_IDX
 	range 43 $(UINT8_MAX) if !BT_EXT_ADV
 	range 58 $(UINT8_MAX) if BT_EXT_ADV
 	# LE Extended Advertising Report event
 	default $(UINT8_MAX) if BT_CLASSIC
 	# Le Advertising Report event
+	default 44 if !BT_EXT_ADV && BT_HCI_ADV_REPORT_CHAN_IDX
 	default 43 if !BT_EXT_ADV
 	default 58 if BT_EXT_ADV && BT_MESH
 	default BT_BUF_EVT_RX_SIZE if BT_EXT_ADV
@@ -913,10 +915,18 @@ config BT_BACKGROUND_SCAN_INTERVAL
 	int "Scan interval used for background scanning in 0.625 ms units"
 	default 2048
 	range 4 16384
+
 config BT_BACKGROUND_SCAN_WINDOW
 	int "Scan window used for background scanning in 0.625 ms units"
 	default 18
 	range 4 16384
+
+config BT_HCI_ADV_REPORT_CHAN_IDX
+	bool "Channel index in scan receive information"
+	depends on BT_LL_SOFTDEVICE if HAS_BT_CTLR
+	help
+	  When enabled, the bt_le_scan_recv_info parameter in the scan callback
+	  will provide the channel index the advertising PDU was received on.
 
 config BT_EXT_SCAN_BUF_SIZE
 	int "Maximum advertisement report size"
