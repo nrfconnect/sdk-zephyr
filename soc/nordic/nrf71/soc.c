@@ -44,6 +44,9 @@ LOG_MODULE_REGISTER(soc, CONFIG_SOC_LOG_LEVEL);
 
 #define LFXO_NODE DT_NODELABEL(lfxo)
 
+#define NRF7120_FICR_SOCINFO_HWREVISION_OFFSET 0x344U
+#define NRF7120_HWREVISION_1_0                  0x0U
+
 #if !defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)
 
 struct mpc_region_override {
@@ -146,6 +149,28 @@ static inline NRF_SPU_Type *spu_instance_from_peripheral_addr(uint32_t periphera
 	return (NRF_SPU_Type *)(0x50000000 | apb_bus_number);
 }
 
+static void oscillators_configuration(void)
+{
+	NRF_SPU_Type *spu_instance =
+		spu_instance_from_peripheral_addr(NRF_OSCILLATORS_S_BASE);
+	uint8_t periph_id = NRFX_PERIPHERAL_ID_GET(NRF_OSCILLATORS_S_BASE);
+	uint8_t spu_id = NRFX_PERIPHERAL_ID_GET(spu_instance);
+	uint8_t index = periph_id - spu_id;
+	uint32_t hw_revision = *(volatile const uint32_t *)
+		(NRF_FICR_NS_BASE + NRF7120_FICR_SOCINFO_HWREVISION_OFFSET);
+	bool secure = hw_revision != NRF7120_HWREVISION_1_0;
+
+	/*
+	 * On nRF7120 1.0, Wi-Fi is non-secure and configures the PLL in
+	 * NRF_OSCILLATORS. Keep the peripheral secure on all other revisions.
+	 *
+	 * NRF_OSCILLATORS and NRF_REGULATORS share a peripheral ID and must
+	 * therefore have the same security configuration.
+	 */
+	nrf_spu_periph_perm_secattr_set(spu_instance, index, secure);
+	nrf_spu_periph_perm_lock_enable(spu_instance, index);
+}
+
 static void grtc_configuration(void)
 {
 	/* Split security configuration to let Wi-Fi access GRTC */
@@ -194,6 +219,7 @@ int nordicsemi_nrf71_init(void)
 
 #if !defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)
 	/* Skip for tf-m, configuration exist in target_cfg_71.c */
+	oscillators_configuration();
 	mpc_configuration();
 	grtc_configuration();
 	ipct_configuration();
