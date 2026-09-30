@@ -664,6 +664,10 @@ static void create_legacy_adv_info(uint8_t evt_type, int8_t rssi,
 	scan_info->secondary_phy = 0;
 	scan_info->tx_power = BT_GAP_TX_POWER_INVALID;
 	scan_info->rssi = rssi;
+#if defined(CONFIG_BT_HCI_ADV_REPORT_CHAN_IDX)
+	/* Not available, unless set by the caller (LE Advertising Report with channel index) */
+	scan_info->chan_idx = UINT8_MAX;
+#endif /* CONFIG_BT_HCI_ADV_REPORT_CHAN_IDX */
 	scan_info->sid = BT_GAP_SID_INVALID;
 	scan_info->interval = 0U;
 	scan_info->adv_type = evt_type;
@@ -854,6 +858,9 @@ static void create_ext_adv_info(struct bt_hci_evt_le_ext_advertising_info const 
 
 	scan_info->tx_power = evt->tx_power;
 	scan_info->rssi = evt->rssi;
+#if defined(CONFIG_BT_HCI_ADV_REPORT_CHAN_IDX)
+	scan_info->chan_idx = UINT8_MAX; /* Extended Advertising reports do not support chan_idx */
+#endif /* CONFIG_BT_HCI_ADV_REPORT_CHAN_IDX */
 	scan_info->sid = evt->sid;
 	scan_info->interval = sys_le16_to_cpu(evt->interval);
 	scan_info->adv_type = get_adv_type(evt_type);
@@ -1776,6 +1783,7 @@ void bt_hci_le_adv_report(struct net_buf *buf)
 
 	while (num_reports--) {
 		struct bt_le_scan_recv_info adv_info;
+		uint16_t evt_len_expected;
 
 		if (!explicit_scan && !conn_scan) {
 			/* The application has not requested explicit scan, so it is not expecting
@@ -1798,7 +1806,13 @@ void bt_hci_le_adv_report(struct net_buf *buf)
 
 		evt = net_buf_pull_mem(buf, sizeof(*evt));
 
-		if (buf->len < evt->length + sizeof(adv_info.rssi)) {
+		evt_len_expected = evt->length + sizeof(adv_info.rssi);
+
+#if defined(CONFIG_BT_HCI_ADV_REPORT_CHAN_IDX)
+		evt_len_expected += sizeof(adv_info.chan_idx);
+#endif /* CONFIG_BT_HCI_ADV_REPORT_CHAN_IDX */
+
+		if (buf->len < evt_len_expected) {
 			LOG_ERR("Unexpected end of buffer");
 			break;
 		}
@@ -1808,9 +1822,13 @@ void bt_hci_le_adv_report(struct net_buf *buf)
 		 */
 		create_legacy_adv_info(evt->evt_type, evt->data[evt->length], &adv_info);
 
+#if defined(CONFIG_BT_HCI_ADV_REPORT_CHAN_IDX)
+		adv_info.chan_idx = evt->data[evt->length + 1U];
+#endif /* CONFIG_BT_HCI_ADV_REPORT_CHAN_IDX */
+
 		le_adv_recv(&evt->addr, &adv_info, &buf->b, evt->length);
 
-		net_buf_pull(buf, evt->length + sizeof(adv_info.rssi));
+		net_buf_pull(buf, evt_len_expected);
 	}
 }
 
