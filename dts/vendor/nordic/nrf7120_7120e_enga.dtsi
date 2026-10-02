@@ -27,6 +27,7 @@
 			clock-frequency = <DT_FREQ_M(256)>;
 			#address-cells = <1>;
 			#size-cells = <1>;
+			cpu-power-states = <&runtime_idle>;
 
 			itm: itm@e0000000 {
 				compatible = "arm,armv8m-itm";
@@ -44,6 +45,29 @@
 			riscv,isa-base = "rv32e";
 			riscv,isa-extensions = "e", "m", "c", "zicsr";
 			nordic,bus-width = <32>;
+		};
+	};
+
+	power-states {
+		/*
+		 * Lightweight idle state: this SoC doesn't need cache
+		 * retention or S2RAM sequencing here, only a hook to let
+		 * software (see soc/nordic/nrf71/soc_power.c) switch LFXO
+		 * mode before/after WFI.
+		 */
+		runtime_idle: runtime_idle {
+			compatible = "zephyr,power-state";
+			power-state-name = "runtime-idle";
+			min-residency-us = <0>;
+			exit-latency-us = <0>;
+			/*
+			 * Applications that already suspend/resume specific
+			 * devices themselves (e.g. a UART around each
+			 * k_sleep(), matching CONFIG_PM_DEVICE) should not
+			 * also have every device suspended/resumed
+			 * automatically on every idle entry.
+			 */
+			zephyr,pm-device-disabled;
 		};
 	};
 
