@@ -1,10 +1,10 @@
 /* Copyright (c) 2024 Nordic Semiconductor
  * SPDX-License-Identifier: Apache-2.0
  */
-#ifndef SECURE_STORAGE_ITS_STORE_SETTINGS_GET_H
-#define SECURE_STORAGE_ITS_STORE_SETTINGS_GET_H
+#ifndef SECURE_STORAGE_ITS_STORE_SETTINGS_H
+#define SECURE_STORAGE_ITS_STORE_SETTINGS_H
 
-/** @file zephyr/secure_storage/its/store/settings_get.h The settings ITS store module API.
+/** @file zephyr/secure_storage/its/store/settings.h The settings ITS store module API.
  *
  * The functions declared in this header allow customization
  * of the settings implementation of the ITS store module.
@@ -14,10 +14,9 @@
  */
 #include <zephyr/secure_storage/its/common.h>
 
-/** @brief ITS store settings name buffer size
- */
-enum { SECURE_STORAGE_ITS_STORE_SETTINGS_NAME_BUF_SIZE
-	= CONFIG_SECURE_STORAGE_ITS_STORE_SETTINGS_NAME_MAX_LEN + 1 };
+/** @brief ITS store settings name buffer size */
+#define SECURE_STORAGE_ITS_STORE_SETTINGS_NAME_BUF_SIZE                    \
+		(CONFIG_SECURE_STORAGE_ITS_STORE_SETTINGS_NAME_MAX_LEN + 1)
 
 /** @brief Returns the setting name to use for an ITS entry.
  *
