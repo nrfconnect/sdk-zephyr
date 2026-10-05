@@ -114,4 +114,6 @@ config SOC_NRF7120_DEVELOP_IN_NRF7120E
 	  onto the nRF7120E DK. This symbol needs to be considered by certain system
 	  initialization functionality residing in SoC erratas.
 
+rsource "Kconfig.wifi_patch"
+
 endif # SOC_SERIES_NRF71

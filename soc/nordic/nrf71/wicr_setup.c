@@ -22,6 +22,16 @@
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
 #endif
 
+#if defined(CONFIG_WIFI_NRF71_PATCH)
+#define WICR_LMAC_PATCH_ADDR CONFIG_WIFI_NRF71_PATCH_LMAC_ORIGIN
+#define WICR_UMAC_PATCH_ADDR CONFIG_WIFI_NRF71_PATCH_UMAC_ORIGIN
+#pragma message("Using Wi-Fi patch addresses from Kconfig")
+#else
+#define WICR_LMAC_PATCH_ADDR DT_REG_ADDR(DT_PHANDLE(WICR_NODE, firmware_lmacrompatchaddr))
+#define WICR_UMAC_PATCH_ADDR DT_REG_ADDR(DT_PHANDLE(WICR_NODE, firmware_umacrompatchaddr))
+#pragma message("No Wi-Fi patch configured, using ROM patch addresses from device tree")
+#endif
+
 struct wicr_word {
 	uint16_t offset;
 	uint32_t value;
@@ -30,8 +40,8 @@ struct wicr_word {
 static const struct wicr_word wicr_words[] = {
 	{0x000, DT_REG_ADDR(DT_PHANDLE(WICR_NODE, firmware_lmacinitpc))},
 	{0x004, DT_REG_ADDR(DT_PHANDLE(WICR_NODE, firmware_umacinitpc))},
-	{0x008, DT_REG_ADDR(DT_PHANDLE(WICR_NODE, firmware_lmacrompatchaddr))},
-	{0x00C, DT_REG_ADDR(DT_PHANDLE(WICR_NODE, firmware_umacrompatchaddr))},
+	{0x008, WICR_LMAC_PATCH_ADDR},
+	{0x00C, WICR_UMAC_PATCH_ADDR},
 	{0x080, DT_REG_ADDR(DT_PHANDLE(WICR_NODE, ipcconfig_commandmbox))},
 	{0x084, DT_REG_SIZE(DT_PHANDLE(WICR_NODE, ipcconfig_commandmbox))},
 	{0x088, DT_REG_ADDR(DT_PHANDLE(WICR_NODE, ipcconfig_eventmbox))},
