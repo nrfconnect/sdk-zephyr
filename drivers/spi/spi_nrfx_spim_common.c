@@ -532,8 +532,10 @@ int spi_nrfx_spim_common_configure(const struct device *dev, const struct spi_co
 #if NRF_SPIM_HAS_RXDELAY
 	spim_cfg.rx_delay = dev_config->rx_delay;
 #endif
+#if !IS_ENABLED(CONFIG_NRFX_SPIM_SKIP_PIN_CFG)
 	spim_cfg.skip_gpio_cfg = true;
 	spim_cfg.skip_psel_cfg = true;
+#endif
 
 	if (dev_data->configured) {
 		ret = nrfx_spim_reconfigure(&dev_data->spim, &spim_cfg);
