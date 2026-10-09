@@ -200,27 +200,19 @@ BUILD_ASSERT(DT_HAS_COMPAT_STATUS_OKAY(nordic_nrf_pwr_antswc),
 	     "antsw steering requires pwr_antswc to power the antenna switch");
 
 /*
- * Steer the antenna switch (ANTSW) towards its Kconfig-selected default
- * radio (CONFIG_SOC_SERIES_NRF71_ANTSW_DEFAULT) before either radio that
- * shares it starts using it. This runs before the GPIO driver is up, so the
- * pin (described in devicetree) is configured directly through the nrf_gpio
- * HAL, which keeps the access on the P0 alias that matches the build's
- * security state. Powering the switch is handled separately by pwr_antswc.
+ * Route the antenna switch select pin to the ANTSWC peripheral (GPIO
+ * PIN_CNF CTRLSEL = 5). ANTSWC drives the line for Wi-Fi and BLE; boot
+ * code only assigns the pin through the nrf_gpio HAL (before the GPIO
+ * driver is up). Powering the switch is handled separately by pwr_antswc.
  */
 static void antsw_setup(void)
 {
 	uint32_t sel_psel = NRF_DT_GPIOS_TO_PSEL(ANTSW_NODE, sel_gpios);
 
-	/* Drive the pin to the WLAN or BLE position before enabling the output,
-	 * then configure it as a plain output. No pull is needed on a driven
-	 * output.
-	 */
-	if (IS_ENABLED(CONFIG_SOC_SERIES_NRF71_ANTSW_DEFAULT_BLE)) {
-		nrf_gpio_pin_set(sel_psel);
-	} else {
-		nrf_gpio_pin_clear(sel_psel);
-	}
-	nrf_gpio_cfg_output(sel_psel);
+#if defined(GPIO_PIN_CNF_CTRLSEL_ANTSWC) && NRF_GPIO_HAS_SEL
+	nrf_gpio_pin_control_select(sel_psel,
+				    (nrf_gpio_pin_sel_t)GPIO_PIN_CNF_CTRLSEL_ANTSWC);
+#endif
 }
 #endif /* DT_HAS_COMPAT_STATUS_OKAY(nordic_nrf71_antsw) */
 
@@ -280,7 +272,7 @@ int nordicsemi_nrf71_init(void)
 #endif
 
 #if DT_HAS_COMPAT_STATUS_OKAY(nordic_nrf71_antsw)
-	/* Steer the (now powered) antenna switch towards its default radio. */
+	/* Route the (now powered) antenna switch select pin to ANTSWC. */
 	antsw_setup();
 #endif
 
