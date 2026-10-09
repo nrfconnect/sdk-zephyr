@@ -84,6 +84,20 @@ When there are no longer any ready ifaces left, the :c:macro:`NET_EVENT_L4_DISCO
 
    These are similar to :c:macro:`NET_EVENT_L4_CONNECTED` and :c:macro:`NET_EVENT_L4_DISCONNECTED`, but specifically track whether IPv4- and IPv6-capable ifaces are ready.
 
+.. _conn_mgr_monitoring_dns:
+
+Name resolution readiness
+=========================
+
+:c:macro:`NET_EVENT_L4_CONNECTED` does not imply that host names can be resolved.
+For example, an iface may obtain an IPv6 address through SLAAC from a router that does not advertise any DNS server.
+
+Connection Manager therefore also emits events :c:macro:`NET_EVENT_L4_DNS_READY` and :c:macro:`NET_EVENT_L4_DNS_LOST` accordingly.
+Name resolution is considered available only when a DNS server is installed for an interface and address family that are ready.
+These events are system-wide and are not associated with any iface or address family.
+
+The current DNS readiness state can also be queried with :c:func:`conn_mgr_dns_is_ready`.
+
 .. _conn_mgr_monitoring_usage:
 
 Usage
@@ -129,6 +143,27 @@ To receive connectivity updates, create and register a listener for the :c:macro
            /* Register the callback */
            net_mgmt_add_event_callback(&l4_callback);
    }
+
+You can also use :c:macro:`NET_MGMT_REGISTER_EVENT_HANDLER` to register your callback handler at
+compile time, instead of at runtime. That way, you can ensure your callback is registered before
+Connection Manager monitoring initializes.
+
+.. code-block:: c
+
+   static void l4_event_handler(uint64_t event, struct net_if *iface, void *info,
+                                size_t info_length, void *user_data)
+   {
+           if (event == NET_EVENT_L4_CONNECTED) {
+                   LOG_INF("Network connectivity gained!");
+           } else if (event == NET_EVENT_L4_DISCONNECTED) {
+                   LOG_INF("Network connectivity lost!");
+           }
+
+           /* Otherwise, it's some other event type we didn't register for. */
+   }
+
+   NET_MGMT_REGISTER_EVENT_HANDLER(l4_callback, l4_event_handler,
+                                   NET_EVENT_L4_CONNECTED | NET_EVENT_L4_DISCONNECTED, NULL);
 
 See :ref:`net_mgmt_listening` for more details on listening for net_mgmt events.
 

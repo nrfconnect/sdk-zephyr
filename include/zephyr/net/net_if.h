@@ -446,11 +446,34 @@ struct net_if_dhcpv6 {
 	/** Retransmit timeout for the current message, milliseconds. */
 	uint32_t retransmit_timeout;
 
+	/** Maximum Solicit retransmit timeout, milliseconds. */
+	uint32_t sol_max_rt;
+
+	/** Maximum Information-request retransmit timeout, milliseconds. */
+	uint32_t inf_max_rt;
+
+	/** Information-request refresh interval, milliseconds; 0 means never
+	 *  refresh (infinity).
+	 */
+	uint32_t info_refresh_time;
+
 	/** Current best server preference received. */
 	int16_t server_preference;
 
 	/** Retransmission counter. */
 	uint8_t retransmissions;
+
+	/** Client was started automatically by a Router Advertisement. */
+	bool auto_started : 1;
+
+	/** Automatic start disabled by an explicit stop. */
+	bool auto_start_disabled : 1;
+
+	/** M flag of the latest Router Advertisement. */
+	bool ra_managed : 1;
+
+	/** O flag of the latest Router Advertisement. */
+	bool ra_other : 1;
 
 	/** Transaction ID for current exchange. */
 	uint8_t tid[DHCPV6_TID_SIZE];
