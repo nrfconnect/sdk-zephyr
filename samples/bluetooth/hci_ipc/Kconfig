@@ -1,0 +1,14 @@
+# Copyright (c) 2026 Nordic Semiconductor ASA
+# SPDX-License-Identifier: Apache-2.0
+
+mainmenu "Bluetooth: HCI IPC"
+
+config HCI_IPC_RX_STACK_SIZE
+	int "HCI IPC RX thread stack size"
+	default 512
+	help
+	  Stack size of the thread that processes the data received over IPC. The thread is used
+	  only with IPC backends that invoke the endpoint receive callback from an interrupt
+	  handler.
+
+source "Kconfig.zephyr"
