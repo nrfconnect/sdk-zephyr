@@ -173,6 +173,15 @@ SECTION_FUNC(exception.entry, _isr_wrapper)
 /* Provide requested alignment, which depends e.g. on MTVEC format */
 .balign CONFIG_RISCV_TRAP_HANDLER_ALIGNMENT
 
+#ifdef CONFIG_RISCV_SOC_IRQ_ENABLED_ON_ENTRY
+	/*
+	 * Must be the first instruction: everything below until the ISR call
+	 * and from the ISR return until TRAP_RET touches per-CPU state and
+	 * stacks that must not be observed by a preempting interrupt.
+	 */
+	csrci RV_STATUS, STATUS_IE
+#endif
+
 #ifdef CONFIG_USERSPACE
 	/* retrieve address of _current_cpu preserving s0 */
 	csrrw s0, RV_SCRATCH, s0
@@ -565,6 +574,9 @@ do_irq_offload:
 	/* Save thread stack pointer on interrupt stack */
 	addi sp, sp, -16
 	sr t0, 0(sp)
+#ifdef CONFIG_RISCV_SOC_IRQ_ENABLED_ON_ENTRY
+	sr zero, RV_REGSIZE(sp)
+#endif
 
 #ifdef CONFIG_CUSTOM_STACK_GUARD
 	/* Enable the custom stack guard for interrupt stack */
@@ -692,6 +704,27 @@ is_interrupt:
 	sw t2, ___cpu_t_nested_OFFSET(s0)
 	bnez t1, on_irq_stack
 
+#ifdef CONFIG_RISCV_SOC_IRQ_ENABLED_ON_ENTRY
+	/*
+	 * A higher level interrupt may preempt another one before the first
+	 * instruction of _isr_wrapper masks interrupts, i.e. before it could
+	 * account itself in nested. Treat this as nesting: never reschedule
+	 * on the way out, so that the preempted handler resumes right after
+	 * on the very same stack pointer the hardware stacked it on.
+	 */
+	lr t0, __struct_arch_esf_mepc_OFFSET(sp)
+	la t1, _isr_wrapper
+	bne t0, t1, 1f
+	mv t0, sp
+	lr sp, ___cpu_t_irq_stack_OFFSET(s0)
+	addi sp, sp, -16
+	sr t0, 0(sp)
+	li t1, 1
+	sr t1, RV_REGSIZE(sp)
+	j on_irq_stack
+1:
+#endif /* CONFIG_RISCV_SOC_IRQ_ENABLED_ON_ENTRY */
+
 #ifdef CONFIG_CUSTOM_STACK_GUARD
 	/* Disable the custom stack guard */
 	call z_riscv_custom_stack_guard_disable
@@ -707,6 +740,9 @@ is_interrupt:
 	 */
 	addi sp, sp, -16
 	sr t0, 0(sp)
+#ifdef CONFIG_RISCV_SOC_IRQ_ENABLED_ON_ENTRY
+	sr zero, RV_REGSIZE(sp)
+#endif
 
 #ifdef CONFIG_CUSTOM_STACK_GUARD
 	/* Enable the custom stack guard for interrupt stack */
@@ -757,7 +793,13 @@ on_irq_stack:
 #endif
 
 	/* Call ISR function */
+#ifdef CONFIG_RISCV_SOC_IRQ_ENABLED_ON_ENTRY
+	csrsi RV_STATUS, STATUS_IE
+#endif
 	jalr ra, t1, 0
+#ifdef CONFIG_RISCV_SOC_IRQ_ENABLED_ON_ENTRY
+	csrci RV_STATUS, STATUS_IE
+#endif
 
 #ifdef CONFIG_TRACING_ISR
 	call sys_trace_isr_exit
@@ -771,6 +813,15 @@ irq_done:
 	addi t2, t2, -1
 	sw t2, ___cpu_t_nested_OFFSET(s0)
 	bnez t2, no_reschedule
+
+#ifdef CONFIG_RISCV_SOC_IRQ_ENABLED_ON_ENTRY
+	/* Preempted another handler at its first instruction: return to it */
+	lr t0, RV_REGSIZE(sp)
+	beqz t0, 1f
+	lr sp, 0(sp)
+	j no_reschedule
+1:
+#endif /* CONFIG_RISCV_SOC_IRQ_ENABLED_ON_ENTRY */
 
 #ifdef CONFIG_CUSTOM_STACK_GUARD
 	/* Disable the custom stack guard for interrupt stack */
