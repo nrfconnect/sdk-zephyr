@@ -39,7 +39,7 @@ psa_status_t secure_storage_its_transform_aead_crypt(
 	aead_crypt = (operation == PSA_KEY_USAGE_ENCRYPT) ?
 		      psa_driver_wrapper_aead_encrypt : psa_driver_wrapper_aead_decrypt;
 
-	ret = secure_storage_its_transform_aead_get_key(uid, key);
+	ret = secure_storage_its_transform_aead_get_key_material(uid, key);
 	if (ret != PSA_SUCCESS) {
 		goto exit;
 	}
