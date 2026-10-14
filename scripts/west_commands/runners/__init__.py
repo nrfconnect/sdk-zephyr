@@ -41,6 +41,7 @@ _names = [
     'iar',
     'intel_adsp',
     'intel_cyclonev',
+    'ironside_te',
     'jlink',
     'linkserver',
     'lldbac',
