@@ -66,3 +66,7 @@ if(SB_CONFIG_BOOTLOADER_MCUBOOT)
     endif()
   endif()
 endif()
+
+if(SB_CONFIG_IRONSIDE_TE)
+  set_config_string(${ZCMAKE_APPLICATION} CONFIG_IRONSIDE_TE_KEYSET "${SB_CONFIG_IRONSIDE_TE_KEYSET}")
+endif()

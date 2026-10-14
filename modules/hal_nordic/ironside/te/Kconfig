@@ -38,6 +38,23 @@ source "subsys/logging/Kconfig.template.log_config"
 
 endif # IRONSIDE_TE_FAULT_LOGGING || IRONSIDE_TE_BOOT_LAYOUT_CHECK
 
+config IRONSIDE_TE_KEYSET
+	string "Key source holding the application signing key"
+	default "keyring:dev"
+	help
+	  Passed as --keyset to ironsdk/scripts/sign.py: keyring:<keyset> or
+	  dir:<path>. Sysbuild sets it from SB_CONFIG_IRONSIDE_TE_KEYSET.
+
+config IRONSIDE_TE_SIGN_VERSION
+	string "Application image version, MAJOR.MINOR.PATCH[.TWEAK]"
+	default "0.0.0.1" if "$(VERSION_MAJOR)" = ""
+	default "$(VERSION_MAJOR).$(VERSION_MINOR).$(PATCHLEVEL).$(VERSION_TWEAK)"
+	help
+	  Passed as --version to ironsdk/scripts/sign.py. Set either manually
+	  or through the application's VERSION file.
+	  The security counter is derived from it: once a device has booted
+	  an image, it rejects any image with a lower version.
+
 endif # IRONSIDE_TE_CLIENT
 
 choice PSA_CRYPTO_PROVIDER
