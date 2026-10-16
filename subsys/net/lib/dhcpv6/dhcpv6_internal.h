@@ -51,6 +51,13 @@
 #define DHCPV6_SOL_MAX_DELAY 1000 /* Max delay of first Solicit, milliseconds */
 #define DHCPV6_SOL_TIMEOUT 1000 /* Initial Solicit timeout, milliseconds */
 #define DHCPV6_SOL_MAX_RT 3600000 /* Max Solicit timeout value, milliseconds */
+#define DHCPV6_INF_TIMEOUT 1000 /* Initial Information-request timeout, milliseconds */
+#define DHCPV6_INF_MAX_RT 3600000 /* Max Information-request timeout value, milliseconds */
+#define DHCPV6_MAX_RT_MIN 60000 /* Minimum server-provided max RT, milliseconds */
+#define DHCPV6_MAX_RT_MAX 86400000 /* Maximum server-provided max RT, milliseconds */
+#define DHCPV6_IRT_DEFAULT 86400 /* Default Information Refresh Time, seconds */
+#define DHCPV6_IRT_MINIMUM 600 /* Minimum Information Refresh Time, seconds */
+#define DHCPV6_IRT_INFINITY 0xffffffffUL /* Information Refresh Time infinity value */
 #define DHCPV6_REQ_TIMEOUT 1000 /* Initial Request timeout, milliseconds */
 #define DHCPV6_REQ_MAX_RT 30000 /* Max Request timeout value, milliseconds */
 #define DHCPV6_REQ_MAX_RC 10 /* Max Request retry attempts */
@@ -193,5 +200,18 @@ static inline int net_dhcpv6_init(void)
 	return 0;
 }
 #endif /* CONFIG_NET_DHCPV6 */
+
+#if defined(CONFIG_NET_DHCPV6_START_ON_RA)
+/* Called by IPv6 Neighbor Discovery for each accepted Router Advertisement. */
+void net_dhcpv6_handle_ra(struct net_if *iface, bool managed, bool other);
+#else
+static inline void net_dhcpv6_handle_ra(struct net_if *iface, bool managed,
+					bool other)
+{
+	ARG_UNUSED(iface);
+	ARG_UNUSED(managed);
+	ARG_UNUSED(other);
+}
+#endif /* CONFIG_NET_DHCPV6_START_ON_RA */
 
 #endif /* DHCPV6_INTERNAL_H_ */

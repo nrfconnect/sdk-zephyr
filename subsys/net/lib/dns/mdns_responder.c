@@ -912,7 +912,7 @@ static int send_probe(struct mdns_responder_context *ctx)
 	int ret;
 
 	NET_DBG("%s %s %s to our hostname %s%s iface %d", "mDNS",
-		ctx->dispatcher.local_addr.sa_family == NET_AF_INET ? "IPv4" : "IPv6",
+		ctx->dispatcher.local_addr_storage.ss_family == NET_AF_INET ? "IPv4" : "IPv6",
 		"probe", hostname, ".local", net_if_get_by_iface(ctx->iface));
 
 	ret = 0;
@@ -920,14 +920,15 @@ static int send_probe(struct mdns_responder_context *ctx)
 		local_port = sys_rand16_get() | 0x8000;
 		ret++;
 	} while (net_context_port_in_use(NET_IPPROTO_UDP, local_port,
-					 &ctx->dispatcher.local_addr) && ret < PORT_COUNT);
+					 net_sad(&ctx->dispatcher.local_addr_storage)) &&
+		 ret < PORT_COUNT);
 	if (ret >= PORT_COUNT) {
 		NET_ERR("No available port, %s probe fails!", "mDNS");
 		ret = -EIO;
 		goto out;
 	}
 
-	if (ctx->dispatcher.local_addr.sa_family == NET_AF_INET) {
+	if (ctx->dispatcher.local_addr_storage.ss_family == NET_AF_INET) {
 		create_ipv4_addr((struct net_sockaddr_in *)&server);
 	} else {
 		create_ipv6_addr(&server);
@@ -1028,8 +1029,8 @@ static void probing(struct k_work *work)
 		}
 
 		NET_DBG("Cannot send %s mDNS probe (%d, errno %d)",
-			ctx->dispatcher.local_addr.sa_family == NET_AF_INET ? "IPv4" :
-			(ctx->dispatcher.local_addr.sa_family == NET_AF_INET6 ? "IPv6" :
+			ctx->dispatcher.local_addr_storage.ss_family == NET_AF_INET ? "IPv4" :
+			(ctx->dispatcher.local_addr_storage.ss_family == NET_AF_INET6 ? "IPv6" :
 			 ""),
 			ret, errno);
 	}
@@ -1317,6 +1318,7 @@ static int dispatcher_cb(struct dns_socket_dispatcher *ctx, int sock,
 static int register_dispatcher(struct mdns_responder_context *ctx,
 			       const struct net_socket_service_desc *svc,
 			       struct net_sockaddr *local,
+			       size_t local_len,
 			       int ifindex,
 			       struct zsock_pollfd *fds,
 			       size_t fds_len)
@@ -1339,10 +1341,18 @@ static int register_dispatcher(struct mdns_responder_context *ctx,
 	svc->pev[0].event.fd = ctx->sock;
 
 	if (IS_ENABLED(CONFIG_NET_IPV6) && local->sa_family == NET_AF_INET6) {
-		memcpy(&ctx->dispatcher.local_addr, local,
+		if (local_len < sizeof(struct net_sockaddr_in6)) {
+			return -EINVAL;
+		}
+
+		memcpy(&ctx->dispatcher.local_addr_storage, local,
 		       sizeof(struct net_sockaddr_in6));
 	} else if (IS_ENABLED(CONFIG_NET_IPV4) && local->sa_family == NET_AF_INET) {
-		memcpy(&ctx->dispatcher.local_addr, local,
+		if (local_len < sizeof(struct net_sockaddr_in)) {
+			return -EINVAL;
+		}
+
+		memcpy(&ctx->dispatcher.local_addr_storage, local,
 		       sizeof(struct net_sockaddr_in));
 	} else {
 		return -ENOTSUP;
@@ -1382,7 +1392,7 @@ static int pre_init_listener(void)
 		 * is initialized does not try to send on it.
 		 */
 		v6_ctx[i].sock = -1;
-		v6_ctx[i].dispatcher.local_addr.sa_family = NET_AF_INET6;
+		v6_ctx[i].dispatcher.local_addr_storage.ss_family = NET_AF_INET6;
 		v6_ctx[i].dispatcher.svc = &v6_svc;
 
 		k_work_init_delayable(&v6_ctx[i].probe_timer, probing);
@@ -1410,7 +1420,7 @@ static int pre_init_listener(void)
 		 * is initialized does not try to send on it.
 		 */
 		v4_ctx[i].sock = -1;
-		v4_ctx[i].dispatcher.local_addr.sa_family = NET_AF_INET;
+		v4_ctx[i].dispatcher.local_addr_storage.ss_family = NET_AF_INET;
 		v4_ctx[i].dispatcher.svc = &v4_svc;
 
 		k_work_init_delayable(&v4_ctx[i].probe_timer, probing);
@@ -1529,7 +1539,8 @@ static int init_listener(void)
 		}
 
 		ret = register_dispatcher(&v6_ctx[i], &v6_svc, (struct net_sockaddr *)&local_addr6,
-					  ifindex, ipv6_fds, ARRAY_SIZE(ipv6_fds));
+					  sizeof(local_addr6), ifindex, ipv6_fds,
+					  ARRAY_SIZE(ipv6_fds));
 		if (ret < 0 && ret != -EALREADY) {
 			NET_DBG("Cannot register %s %s socket service (%d)",
 				"IPv6", "mDNS", ret);
@@ -1626,7 +1637,8 @@ static int init_listener(void)
 		}
 
 		ret = register_dispatcher(&v4_ctx[i], &v4_svc, (struct net_sockaddr *)&local_addr4,
-					  ifindex, ipv4_fds, ARRAY_SIZE(ipv4_fds));
+					  sizeof(local_addr4), ifindex, ipv4_fds,
+					  ARRAY_SIZE(ipv4_fds));
 		if (ret < 0 && ret != -EALREADY) {
 			NET_DBG("Cannot register %s %s socket service (%d)",
 				"IPv4", "mDNS", ret);
