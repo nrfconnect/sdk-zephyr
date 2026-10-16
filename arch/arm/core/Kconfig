@@ -6,11 +6,11 @@
 config CPU_CORTEX_M
 	bool
 	select CPU_CORTEX
-	select ARCH_HAS_CUSTOM_SWAP_TO_MAIN
+	select ARCH_HAS_CUSTOM_SWAP_TO_MAIN if !USE_SWITCH
 	select HAS_CMSIS_CORE
 	select HAS_FLASH_LOAD_OFFSET
 	select ARCH_HAS_SINGLE_THREAD_SUPPORT
-	select ARCH_HAS_THREAD_ABORT
+	select ARCH_HAS_THREAD_ABORT if  !USE_SWITCH
 	select ARCH_HAS_TRUSTED_EXECUTION if ARM_TRUSTZONE_M
 	select ARCH_HAS_STACK_PROTECTION if (ARM_MPU && !ARMV6_M_ARMV8_M_BASELINE) || CPU_CORTEX_M_HAS_SPLIM
 	select ARCH_HAS_USERSPACE if ARM_MPU
@@ -215,6 +215,13 @@ config ARM_STACK_PROTECTION
 	  still has the option to manually select the MPU-based
 	  stack guard, if this is desired.
 
+config ARCH_HAS_STACKWALK
+	bool
+	default y if EXTRA_EXCEPTION_INFO && CPU_CORTEX_M
+	help
+	  Internal config to indicate that the arch_stack_walk() API is implemented
+	  and it can be enabled.
+
 config ARM_SECURE_FIRMWARE
 	bool
 	depends on ARMV8_M_SE
@@ -274,6 +281,9 @@ config ARM_STORE_EXC_RETURN
 	  This is needed when switching between threads that differ in either
 	  FPU usage or security domain.
 
+# Both FP_HARDABI and FP_SOFTABI require FPU sharing support as the compiler
+# may generate code that uses the FPU even if the application does not
+# explicitly use floating point operations.
 choice
 	prompt "Floating point ABI"
 	default FP_HARDABI
@@ -281,6 +291,7 @@ choice
 
 config FP_HARDABI
 	bool "Floating point Hard ABI"
+	select FPU_SHARING
 	help
 	  This option selects the Floating point ABI in which hardware floating
 	  point instructions are generated and uses FPU-specific calling
@@ -288,6 +299,7 @@ config FP_HARDABI
 
 config FP_SOFTABI
 	bool "Floating point Soft ABI"
+	select FPU_SHARING
 	help
 	  This option selects the Floating point ABI in which hardware floating
 	  point instructions are generated but soft-float calling conventions.

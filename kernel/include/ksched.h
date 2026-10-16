@@ -66,6 +66,28 @@ int z_unpend_all(_wait_q_t *wait_q);
 bool z_thread_prio_set(struct k_thread *thread, int prio);
 void *z_get_next_switch_handle(void *interrupted);
 
+void z_thread_suspend_current(struct k_thread *thread);
+
+/* Wrapper around z_get_next_switch_handle() for the benefit of
+ * non-SMP platforms that always pass a NULL interrupted handle.
+ * Exposes the (extremely) common early exit case in a context that
+ * can be (much) better optimized in surrounding C code.  Takes a
+ * _current pointer that the outer scope surely already has to avoid
+ * having to refetch it across a lock.
+ *
+ * Mystic arts for cycle nerds, basically.  Replace with
+ * z_get_next_switch_handle() if this becomes a maintenance hassle.
+ */
+static ALWAYS_INLINE void *z_sched_next_handle(struct k_thread *curr)
+{
+#ifndef CONFIG_SMP
+	if (curr == _kernel.ready_q.cache) {
+		return NULL;
+	}
+#endif
+	return z_get_next_switch_handle(NULL);
+}
+
 void z_time_slice(void);
 void z_reset_time_slice(struct k_thread *curr);
 void z_sched_start(struct k_thread *thread);
@@ -73,6 +95,46 @@ void z_ready_thread(struct k_thread *thread);
 void z_requeue_current(struct k_thread *curr);
 struct k_thread *z_swap_next_thread(void);
 void move_current_to_end_of_prio_q(void);
+
+/*
+ * Internal scheduler functions exposed for use by thread lifecycle code
+ * (thread.c). These operate under _sched_spinlock and must not be called
+ * without holding it.
+ */
+
+/**
+ * @brief Halt a thread, suspending or terminating it.
+ *
+ * Shared implementation for k_thread_suspend() and k_thread_abort(). The
+ * caller must hold _sched_spinlock; this function releases it before
+ * returning (possibly after a context switch).
+ *
+ * @param thread  Thread to halt.
+ * @param key     Scheduler spinlock key held by the caller.
+ * @param terminate true to abort (kill) the thread, false to suspend it.
+ */
+void z_thread_halt(struct k_thread *thread, k_spinlock_key_t key, bool terminate);
+
+/**
+ * @brief Ready a thread while the scheduler spinlock is already held.
+ *
+ * Equivalent to the internal ready_thread() helper. Callers must hold
+ * _sched_spinlock.
+ *
+ * @param thread Thread to make ready.
+ */
+void z_sched_ready_locked(struct k_thread *thread);
+
+/**
+ * @brief Add a thread to a wait queue while the scheduler spinlock is held.
+ *
+ * Moves the thread out of the run queue and onto the specified wait queue.
+ * Callers must hold _sched_spinlock.
+ *
+ * @param thread  Thread to pend.
+ * @param wait_q  Wait queue to add the thread to (may be NULL).
+ */
+void z_sched_add_to_waitq_locked(struct k_thread *thread, _wait_q_t *wait_q);
 
 static inline void z_reschedule_unlocked(void)
 {
@@ -221,11 +283,12 @@ bool z_sched_wake(_wait_q_t *wait_q, int swap_retval, void *swap_data);
  * Given a specific thread, wake it up. This routine assumes that the given
  * thread is not on the timeout queue.
  *
+ * @warning Caller must hold _sched_spinlock when calling this function!
+ *
  * @param thread Given thread to wake up.
- * @param is_timeout True if called from the timer ISR; false otherwise.
  *
  */
-void z_sched_wake_thread(struct k_thread *thread, bool is_timeout);
+void z_sched_wake_thread_locked(struct k_thread *thread);
 
 /**
  * Wake up all threads pending on the provided wait queue
@@ -276,25 +339,48 @@ int z_sched_wait(struct k_spinlock *lock, k_spinlock_key_t key,
 		 _wait_q_t *wait_q, k_timeout_t timeout, void **data);
 
 /**
- * @brief Walks the wait queue invoking the callback on each waiting thread
+ * Callback function called during queue walk by @ref z_sched_waitq_walk
+ * for each thread in the wait queue (if not ended earlier)
  *
- * This function walks the wait queue invoking the callback function on each
- * waiting thread while holding _sched_spinlock. This can be useful for routines
- * that need to operate on multiple waiting threads.
+ * @param thread Thread info data structure
+ * @param data   `data` parameter of z_sched_waitq_walk()
+ * @return non-zero to end wait queue walk immediately, 0 to continue
+ */
+typedef int (*_waitq_walk_cb_t)(struct k_thread *thread, void *data);
+
+/**
+ * Callback function called after queue walk by @ref z_sched_waitq_walk
+ *
+ * @param status Wait queue walk status
+ * (same value that will be returned to caller of z_sched_waitq_walk())
+ * @param data   `data` parameter of z_sched_waitq_walk()
+ */
+typedef void (*_waitq_post_walk_cb_t)(int status, void *data);
+
+/**
+ * @brief Walks the wait queue invoking a callback on each waiting thread
+ *
+ * This function walks the wait queue invoking the `walk_func` callback function
+ * on each waiting thread (except if stopped earlier by a non-zero return value),
+ * followed by a single call of `post_func`, all while holding `_sched_spinlock`.
+ * This can be useful for routines that need to operate on multiple waiting threads.
  *
  * CAUTION! As a wait queue is of indeterminate length, the scheduler will be
- * locked for an indeterminate amount of time. This may impact system
- * performance. As such, care must be taken when using both this function and
- * the specified callback.
+ * locked for an indeterminate amount of time. This may impact system performance.
+ * As such, care must be taken when using this function and in the callbacks.
  *
- * @param wait_q Identifies the wait queue to walk
- * @param func   Callback to invoke on each waiting thread
- * @param data   Custom data passed to the callback
+ * @warning @p walk_func may safely remove the thread received as argument from
+ * the wait queue only when `CONFIG_WAITQ_SCALABLE=n`.
  *
- * @retval non-zero if walk is terminated by the callback; otherwise 0
+ * @param wait_q    Identifies the wait queue to walk
+ * @param walk_func Callback to invoke for each waiting thread
+ * @param post_func Callback to invoke after queue walk (optional)
+ * @param data      Custom data passed to the callbacks
+ *
+ * @return non-zero if walk is terminated by the callback; otherwise 0
  */
-int z_sched_waitq_walk(_wait_q_t *wait_q,
-		       int (*func)(struct k_thread *, void *), void *data);
+int z_sched_waitq_walk(_wait_q_t *wait_q, _waitq_walk_cb_t walk_func,
+		       _waitq_post_walk_cb_t post_func, void *data);
 
 /** @brief Halt thread cycle usage accounting.
  *

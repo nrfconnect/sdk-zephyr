@@ -68,7 +68,12 @@ SECTION_FUNC(TEXT, z_arm_pendsv)
 #endif /* CONFIG_INSTRUMENT_THREAD_SWITCHING */
 
     /* load _kernel into r1 and current k_thread into r2 */
+#if defined(CONFIG_SLOW_FLASH_DATA)
+    movw r1, #:lower16:_kernel
+    movt r1, #:upper16:_kernel
+#else
     ldr r1, =_kernel
+#endif
     ldr r2, [r1, #_kernel_offset_to_current]
 
 #if defined(CONFIG_ARM_STORE_EXC_RETURN)
@@ -136,7 +141,12 @@ SECTION_FUNC(TEXT, z_arm_pendsv)
      * to pend PendSV have been taken with the current kernel
      * state and this is what we're handling currently.
      */
+#if defined(CONFIG_SLOW_FLASH_DATA)
+    movw r7, #:lower16:_SCS_ICSR
+    movt r7, #:upper16:_SCS_ICSR
+#else
     ldr r7, =_SCS_ICSR
+#endif
     ldr r6, =_SCS_ICSR_UNPENDSV
 
     /* _kernel is still in r1 */
@@ -451,9 +461,19 @@ SECTION_FUNC(TEXT, z_arm_svc)
     pop {r0, lr}
 #endif
 
-    /* exception return is done in z_arm_int_exit() */
+#ifdef CONFIG_USE_SWITCH
+    /* FIXME: this uses the pre-hook LR, but we want to refetch the
+     * one in the stack frame, otherwise irq_offload() won't context
+     * switch correctly (which... isn't tested?)
+     */
+    push {r0, lr}
+    bl arm_m_legacy_exit
+    pop {r0, lr}
+    bx lr
+#else
     ldr r0, =z_arm_int_exit
     bx r0
+#endif
 
 #endif
 
@@ -491,6 +511,11 @@ SECTION_FUNC(TEXT, z_arm_svc)
      */
     add sp, #40
 #endif /* CONFIG_EXTRA_EXCEPTION_INFO */
+
+#ifdef CONFIG_USE_SWITCH
+    bl arm_m_legacy_exit
+#endif
+
     pop {r0, pc}
 
 #if defined(CONFIG_USERSPACE)
