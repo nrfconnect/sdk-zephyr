@@ -68,6 +68,15 @@ Removed APIs and options
 
       * ``CONFIG_XTENSA_BACKTRACE_EXCEPTION_DUMP_HOOK``
 
+* Bluetooth
+
+  * Host
+
+    * The ``CONFIG_BT_RECV_CONTEXT`` choice and its options ``CONFIG_BT_RECV_WORKQ_SYS``
+      and ``CONFIG_BT_RECV_WORKQ_BT`` have been removed. The host now always
+      processes low-priority HCI packets on the dedicated Bluetooth RX workqueue
+      (the former ``CONFIG_BT_RECV_WORKQ_BT`` behavior). See the migration guide.
+
 * Counter
 
     * ``CONFIG_COUNTER_MAXIM_DS3231``
@@ -185,6 +194,8 @@ New APIs and options
     * :c:member:`bt_le_adv_param.tx_power` and :c:enumerator:`BT_LE_ADV_OPT_TX_POWER`
       to request a specific TX power level per extended advertising set.
     * :c:member:`bt_conn_cb.le_param_update_rejected`
+    * ``BT_HCI_QUIRK_NO_FLOW_CONTROL`` HCI device quirk for controllers that
+      advertise but reject the controller to host flow control commands.
 
   * Mesh
 

@@ -22,7 +22,7 @@
 #include <zephyr/sys/atomic.h>
 #include <zephyr/sys/slist.h>
 #include <zephyr/sys/util_macro.h>
-#include <zephyr/sys_clock.h>
+#include <zephyr/sys/clock.h>
 #include <zephyr/toolchain.h>
 
 typedef enum __packed {
@@ -79,6 +79,7 @@ enum {
 	BT_CONN_BR_GENERAL_BONDING,           /* BR general bonding */
 	BT_CONN_BR_PAIRING_INITIATOR,         /* local host starts authentication */
 	BT_CONN_CLEANUP,                      /* Disconnected, pending cleanup */
+	BT_CONN_TX_FAILED,                    /* Sending failed, pending disconnect */
 	BT_CONN_AUTO_INIT_PROCEDURES_DONE,    /* Auto-initiated procedures have run */
 	BT_CONN_PERIPHERAL_PARAM_UPDATE,      /* If periph param update timer fired */
 	BT_CONN_PERIPHERAL_PARAM_AUTO_UPDATE, /* If periph param auto update on timer fired */

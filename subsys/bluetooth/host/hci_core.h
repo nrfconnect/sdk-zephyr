@@ -36,9 +36,10 @@
 
 /* bt_dev flags: the flags defined here represent BT controller state */
 enum {
-	BT_DEV_ENABLE,
-	BT_DEV_DISABLE,
-	BT_DEV_READY,
+	BT_DEV_ENABLING,    /* Host stack is being enabled */
+	BT_DEV_DISABLING,   /* Host stack is being disabled */
+	BT_DEV_OPEN,        /* HCI transport is open */
+	BT_DEV_READY,       /* Host stack has completed init */
 	BT_DEV_PRESET_ID,
 	BT_DEV_HAS_PUB_KEY,
 
@@ -87,9 +88,10 @@ enum {
 };
 
 /* Flags which should not be cleared upon HCI_Reset */
-#define BT_DEV_PERSISTENT_FLAGS (BIT(BT_DEV_ENABLE) | \
-				 BIT(BT_DEV_PRESET_ID) | \
-				 BIT(BT_DEV_DISABLE))
+#define BT_DEV_PERSISTENT_FLAGS (BIT(BT_DEV_ENABLING) | \
+				 BIT(BT_DEV_DISABLING) | \
+				 BIT(BT_DEV_OPEN) | \
+				 BIT(BT_DEV_PRESET_ID))
 
 #if defined(CONFIG_BT_EXT_ADV_LEGACY_SUPPORT)
 /* Check the feature bit for extended or legacy advertising commands */
@@ -284,8 +286,6 @@ struct bt_dev_le {
 
 #if defined(CONFIG_BT_CONN)
 	/* Controller buffer information */
-	uint16_t		mtu;
-	struct k_sem		pkts;
 	uint16_t		acl_mtu;
 	struct k_sem		acl_pkts;
 #endif /* CONFIG_BT_CONN */
@@ -380,7 +380,6 @@ struct bt_dev {
 
 #if defined(CONFIG_BT_HCI_VS)
 	/* Vendor HCI support */
-	uint8_t                    vs_features[BT_DEV_VS_FEAT_MAX];
 	uint8_t                    vs_commands[BT_DEV_VS_CMDS_MAX];
 #endif
 
@@ -440,6 +439,15 @@ extern struct bt_dev bt_dev;
 extern const struct bt_conn_auth_cb *bt_auth;
 extern sys_slist_t bt_auth_info_cbs;
 enum bt_security_err bt_security_err_get(uint8_t hci_err);
+
+/* Submit work to the general purpose Bluetooth workqueue.
+ *
+ * This is used for the host's internal work items to avoid the shared system
+ * workqueue. The work runs in the RX thread context.
+ */
+int bt_work_submit(struct k_work *work);
+int bt_work_schedule(struct k_work_delayable *work, k_timeout_t delay);
+int bt_work_reschedule(struct k_work_delayable *work, k_timeout_t delay);
 
 /* Data type to store state related with command to be updated
  * when command completes successfully.
@@ -515,7 +523,7 @@ bool bt_id_find_conflict_multiple(struct bt_keys *candidate, struct bt_keys **fi
 int bt_setup_random_id_addr(void);
 int bt_setup_public_id_addr(void);
 
-void bt_finalize_init(void);
+void bt_finalize_init(int err);
 
 void bt_hci_host_num_completed_packets(struct net_buf *buf);
 

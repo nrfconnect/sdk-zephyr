@@ -328,7 +328,10 @@ typedef void (*bt_ready_cb_t)(int err);
  * @param cb Callback to notify completion or NULL to perform the
  * enabling synchronously. The callback is called from the system workqueue.
  *
- * @return Zero on success or (negative) error code otherwise.
+ * @return 0 on success, negative errno value on failure.
+ * @retval -EALREADY Bluetooth is already enabled, or being enabled.
+ * @retval -EAGAIN Bluetooth is being disabled; retry once bt_disable() has returned.
+ * @retval -ENODEV The HCI driver is not ready.
  */
 int bt_enable(bt_ready_cb_t cb);
 
@@ -336,6 +339,10 @@ int bt_enable(bt_ready_cb_t cb);
  * @brief Disable Bluetooth
  *
  * Disable Bluetooth. Can't be called before bt_enable has completed.
+ *
+ * When bt_enable() was called with a ready callback the initialization runs
+ * asynchronously. If bt_disable() is called before the ready callback fires,
+ * it returns -EAGAIN. The caller should retry after the ready callback.
  *
  * This API will clear all configured identity addresses and keys that are not persistently
  * stored with @kconfig{CONFIG_BT_SETTINGS}. These can be restored
@@ -349,7 +356,10 @@ int bt_enable(bt_ready_cb_t cb);
  *
  * Close and release HCI resources. Result is architecture dependent.
  *
- * @return Zero on success or (negative) error code otherwise.
+ * @return 0 on success, negative errno value on failure.
+ * @retval -EALREADY Bluetooth is already disabled, or being disabled.
+ * @retval -EAGAIN Bluetooth is still being enabled, which with @kconfig{CONFIG_BT_SETTINGS}
+ *                 includes loading the Bluetooth settings; retry once bt_is_ready() returns true.
  */
 int bt_disable(void);
 
