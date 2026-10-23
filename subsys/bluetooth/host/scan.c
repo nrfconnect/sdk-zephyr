@@ -802,7 +802,8 @@ static void create_ext_adv_info(struct bt_hci_evt_le_ext_advertising_info const 
 	scan_info->tx_power = evt->tx_power;
 	scan_info->rssi = evt->rssi;
 #if defined(CONFIG_BT_HCI_ADV_REPORT_CHAN_IDX)
-	scan_info->chan_idx = UINT8_MAX; /* Extended Advertising reports do not support chan_idx */
+	/* Updated by the caller for legacy advertising PDUs */
+	scan_info->chan_idx = UINT8_MAX;
 #endif /* CONFIG_BT_HCI_ADV_REPORT_CHAN_IDX */
 	scan_info->sid = evt->sid;
 	scan_info->interval = sys_le16_to_cpu(evt->interval);
@@ -880,8 +881,24 @@ void bt_hci_le_adv_ext_report(struct net_buf *buf)
 			 * Create event immediately.
 			 */
 			create_ext_adv_info(evt, &scan_info);
+
+#if defined(CONFIG_BT_HCI_ADV_REPORT_CHAN_IDX)
+			if (buf->len < evt->length + sizeof(scan_info.chan_idx)) {
+				LOG_ERR("Unexpected end of buffer");
+				break;
+			}
+
+			scan_info.chan_idx = buf->data[evt->length];
+#endif /* CONFIG_BT_HCI_ADV_REPORT_CHAN_IDX */
+
 			le_adv_recv(&evt->addr, &scan_info, &buf->b, evt->length);
+
+#if defined(CONFIG_BT_HCI_ADV_REPORT_CHAN_IDX)
+			net_buf_pull(buf, evt->length + sizeof(scan_info.chan_idx));
+			continue;
+#else /* !CONFIG_BT_HCI_ADV_REPORT_CHAN_IDX */
 			goto cont;
+#endif /* !CONFIG_BT_HCI_ADV_REPORT_CHAN_IDX */
 		}
 
 		is_new_advertiser = reassembling_advertiser.state == FRAG_ADV_INACTIVE ||
