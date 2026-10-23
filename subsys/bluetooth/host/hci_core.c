@@ -42,7 +42,7 @@
 #include <zephyr/sys/slist.h>
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/sys/__assert.h>
-#include <zephyr/sys_clock.h>
+#include <zephyr/sys/clock.h>
 #include <zephyr/toolchain.h>
 #include <soc.h>
 
@@ -132,6 +132,7 @@ struct bt_dev bt_dev = {
 	.appearance = CONFIG_BT_DEVICE_APPEARANCE,
 #endif
 	.hci = BT_HCI_DEV,
+	.lock = Z_MUTEX_INITIALIZER(bt_dev.lock),
 };
 
 static bt_ready_cb_t ready_cb;

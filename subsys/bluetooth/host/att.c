@@ -32,7 +32,7 @@
 #include <zephyr/sys/slist.h>
 #include <zephyr/sys/util.h>
 #include <zephyr/sys/util_macro.h>
-#include <zephyr/sys_clock.h>
+#include <zephyr/sys/clock.h>
 #include <zephyr/toolchain.h>
 #include <sys/types.h>
 
@@ -635,8 +635,11 @@ static int bt_att_chan_req_send(struct bt_att_chan *chan, struct bt_att_req *req
 	buf = net_buf_take(&req->buf);
 
 	/* This lock makes sure the value of `bt_att_mtu(chan)` does not
-	 * change.
+	 * change; the scheduler lock keeps the RX-path request handling,
+	 * which does not take the host lock, from preempting a preemptible
+	 * caller.
 	 */
+	bt_dev_lock();
 	k_sched_lock();
 	err = bt_att_chan_send(chan, buf);
 	if (err) {
@@ -647,6 +650,7 @@ static int bt_att_chan_req_send(struct bt_att_chan *chan, struct bt_att_req *req
 		bt_gatt_req_set_mtu(req, bt_att_mtu(chan));
 	}
 	k_sched_unlock();
+	bt_dev_unlock();
 
 	return err;
 }
@@ -709,7 +713,7 @@ static void chan_rebegin_att_timeout(struct bt_att_tx_meta_data *user_data)
 	 * in-flight.
 	 */
 	if (chan->req) {
-		k_work_reschedule(&chan->timeout_work, BT_ATT_TIMEOUT);
+		bt_work_reschedule(&chan->timeout_work, BT_ATT_TIMEOUT);
 	}
 }
 
@@ -3644,8 +3648,7 @@ static int att_schedule_eatt_connect(struct bt_conn *conn, uint8_t chans_to_conn
 
 	att->eatt.chans_to_connect = chans_to_connect;
 
-	return k_work_reschedule(&att->eatt.connection_work,
-				 credit_based_connection_delay(conn));
+	return bt_work_reschedule(&att->eatt.connection_work, credit_based_connection_delay(conn));
 }
 
 static void handle_potential_collision(struct bt_att *att)
@@ -4070,11 +4073,18 @@ int bt_att_req_send(struct bt_conn *conn, struct bt_att_req *req)
 	__ASSERT_NO_MSG(conn);
 	__ASSERT_NO_MSG(req);
 
+	/* att_handle_rsp() processes the request queue on the RX workqueue
+	 * without the host lock, relying on cooperative scheduling: hold the
+	 * scheduler lock as well so that it cannot preempt a preemptible
+	 * caller mid-update.
+	 */
+	bt_dev_lock();
 	k_sched_lock();
 
 	att = att_get(conn);
 	if (!att) {
 		k_sched_unlock();
+		bt_dev_unlock();
 		return -ENOTCONN;
 	}
 
@@ -4082,6 +4092,7 @@ int bt_att_req_send(struct bt_conn *conn, struct bt_att_req *req)
 	att_req_send_process(att);
 
 	k_sched_unlock();
+	bt_dev_unlock();
 
 	return 0;
 }
@@ -4135,13 +4146,17 @@ struct bt_att_req *bt_att_find_req_by_user_data(struct bt_conn *conn, const void
 	struct bt_att_chan *chan;
 	struct bt_att_req *req;
 
+	if (user_data == NULL) {
+		return NULL;
+	}
+
 	att = att_get(conn);
 	if (!att) {
 		return NULL;
 	}
 
 	SYS_SLIST_FOR_EACH_CONTAINER(&att->chans, chan, node) {
-		if (chan->req->user_data == user_data) {
+		if (chan->req != NULL && chan->req->user_data == user_data) {
 			return chan->req;
 		}
 	}
