@@ -174,6 +174,21 @@ config RISCV_SOC_HAS_ISR_STACKING
 	    stack with proper values. This prevents from incorrect behavior
 	    on entry context switch when initial stack is restored.
 
+config RISCV_SOC_IRQ_ENABLED_ON_ENTRY
+	bool
+	depends on !RISCV_SOC_HAS_CUSTOM_IRQ_HANDLING
+	help
+	  Selected by SoCs whose interrupt controller does not clear
+	  mstatus.MIE on trap entry and instead lets higher interrupt levels
+	  preempt in hardware (e.g. Nordic VPR).
+
+	  The generic trap handler keeps per-CPU state (nesting counter,
+	  interrupt stack pointer) and performs context switches assuming
+	  interrupts are disabled. With this option, the trap handler masks
+	  interrupts on entry and only unmasks them around the call to the
+	  ISR, so nesting can only happen while the outer ISR body runs on
+	  the interrupt stack. mret restores the interrupted MIE state.
+
 config RISCV_SOC_HAS_CUSTOM_IRQ_HANDLING
 	bool
 	help
