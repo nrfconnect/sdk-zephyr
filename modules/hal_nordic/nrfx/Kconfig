@@ -226,6 +226,10 @@ config NRFX_SPIM
 	bool "SPIM driver"
 	depends on $(dt_has_compat,$(DT_COMPAT_NORDIC_NRF_SPIM))
 
+config NRFX_SPIM_SKIP_PIN_CFG
+	bool "Skip pin configuration inside SPIM driver"
+	default y if SPI
+
 config NRFX_SPIS
 	bool "SPIS driver"
 	depends on $(dt_has_compat,$(DT_COMPAT_NORDIC_NRF_SPIS))
