@@ -1877,6 +1877,7 @@ Missing SoC names or CONFIG_SOC vs soc.yml out of sync:
             ":!/doc/nrf/app_dev/device_guides/nrf70/wifi_advanced_security_modes.rst",
             ":!/doc/nrf-bm/release_notes",
             cwd=GIT_TOP,
+            ignore_non_zero=True,
         )
 
         self_folder = Path(__file__).resolve().parent
