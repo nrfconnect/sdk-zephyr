@@ -2457,6 +2457,14 @@ struct bt_le_scan_recv_info {
 	/** Advertising Set Identifier, valid range @ref BT_GAP_SID_MIN to @ref BT_GAP_SID_MAX. */
 	uint8_t sid;
 
+#if defined(CONFIG_BT_HCI_ADV_REPORT_CHAN_IDX)
+	/** Advertising channel index the packet was received on.
+	 *
+	 * Valid values are 37 to 39. Set to UINT8_MAX when channel index is not available.
+	 */
+	uint8_t chan_idx;
+#endif /* CONFIG_BT_HCI_ADV_REPORT_CHAN_IDX */
+
 	/** Strength of advertiser signal. */
 	int8_t rssi;
 
