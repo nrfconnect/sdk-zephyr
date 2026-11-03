@@ -8,6 +8,7 @@ zephyr_library_sources_ifdef(CONFIG_LED_SHELL led_shell.c)
 zephyr_library_sources_ifdef(CONFIG_USERSPACE led_handlers.c)
 
 # zephyr-keep-sorted-start
+zephyr_library_include_directories_ifdef(CONFIG_LED_NPM10XX ${ZEPHYR_BASE}/drivers/mfd)
 zephyr_library_sources_ifdef(CONFIG_HT16K33 ht16k33.c)
 zephyr_library_sources_ifdef(CONFIG_IS31FL319X is31fl319x.c)
 zephyr_library_sources_ifdef(CONFIG_IS31FL3216A is31fl3216a.c)
@@ -16,6 +17,7 @@ zephyr_library_sources_ifdef(CONFIG_LEDS_GROUP_MULTICOLOR leds_group_multicolor.
 zephyr_library_sources_ifdef(CONFIG_LED_AXP192_AXP2101 led_axp192.c)
 zephyr_library_sources_ifdef(CONFIG_LED_DAC led_dac.c)
 zephyr_library_sources_ifdef(CONFIG_LED_GPIO led_gpio.c)
+zephyr_library_sources_ifdef(CONFIG_LED_NPM10XX led_npm10xx.c)
 zephyr_library_sources_ifdef(CONFIG_LED_NPM13XX led_npm13xx.c)
 zephyr_library_sources_ifdef(CONFIG_LED_PWM led_pwm.c)
 zephyr_library_sources_ifdef(CONFIG_LED_SCT2024 sct2024.c)
