@@ -134,6 +134,14 @@
 	status = "okay";
 };
 
+&ipct10 {
+	status = "okay";
+};
+
+&nrf_radio_coex {
+	status = "okay";
+};
+
 &temp {
 	status = "okay";
 };
