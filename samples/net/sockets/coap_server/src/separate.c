@@ -38,19 +38,20 @@ static int separate_get(struct coap_resource *resource,
 		return 0;
 	}
 
-	/* An empty ACK only makes sense as a reply to a Confirmable message -
-	 * a Non-confirmable request has nothing to acknowledge.
-	 */
-	if (type == COAP_TYPE_CON) {
-		r = coap_ack_init(&response, request, data, sizeof(data), 0);
-		if (r < 0) {
-			return r;
-		}
+	r = coap_ack_init(&response, request, data, sizeof(data), 0);
+	if (r < 0) {
+		return r;
+	}
 
-		r = coap_resource_send(resource, &response, addr, addr_len, NULL);
-		if (r < 0) {
-			return r;
-		}
+	r = coap_resource_send(resource, &response, addr, addr_len, NULL);
+	if (r < 0) {
+		return r;
+	}
+
+	if (type == COAP_TYPE_CON) {
+		type = COAP_TYPE_CON;
+	} else {
+		type = COAP_TYPE_NON_CON;
 	}
 
 	/* Re-use the buffer */
