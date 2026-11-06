@@ -37,6 +37,7 @@
 
 	lp-rx-filter = <10000>;
 
+	st,ltdc = <&zephyr_lcd_controller>;
 	status = "okay";
 
 	rm67162_g1120b0mipi: rm67162@0 {
@@ -49,33 +50,33 @@
 		height = <390>;
 		pixel-format = <MIPI_DSI_PIXFMT_RGB888>;
 		status = "okay";
+
+		display-timings {
+			compatible = "zephyr,panel-timing";
+			de-active = <0>;
+			pixelclk-active = <0>;
+			hsync-active = <0>;
+			vsync-active = <0>;
+			hsync-len = <6>;
+			vsync-len = <1>;
+			hback-porch = <6>;
+			vback-porch = <1>;
+			hfront-porch = <6>;
+			vfront-porch = <1>;
+		};
 	};
 };
 
 &zephyr_lcd_controller {
-	status = "okay";
 
 	width = <390>;
 	height = <390>;
 	pixel-format = <PANEL_PIXEL_FORMAT_RGB_888>;
 
-	display-timings {
-		compatible = "zephyr,panel-timing";
-		de-active = <0>;
-		pixelclk-active = <0>;
-		hsync-active = <0>;
-		vsync-active = <0>;
-		hsync-len = <1>;
-		vsync-len = <1>;
-		hback-porch = <1>;
-		vback-porch = <1>;
-		hfront-porch = <1>;
-		vfront-porch = <1>;
-	};
-
 	def-back-color-red = <0x0>;
 	def-back-color-green = <0x0>;
 	def-back-color-blue = <0x0>;
+	status = "okay";
 };
 
 &qsh_030_i2c {

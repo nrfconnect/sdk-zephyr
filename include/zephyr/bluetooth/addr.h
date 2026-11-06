@@ -22,6 +22,8 @@ extern "C" {
 /**
  * @brief Bluetooth device address definitions and utilities.
  * @defgroup bt_addr Device Address
+ * @since 1.0
+ * @version 1.1.0
  * @ingroup bluetooth
  * @{
  */
@@ -220,9 +222,9 @@ static inline bool bt_addr_le_is_identity(const bt_addr_le_t *addr)
  *
  *  @details The recommended length guarantee the output of address
  *  conversion will not lose valuable information about address being
- *  processed.
+ *  processed. Format: "P:XX:XX:XX:XX:XX:XX" or "R:XX:XX:XX:XX:XX:XX"
  */
-#define BT_ADDR_LE_STR_LEN 30
+#define BT_ADDR_LE_STR_LEN 20
 
 /** @brief Converts binary Bluetooth address to string.
  *
@@ -243,6 +245,18 @@ static inline int bt_addr_to_str(const bt_addr_t *addr, char *str, size_t len)
 
 /** @brief Converts binary LE Bluetooth address to string.
  *
+ *  Converts the LE Bluetooth address to a string representation in the format:
+ *  - "P:XX:XX:XX:XX:XX:XX" for public addresses
+ *  - "R:XX:XX:XX:XX:XX:XX" for random addresses
+ *
+ *  Address type values that carry additional HCI-level information, such as
+ *  @c BT_ADDR_LE_PUBLIC_ID and @c BT_ADDR_LE_RANDOM_ID, are formatted according
+ *  to their base type (public or random). The HCI sentinels for an unresolved
+ *  RPA (@c BT_ADDR_LE_UNRESOLVED) and an anonymous advertiser
+ *  (@c BT_ADDR_LE_ANONYMOUS) are formatted as random addresses. The additional
+ *  information is not part of the string and has to be conveyed separately by
+ *  the caller.
+ *
  *  @param addr Address of buffer containing binary LE Bluetooth address.
  *  @param str Address of user buffer with enough room to store
  *  formatted string containing binary LE address.
@@ -254,29 +268,25 @@ static inline int bt_addr_to_str(const bt_addr_t *addr, char *str, size_t len)
 static inline int bt_addr_le_to_str(const bt_addr_le_t *addr, char *str,
 				    size_t len)
 {
-	char type[10];
+	char type_char;
 
 	switch (addr->type) {
 	case BT_ADDR_LE_PUBLIC:
-		strcpy(type, "public");
-		break;
-	case BT_ADDR_LE_RANDOM:
-		strcpy(type, "random");
-		break;
 	case BT_ADDR_LE_PUBLIC_ID:
-		strcpy(type, "public-id");
-		break;
-	case BT_ADDR_LE_RANDOM_ID:
-		strcpy(type, "random-id");
+		type_char = 'P';
 		break;
 	default:
-		snprintk(type, sizeof(type), "0x%02x", addr->type);
+		/* BT_ADDR_LE_RANDOM, BT_ADDR_LE_RANDOM_ID and the unresolved-RPA
+		 * and anonymous sentinels, none of which are public addresses.
+		 */
+		type_char = 'R';
 		break;
 	}
 
-	return snprintk(str, len, "%02X:%02X:%02X:%02X:%02X:%02X (%s)",
+	return snprintk(str, len, "%c:%02X:%02X:%02X:%02X:%02X:%02X",
+			type_char,
 			addr->a.val[5], addr->a.val[4], addr->a.val[3],
-			addr->a.val[2], addr->a.val[1], addr->a.val[0], type);
+			addr->a.val[2], addr->a.val[1], addr->a.val[0]);
 }
 
 /** @cond INTERNAL_HIDDEN */
@@ -329,14 +339,19 @@ int bt_addr_from_str(const char *str, bt_addr_t *addr);
 
 /** @brief Convert LE Bluetooth address from string to binary.
  *
+ *  The string must use the format produced by bt_addr_le_to_str():
+ *  "P:XX:XX:XX:XX:XX:XX" for a public address or "R:XX:XX:XX:XX:XX:XX" for a
+ *  random address. The type prefix and the hexadecimal digits are
+ *  case-insensitive.
+ *
  *  @param[in]  str   The string representation of an LE Bluetooth address.
- *  @param[in]  type  The string representation of the LE Bluetooth address
- *                   type.
  *  @param[out] addr  Address of buffer to store the LE Bluetooth address
  *
- *  @return Zero on success or (negative) error code otherwise.
+ *  @retval 0 Success. The parsed address is stored in @p addr.
+ *  @retval -EINVAL Invalid address string. @p str has an unknown type prefix or is
+ *                  not a well-formed Bluetooth address.
  */
-int bt_addr_le_from_str(const char *str, const char *type, bt_addr_le_t *addr);
+int bt_addr_le_from_str(const char *str, bt_addr_le_t *addr);
 
 /** @brief Resolve a Bluetooth LE Resolvable Private Address (RPA) to its identity address.
  *
@@ -344,7 +359,7 @@ int bt_addr_le_from_str(const char *str, const char *type, bt_addr_le_t *addr);
  *  address (public or random static) using the host Identity Resolving Key
  *  (IRK) database.
  *
- *  @kconfig_dep{CONFIG_BT_PRIVACY}
+ *  @kconfig_dep{CONFIG_BT_PRIVACY,CONFIG_BT_SMP}
  *
  *  @param[in]  id            Local identity whose IRK database is used.
  *                            Must be less than @kconfig{CONFIG_BT_ID_MAX}.
@@ -362,6 +377,28 @@ int bt_addr_le_from_str(const char *str, const char *type, bt_addr_le_t *addr);
  *                  @p id is invalid, or @p addr is not an RPA.
  */
 int bt_addr_le_rpa_resolve(uint8_t id, const bt_addr_le_t *addr, bt_addr_le_t *resolved_addr);
+
+/** Size of an Identity Resolving Key in octets. */
+#define BT_IRK_SIZE 16U
+
+/**
+ * @brief Check whether a Resolvable Private Address was generated from an IRK.
+ *
+ * Computes the hash of the random part of @p rpa with @p irk and compares it
+ * with the hash part of @p rpa.
+ *
+ * Available when the Host or the Controller provides AES, that is with
+ * @kconfig{CONFIG_BT_HOST_CRYPTO} or @kconfig{CONFIG_BT_CTLR_CRYPTO}.
+ *
+ * @param rpa Resolvable private address to check.
+ * @param irk Identity Resolving Key, least significant octet first, in the same
+ *            byte order as the IRK used by bt_id_create() and bt_id_reset_irk().
+ *
+ * @retval true  @p rpa was generated from @p irk.
+ * @retval false @p rpa is not a resolvable private address (see BT_ADDR_IS_RPA()),
+ *               was not generated from @p irk, or the AES operation failed.
+ */
+bool bt_addr_matches_irk(const bt_addr_t *rpa, const uint8_t irk[BT_IRK_SIZE]);
 
 /**
  * @}

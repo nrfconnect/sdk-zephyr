@@ -6,13 +6,13 @@
 
 /dts-v1/;
 
-#include <nxp/lpc/nxp_lpc55S6x_ns.dtsi>
+#include <nxp/lpc/lpc55xxx/nxp_lpc55S6x_ns.dtsi>
 #include "lpcxpresso55s69.dtsi"
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 
 / {
-	model = "NXP LPCXpresso55S69 board";
 	compatible = "nxp,lpc55xxx", "nxp,lpc";
+	model = "NXP LPCXpresso55S69 board";
 
 	cpus {
 		/delete-node/ cpu@1;
@@ -97,9 +97,9 @@
 };
 
 &adc0 {
-	status = "okay";
 	pinctrl-0 = <&pinmux_lpadc0>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &dma0 {

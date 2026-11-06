@@ -106,8 +106,17 @@ struct dirent *readdir(DIR *dirp)
 		return NULL;
 	}
 
-	rc = strlen(fdirent.name);
-	rc = (rc < MAX_FILE_NAME) ? rc : (MAX_FILE_NAME - 1);
+	/*
+	 * Bound the copy by both buffers: fdirent.name is MAX_FILE_NAME + 1
+	 * bytes and d_name is NAME_MAX + 1, and either may be the smaller.
+	 * With FAT long file names MAX_FILE_NAME (CONFIG_FS_FATFS_MAX_LFN, up
+	 * to 255) exceeds NAME_MAX, so a long directory entry name would
+	 * overrun d_name; with 8.3 short names it is only 12, so the source is
+	 * the shorter one. strnlen() keeps the read inside fdirent.name even
+	 * if the filesystem left the name unterminated.
+	 */
+	rc = (int)strnlen(fdirent.name,
+			  MIN(sizeof(pdirent.d_name), sizeof(fdirent.name)) - 1);
 	(void)memcpy(pdirent.d_name, fdirent.name, rc);
 
 	/* Make sure the name is NULL terminated */
@@ -151,12 +160,6 @@ int stat(const char *path, struct stat *buf)
 		return -1;
 	}
 
-	rc = fs_statvfs(path, &stat_vfs);
-	if (rc < 0) {
-		errno = -rc;
-		return -1;
-	}
-
 	rc = fs_stat(path, &stat_file);
 	if (rc < 0) {
 		errno = -rc;
@@ -176,6 +179,18 @@ int stat(const char *path, struct stat *buf)
 		errno = EIO;
 		return -1;
 	}
+
+	/*
+	 * fs_statvfs() is only needed for the block-size hint below, and on some
+	 * filesystems it scans the whole volume for free space. Defer it until
+	 * after fs_stat() so a failed lookup skips the scan entirely.
+	 */
+	rc = fs_statvfs(path, &stat_vfs);
+	if (rc < 0) {
+		errno = -rc;
+		return -1;
+	}
+
 	buf->st_size = stat_file.size;
 	buf->st_blksize = stat_vfs.f_bsize;
 	/*

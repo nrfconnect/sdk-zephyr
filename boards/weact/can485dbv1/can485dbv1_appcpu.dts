@@ -11,8 +11,8 @@
 #include <espressif/partitions_0x1000_amp_8M.dtsi>
 
 / {
-	model = "CAN485 DevBoard V1 APPCPU";
 	compatible = "weact,can485dbv1", "espressif,esp32";
+	model = "CAN485 DevBoard V1 APPCPU";
 
 	chosen {
 		zephyr,sram = &sram1;
@@ -21,6 +21,11 @@
 		zephyr,flash = &flash0;
 		zephyr,code-partition = &slot0_appcpu_partition;
 	};
+};
+
+&flash0 {
+	reg = <0x0 DT_SIZE_M(8)>;
+	ranges = <0x0 0x0 DT_SIZE_M(8)>;
 };
 
 &ipm0 {

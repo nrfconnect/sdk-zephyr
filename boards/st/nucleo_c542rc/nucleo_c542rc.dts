@@ -12,8 +12,8 @@
 #include "st_morpho_connector.dtsi"
 
 / {
-	model = "STMicroelectronics STM32C542RC-NUCLEO board";
 	compatible = "st,stm32c542rc-nucleo";
+	model = "STMicroelectronics STM32C542RC-NUCLEO board";
 
 	chosen {
 		zephyr,console = &usart2;
@@ -58,34 +58,39 @@
 	status = "okay";
 };
 
+&clk_psidiv3 {
+	clock-frequency = <DT_FREQ_M(48)>;
+	status = "okay";
+};
+
 &flash0 {
 	partitions {
+		ranges;
 		#address-cells = <1>;
 		#size-cells = <1>;
-		ranges;
 
 		boot_partition: partition@0 {
 			compatible = "zephyr,mapped-partition";
-			label = "mcuboot";
 			reg = <0x00000000 DT_SIZE_K(48)>;
+			label = "mcuboot";
 		};
 
 		slot0_partition: partition@c000 {
 			compatible = "zephyr,mapped-partition";
-			label = "image-0";
 			reg = <0x0000c000 DT_SIZE_K(88)>;
+			label = "image-0";
 		};
 
 		slot1_partition: partition@22000 {
 			compatible = "zephyr,mapped-partition";
-			label = "image-1";
 			reg = <0x00022000 DT_SIZE_K(96)>;
+			label = "image-1";
 		};
 
 		storage_partition: partition@3a000 {
 			compatible = "zephyr,mapped-partition";
-			label = "storage";
 			reg = <0x0003a000 DT_SIZE_K(24)>;
+			label = "storage";
 		};
 	};
 };
@@ -128,5 +133,24 @@
 	pinctrl-0 = <&usart2_tx_pa2 &usart2_rx_pa3>;
 	pinctrl-names = "default";
 	current-speed = <115200>;
+	status = "okay";
+};
+
+&aes {
+	status = "okay";
+};
+
+&hash {
+	status = "okay";
+};
+
+&clk48 {
+	clocks = <&rcc STM32_SRC_PSIDIV3 CK48_SEL(1)>;
+	status = "okay";
+};
+
+zephyr_udc0: &usb {
+	pinctrl-0 = <&usb_dm_pa11 &usb_dp_pa12>;
+	pinctrl-names = "default";
 	status = "okay";
 };

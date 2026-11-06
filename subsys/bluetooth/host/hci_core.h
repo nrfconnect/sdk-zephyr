@@ -36,9 +36,11 @@
 
 /* bt_dev flags: the flags defined here represent BT controller state */
 enum {
-	BT_DEV_ENABLE,
-	BT_DEV_DISABLE,
-	BT_DEV_READY,
+	BT_DEV_ENABLING,    /* Host stack is being enabled */
+	BT_DEV_DISABLING,   /* Host stack is being disabled */
+	BT_DEV_OPEN,        /* HCI transport is open */
+	BT_DEV_CTLR_RX,     /* Controller has sent a packet during bt_enable() */
+	BT_DEV_READY,       /* Host stack has completed init */
 	BT_DEV_PRESET_ID,
 	BT_DEV_HAS_PUB_KEY,
 
@@ -87,9 +89,11 @@ enum {
 };
 
 /* Flags which should not be cleared upon HCI_Reset */
-#define BT_DEV_PERSISTENT_FLAGS (BIT(BT_DEV_ENABLE) | \
-				 BIT(BT_DEV_PRESET_ID) | \
-				 BIT(BT_DEV_DISABLE))
+#define BT_DEV_PERSISTENT_FLAGS (BIT(BT_DEV_ENABLING) | \
+				 BIT(BT_DEV_DISABLING) | \
+				 BIT(BT_DEV_OPEN) | \
+				 BIT(BT_DEV_CTLR_RX) | \
+				 BIT(BT_DEV_PRESET_ID))
 
 #if defined(CONFIG_BT_EXT_ADV_LEGACY_SUPPORT)
 /* Check the feature bit for extended or legacy advertising commands */
@@ -157,6 +161,37 @@ enum {
 	BT_ADV_NUM_FLAGS,
 };
 
+#if defined(CONFIG_BT_PER_ADV_RSP_REASSEMBLY)
+/* Maximum size of a reassembled PAwR response for a single response slot.
+ * An AUX_SYNC_SUBEVENT_RSP PDU cannot carry an AuxPtr (Core 6.3 Vol 6 Part B,
+ * Table 2.9), so a response is at most 254 octets, which matches the 0-254
+ * range of Response_Data_Length in LE Set Periodic Advertising Response Data
+ * (Core 6.3 Vol 4 Part E, 7.8.126).
+ */
+#define BT_PER_ADV_RSP_REASSEMBLY_BUF_SIZE 254
+
+/* Reassembly state for fragmented periodic advertising response reports */
+struct pawr_rsp_reassembly {
+	/* Buffer used to reassemble the fragmented response data */
+	struct net_buf_simple buf;
+
+	/* Backing storage for the reassembly buffer */
+	uint8_t reassembly_data[BT_PER_ADV_RSP_REASSEMBLY_BUF_SIZE];
+
+	/* Subevent of the response being reassembled */
+	uint8_t subevent;
+
+	/* Response slot of the response being reassembled */
+	uint8_t response_slot;
+
+	/* True if the current response chain overflowed the reassembly buffer.
+	 * The remaining fragments, up to and including the terminating COMPLETE
+	 * fragment, are dropped instead of being reported to the application.
+	 */
+	bool report_truncated;
+};
+#endif /* CONFIG_BT_PER_ADV_RSP_REASSEMBLY */
+
 struct bt_le_ext_adv {
 	/* ID Address used for advertising */
 	uint8_t                 id;
@@ -175,15 +210,27 @@ struct bt_le_ext_adv {
 	const struct bt_le_ext_adv_cb *cb;
 #endif /* defined(CONFIG_BT_EXT_ADV) */
 
-	/* Current local Random Address */
-	bt_addr_le_t            random_addr;
+#if defined(CONFIG_BT_PER_ADV_RSP_REASSEMBLY)
+	/* Reassembly state for fragmented periodic advertising response reports */
+	struct pawr_rsp_reassembly pawr_rsp_reassembly;
+#endif /* CONFIG_BT_PER_ADV_RSP_REASSEMBLY */
+
+	/* Address this set advertises with. Updated by
+	 * bt_id_set_adv_random_addr() when a per-set random address is
+	 * programmed, and by bt_id_save_adv_addr() for the address types
+	 * that are not programmed per-set. bt_le_ext_adv_get_info() hands
+	 * out a pointer to it.
+	 */
+	bt_addr_le_t            adv_addr;
 
 	/* Current target address */
 	bt_addr_le_t            target_addr;
 
 	ATOMIC_DEFINE(flags, BT_ADV_NUM_FLAGS);
 
+#if defined(CONFIG_BT_LIM_ADV)
 	struct k_work_delayable	lim_adv_timeout_work;
+#endif /* CONFIG_BT_LIM_ADV */
 
 	/** The options used to set the parameters for this advertising set
 	 * @ref bt_le_adv_param
@@ -284,8 +331,6 @@ struct bt_dev_le {
 
 #if defined(CONFIG_BT_CONN)
 	/* Controller buffer information */
-	uint16_t		mtu;
-	struct k_sem		pkts;
 	uint16_t		acl_mtu;
 	struct k_sem		acl_pkts;
 #endif /* CONFIG_BT_CONN */
@@ -306,12 +351,14 @@ struct bt_dev_le {
 	 */
 	uint8_t                    rl_entries;
 #endif /* CONFIG_BT_SMP */
+#if defined(CONFIG_BT_CONN) || defined(CONFIG_BT_ISO)
 	/* List of `struct bt_conn` that have either pending data to send, or
 	 * something to process (e.g. a disconnection event).
 	 *
 	 * Each element in this list contains a reference to its `conn` object.
 	 */
 	sys_slist_t		conn_ready;
+#endif /* CONFIG_BT_CONN || CONFIG_BT_ISO */
 };
 
 struct bt_dev_br {
@@ -329,6 +376,36 @@ struct bt_dev_br {
 #define BT_DEV_VS_FEAT_MAX  1
 #define BT_DEV_VS_CMDS_MAX  2
 
+/* The Read Local Supported Commands response is 64 octets, but there's no
+ * point in storing all of it when the host only checks a few commands. Each
+ * of these gets a bit in bt_dev.supported_commands instead, set by
+ * read_supported_commands_complete(). A new entry is needed whenever the
+ * host starts checking another command.
+ */
+enum bt_dev_cmd {
+	/* Write Connection Accept Timeout */
+	BT_DEV_CMD_WRITE_CONN_ACCEPT_TIMEOUT,
+	/* Set Controller To Host Flow Control */
+	BT_DEV_CMD_SET_CTL_TO_HOST_FLOW,
+	/* LE Set Host Channel Classification */
+	BT_DEV_CMD_LE_SET_HOST_CHAN_CLASSIF,
+	/* LE Rand */
+	BT_DEV_CMD_LE_RAND,
+	/* LE Read Supported States */
+	BT_DEV_CMD_LE_READ_SUPP_STATES,
+	/* LE Set Privacy Mode */
+	BT_DEV_CMD_LE_SET_PRIVACY_MODE,
+	/* LE Read Buffer Size [v2] */
+	BT_DEV_CMD_LE_READ_BUFFER_SIZE_V2,
+	/* LE Read All Local Supported Features */
+	BT_DEV_CMD_LE_READ_ALL_LOCAL_SUPPORTED_FEATURES,
+	/* LE CS Read Local Supported Capabilities [v2] */
+	BT_DEV_CMD_LE_CS_READ_LOCAL_SUPPORTED_CAPABILITIES_V2,
+
+	/* Total number of commands - must be at the end */
+	BT_DEV_CMD_NUM,
+};
+
 /* State tracking for the local Bluetooth controller */
 struct bt_dev {
 	/* Local Identity Address(es) */
@@ -338,20 +415,25 @@ struct bt_dev {
 	struct bt_conn_le_create_param create_param;
 
 #if !defined(CONFIG_BT_EXT_ADV)
+#if defined(CONFIG_BT_BROADCASTER)
 	/* Legacy advertiser */
 	struct bt_le_ext_adv    adv;
+#endif /* CONFIG_BT_BROADCASTER */
 #else
+#if defined(CONFIG_BT_BROADCASTER)
 	/* Pointer to reserved advertising set */
 	struct bt_le_ext_adv    *adv;
+#endif /* CONFIG_BT_BROADCASTER */
 #if defined(CONFIG_BT_CONN) && (CONFIG_BT_EXT_ADV_MAX_ADV_SET > 1)
-	/* When supporting multiple concurrent connectable advertising sets
-	 * with multiple identities, we need to know the identity of
-	 * the terminating advertising set to identify the connection object.
-	 * The identity of the advertising set is determined by its
-	 * advertising handle, which is part of the
-	 * LE Set Advertising Set Terminated event which is always sent
-	 * _after_ the LE Enhanced Connection complete event.
-	 * Therefore we need cache this event until its identity is known.
+	/* When supporting multiple concurrent connectable advertising sets,
+	 * we need to know the identity of the terminating advertising set to
+	 * identify the connection object. If multiple sets share an identity,
+	 * we also need to know whether the terminating set is directed or
+	 * undirected to select the corresponding connection reservation. The
+	 * advertising set is identified by its advertising handle, which is part
+	 * of the LE Advertising Set Terminated event which is always sent _after_
+	 * the LE Enhanced Connection Complete event. Therefore we need to cache
+	 * this event until its advertising set is known.
 	 */
 	struct {
 		bool valid;
@@ -374,18 +456,17 @@ struct bt_dev {
 	/* LMP features (pages 0, 1, 2) */
 	uint8_t			features[LMP_FEAT_PAGES_COUNT][8];
 
-	/* Supported commands */
-	uint8_t			supported_commands[64];
-
 #if defined(CONFIG_BT_HCI_VS)
 	/* Vendor HCI support */
-	uint8_t                    vs_features[BT_DEV_VS_FEAT_MAX];
 	uint8_t                    vs_commands[BT_DEV_VS_CMDS_MAX];
 #endif
 
 	struct k_work           init;
 
 	ATOMIC_DEFINE(flags, BT_DEV_NUM_FLAGS);
+
+	/* Supported commands, one bit per enum bt_dev_cmd */
+	ATOMIC_DEFINE(supported_commands, BT_DEV_CMD_NUM);
 
 	/* LE controller specific features */
 	struct bt_dev_le	le;
@@ -411,7 +492,7 @@ struct bt_dev {
 
 #if defined(CONFIG_BT_PRIVACY)
 	/* Local Identity Resolving Key */
-	uint8_t			irk[CONFIG_BT_ID_MAX][16];
+	uint8_t			irk[CONFIG_BT_ID_MAX][BT_IRK_SIZE];
 
 #if defined(CONFIG_BT_RPA_SHARING)
 	/* Only 1 RPA per identity */
@@ -433,12 +514,52 @@ struct bt_dev {
 	/* Appearance Value */
 	uint16_t		appearance;
 #endif
+
+	/* The host lock: serializes access to the per-controller host state
+	 * between the contexts that mutate it. Statically initialized
+	 * (Z_MUTEX_INITIALIZER) so that it is usable before bt_enable(), e.g.
+	 * from bt_gatt_service_register().
+	 */
+	struct k_mutex		lock;
 };
 
 extern struct bt_dev bt_dev;
+
+/* Check if the controller supports one of the commands that the host checks */
+static inline bool bt_dev_cmd_supported(enum bt_dev_cmd cmd)
+{
+	return atomic_test_bit(bt_dev.supported_commands, cmd);
+}
+
+/* Assert that the current thread holds the host lock. k_mutex resets the
+ * owner on the final unlock, so the owner check alone is exact.
+ */
+#define BT_DEV_LOCK_ASSERT()                                                                       \
+	__ASSERT(bt_dev.lock.owner == k_current_get(), "host lock not held by %p", k_current_get())
+
+/* Lock/unlock the host lock. k_mutex is recursive, so nested lock/unlock
+ * pairs on the same thread are legal (needed e.g. for the
+ * bt_att_req_send() -> bt_att_chan_req_send() nesting).
+ */
+void bt_dev_lock(void);
+
+void bt_dev_unlock(void);
+
 extern const struct bt_conn_auth_cb *bt_auth;
 extern sys_slist_t bt_auth_info_cbs;
 enum bt_security_err bt_security_err_get(uint8_t hci_err);
+
+/* Submit work to the general purpose Bluetooth workqueue.
+ *
+ * This is used for the host's internal work items to avoid the shared system
+ * workqueue. The work runs in the RX thread context.
+ */
+int bt_work_submit(struct k_work *work);
+int bt_work_schedule(struct k_work_delayable *work, k_timeout_t delay);
+int bt_work_reschedule(struct k_work_delayable *work, k_timeout_t delay);
+
+/* Check whether it is executing in the `bt_workq` thread context. */
+bool bt_is_work_thread(void);
 
 /* Data type to store state related with command to be updated
  * when command completes successfully.
@@ -493,7 +614,7 @@ struct bt_keys *bt_id_find_conflict(struct bt_keys *candidate);
 int bt_setup_random_id_addr(void);
 int bt_setup_public_id_addr(void);
 
-void bt_finalize_init(void);
+void bt_finalize_init(int err);
 
 void bt_hci_host_num_completed_packets(struct net_buf *buf);
 
@@ -510,10 +631,12 @@ void bt_hci_user_passkey_req(struct net_buf *buf);
 void bt_hci_auth_complete(struct net_buf *buf);
 
 /* Common HCI event handlers */
-void bt_hci_le_enh_conn_complete(struct bt_hci_evt_le_enh_conn_complete *evt);
+void bt_hci_le_enh_conn_complete(struct bt_hci_evt_le_enh_conn_complete *evt,
+				 const struct bt_le_ext_adv *ext_adv);
 
 /* Scan HCI event handlers */
 void bt_hci_le_adv_report(struct net_buf *buf);
+void bt_hci_le_direct_adv_report(struct net_buf *buf);
 void bt_hci_le_scan_timeout(struct net_buf *buf);
 void bt_hci_le_adv_ext_report(struct net_buf *buf);
 void bt_hci_le_per_adv_sync_established(struct net_buf *buf);
@@ -573,5 +696,12 @@ int bt_hci_le_read_remote_features(struct bt_conn *conn);
 int bt_hci_le_read_max_data_len(uint16_t *tx_octets, uint16_t *tx_time);
 
 bool bt_drv_quirk_no_auto_dle(void);
+
+static inline bool bt_drv_quirk_no_adv_term_on_dir_timeout(void)
+{
+	/* A build-time constant, so the code it guards is left out of builds without the quirk */
+	return DT_ENUM_HAS_VALUE(DT_CHOSEN(zephyr_bt_hci), bt_hci_quirks,
+				 no_adv_term_on_dir_timeout);
+}
 
 void bt_tx_irq_raise(void);

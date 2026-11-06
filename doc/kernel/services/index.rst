@@ -41,6 +41,7 @@ synchronization.
    synchronization/mutexes.rst
    synchronization/condvar.rst
    synchronization/events.rst
+   synchronization/spinlocks.rst
    smp/smp.rst
 
 .. _kernel_data_passing_api:
@@ -111,6 +112,7 @@ These pages cover timing related services.
 
    timing/clocks.rst
    timing/timers.rst
+   timing/system_timer_drivers.rst
 
 Other
 *****
@@ -123,5 +125,6 @@ These pages cover other kernel services.
    other/atomic.rst
    other/float.rst
    other/version.rst
+   other/assert.rst
    other/fatal.rst
    other/thread_local_storage.rst

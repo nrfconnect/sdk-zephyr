@@ -915,6 +915,84 @@ ZTEST(mcp_server_tests, test_02_tool_registration_edge_cases)
 	}
 }
 
+static char async_tool_token[UUID_STR_LEN];
+
+/* Returns without answering, the test submits the result later */
+static int test_tool_async_callback(enum mcp_tool_event_type event, const char *arguments,
+				    const char *execution_token)
+{
+	if (event == MCP_TOOL_CALL_REQUEST) {
+		mcp_safe_strcpy(async_tool_token, sizeof(async_tool_token), execution_token);
+	}
+
+	return 0;
+}
+
+/* Terminating a session releases it right away when nothing is in flight, and only
+ * after the last tool execution completes otherwise.
+ */
+ZTEST(mcp_server_tests, test_03_client_removal)
+{
+	struct mcp_transport_binding *binding;
+	int disconnects;
+	int ret;
+	char tools_list_request[] = "{\"jsonrpc\":\"2.0\",\"id\":3302,\"method\":\"tools/list\"}";
+	struct mcp_tool_message response = {
+		.type = MCP_USR_TOOL_RESPONSE,
+		.data = "{\"type\":\"text\",\"text\":\"done\"}",
+		.length = strlen("{\"type\":\"text\",\"text\":\"done\"}"),
+	};
+	struct mcp_tool_record async_tool = {
+		.metadata = {
+			.name = "test_async_tool",
+			.input_schema = "{\"type\":\"object\"}",
+		},
+		.callback = test_tool_async_callback
+	};
+
+	zassert_equal(mcp_server_remove_client(server, NULL), -EINVAL);
+
+	binding = send_initialize_request(3300);
+	zassert_not_null(binding, "Client binding should be allocated");
+	send_initialized_notification(binding, 3301);
+
+	disconnects = mcp_transport_mock_get_disconnect_count();
+	ret = mcp_server_remove_client(server, binding);
+	zassert_equal(ret, 0, "Removing a live client should succeed");
+	zassert_equal(mcp_transport_mock_get_disconnect_count(), disconnects + 1,
+		      "Idle client should be disconnected immediately");
+	zassert_equal(mcp_server_remove_client(server, binding), -ENOENT,
+		      "Removing a removed client should fail");
+	zassert_equal(send_json_request(binding, 3302, tools_list_request), -ENOENT,
+		      "Requests on a removed client should be rejected");
+
+	ret = mcp_server_add_tool(server, &async_tool);
+	zassert_equal(ret, 0, "Async tool should register");
+
+	binding = send_initialize_request(3303);
+	zassert_not_null(binding, "Client binding should be allocated");
+	send_initialized_notification(binding, 3304);
+
+	memset(async_tool_token, 0, sizeof(async_tool_token));
+	send_tools_call_request(binding, 3305, "test_async_tool", "{}");
+	zassert_true(async_tool_token[0] != '\0', "Async tool should have been called");
+
+	disconnects = mcp_transport_mock_get_disconnect_count();
+	ret = mcp_server_remove_client(server, binding);
+	zassert_equal(ret, 0, "Removing a busy client should succeed");
+	zassert_equal(mcp_transport_mock_get_disconnect_count(), disconnects,
+		      "Client with a running tool should not be disconnected yet");
+
+	ret = mcp_server_submit_tool_message(server, &response, async_tool_token);
+	zassert_equal(ret, 0, "Tool response should be accepted");
+	zassert_equal(mcp_transport_mock_get_disconnect_count(), disconnects + 1,
+		      "Client should be disconnected once the tool completed");
+
+	while (mcp_server_remove_tool(server, "test_async_tool") == -EBUSY) {
+		k_msleep(10);
+	}
+}
+
 ZTEST(mcp_server_tests, test_04_tool_removal)
 {
 	int ret;
@@ -1300,7 +1378,7 @@ ZTEST(mcp_server_tests, test_10_invalid_execution_tokens)
 
 	mcp_safe_strcpy(used_token, sizeof(used_token), last_execution_token);
 
-	zassert_not_equal(used_token, 0, "Should have captured the execution token");
+	zassert_not_equal(used_token[0], '\0', "Should have captured the execution token");
 
 	printk("=== Test 3a: Attempting to reuse token %s ===\n", used_token);
 	ret = mcp_server_submit_tool_message(server, &tool_msg, used_token);
@@ -1409,7 +1487,7 @@ ZTEST(mcp_server_tests, test_11_health_monitor)
 				"{\"test\":\"idle\"}");
 	memset(execution_token_idle, 0, sizeof(execution_token_idle));
 	mcp_safe_strcpy(execution_token_idle, sizeof(execution_token_idle), last_execution_token);
-	zassert_not_equal(execution_token_idle, 0,
+	zassert_not_equal(execution_token_idle[0], '\0',
 			  "Execution token should be captured for idle test");
 
 	k_msleep(CONFIG_MCP_TOOL_IDLE_TIMEOUT_MS / 2);
@@ -1432,7 +1510,7 @@ ZTEST(mcp_server_tests, test_11_health_monitor)
 	memset(execution_token_cancel, 0, sizeof(execution_token_cancel));
 	mcp_safe_strcpy(execution_token_cancel, sizeof(execution_token_cancel),
 			last_execution_token);
-	zassert_not_equal(execution_token_cancel, 0,
+	zassert_not_equal(execution_token_cancel[0], '\0',
 			  "Execution token should be captured for idle test");
 
 	k_msleep(CONFIG_MCP_TOOL_IDLE_TIMEOUT_MS / 2);
@@ -1456,6 +1534,131 @@ ZTEST(mcp_server_tests, test_11_health_monitor)
 	mcp_server_remove_tool(server, "cancel_timeout_tool");
 
 	printk("=== Health monitor test completed ===\n");
+}
+
+/* A tools/call argument object with an unbalanced brace inside a string value
+ * must reach the tool intact. A byte-level brace counter closes the object early
+ * at the in-string '}'; the JSON object walker is string-aware, so the whole
+ * object is delivered.
+ */
+ZTEST(mcp_server_tests, test_12_tools_call_arguments_braces_in_string)
+{
+	reset_tool_execution_tracking();
+	register_test_tools();
+
+	send_tools_call_request(valid_client_binding, 3200, "test_success_tool",
+				"{\"filter\":\"a}b\"}");
+
+	zassert_equal(tool_execution_count, 1, "tool should execute once");
+	zassert_true(strcmp(last_execution_arguments, "{\"filter\":\"a}b\"}") == 0,
+		     "arguments with a brace in a string must reach the tool intact, got '%s'",
+		     last_execution_arguments);
+
+	cleanup_test_tools();
+}
+
+static int test_tool_reply_then_fail_callback(enum mcp_tool_event_type event, const char *arguments,
+					      const char *execution_token)
+{
+	struct mcp_tool_message response = {
+		.type = MCP_USR_TOOL_RESPONSE,
+		.data = "{\"type\": \"text\", \"text\": \"done\"}",
+		.is_error = false,
+	};
+
+	ARG_UNUSED(arguments);
+
+	tool_execution_count++;
+
+	if (event == MCP_TOOL_CANCEL_REQUEST) {
+		return 0;
+	}
+
+	response.length = strlen(response.data);
+	(void)mcp_server_submit_tool_message(server, &response, execution_token);
+
+	/* Fail after the final response was already sent */
+	return -EIO;
+}
+
+ZTEST(mcp_server_tests, test_13_tools_call_reply_then_fail)
+{
+	int ret;
+	struct mcp_tool_record reply_then_fail_tool = {
+		.metadata = {
+			.name = "test_reply_then_fail_tool",
+			.input_schema = "{\"type\":\"object\"}",
+		},
+		.callback = test_tool_reply_then_fail_callback
+	};
+
+	reset_tool_execution_tracking();
+	register_test_tools();
+	ret = mcp_server_add_tool(server, &reply_then_fail_tool);
+	zassert_equal(ret, 0, "reply-then-fail tool should register");
+
+	send_tools_call_request(valid_client_binding, 3300, "test_reply_then_fail_tool", "{}");
+	zassert_equal(tool_execution_count, 1, "tool should execute once");
+
+	send_tools_call_request(valid_client_binding, 3301, "test_success_tool", "{}");
+	zassert_equal(tool_execution_count, 2,
+		      "request cleanup must not run twice and block later calls");
+
+	while (-EBUSY == mcp_server_remove_tool(server, "test_reply_then_fail_tool")) {
+	}
+	cleanup_test_tools();
+}
+
+/*
+ * The tools array of a tools/list response must be able to use the whole
+ * message, not just a small fixed-size JSON chunk.
+ */
+ZTEST(mcp_server_tests, test_14_tools_list_larger_than_json_chunk)
+{
+	int ret;
+	size_t msg_len;
+	const char *msg;
+	char name[CONFIG_MCP_TOOL_NAME_MAX_LEN];
+	struct mcp_tool_record tool = {
+		.metadata = {
+			.input_schema = "{\"type\":\"object\",\"properties\":{"
+					"\"channel\":{\"type\":\"integer\",\"minimum\":0},"
+					"\"value\":{\"type\":\"number\"},"
+					"\"unit\":{\"type\":\"string\"}},"
+					"\"required\":[\"channel\",\"value\"]}",
+#ifdef CONFIG_MCP_TOOL_DESC
+			.description = "Tool with a description and an input schema long "
+				       "enough for a few of them to exceed 1 KB",
+#endif
+#ifdef CONFIG_MCP_TOOL_TITLE
+			.title = "Large Tool",
+#endif
+#ifdef CONFIG_MCP_TOOL_OUTPUT_SCHEMA
+			.output_schema = "{\"type\":\"object\"}",
+#endif
+		},
+		.callback = stub_tool_callback_1
+	};
+
+	for (int i = 0; i < CONFIG_MCP_MAX_TOOLS; i++) {
+		snprintk(tool.metadata.name, sizeof(tool.metadata.name), "large_tool_%d", i);
+		ret = mcp_server_add_tool(server, &tool);
+		zassert_equal(ret, 0, "Tool %d should register successfully", i);
+	}
+
+	send_tools_list_request(valid_client_binding, 3400);
+
+	msg = mcp_transport_mock_get_last_message(valid_client_binding, &msg_len);
+	zassert_not_null(msg, "Response data should not be NULL");
+	zassert_true(msg_len > MCP_MAX_JSON_CHUNK_LEN, "Response should exceed %d bytes, got %zu",
+		     MCP_MAX_JSON_CHUNK_LEN, msg_len);
+	zassert_not_null(strstr(msg, "\"result\""), "Response should contain result field");
+
+	for (int i = 0; i < CONFIG_MCP_MAX_TOOLS; i++) {
+		snprintk(name, sizeof(name), "large_tool_%d", i);
+		zassert_not_null(strstr(msg, name), "Response should contain %s", name);
+		mcp_server_remove_tool(server, name);
+	}
 }
 
 static void *mcp_server_tests_setup(void)

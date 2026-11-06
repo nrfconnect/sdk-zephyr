@@ -5,12 +5,12 @@
  */
 /dts-v1/;
 
-#include <espressif/esp32c6/esp32c6_lpcore_wroom_n4.dtsi>
+#include <espressif/esp32c6/esp32c6_lpcore.dtsi>
 #include <espressif/partitions_0x0_default.dtsi>
 
 / {
-	model = "Espressif ESP32C6-DevkitC LPCORE";
 	compatible = "espressif,esp32c6";
+	model = "Espressif ESP32C6-DevkitC LPCORE";
 
 	chosen {
 		zephyr,flash = &flash0;
@@ -21,7 +21,12 @@
 	};
 };
 
+&flash0 {
+	reg = <0x0 DT_SIZE_M(8)>;
+	ranges = <0x0 0x0 DT_SIZE_M(8)>;
+};
+
 &lp_uart {
-	status = "okay";
 	current-speed = <115200>;
+	status = "okay";
 };

@@ -13,6 +13,10 @@
 #include <zephyr/dt-bindings/memory-attr/memory-attr-arm.h>
 
 / {
+	chosen {
+		zephyr,system-timer = &lptim1;
+	};
+
 	leds {
 		compatible = "gpio-leds";
 
@@ -62,9 +66,9 @@
 };
 
 &clk_msis {
-	status = "okay";
 	msi-range = <4>;
 	msi-pll-mode;
+	status = "okay";
 };
 
 &pll1 {
@@ -85,7 +89,7 @@
 	apb3-prescaler = <1>;
 };
 
-stm32_lp_tick_source: &lptim1 {
+&lptim1 {
 	clocks = <&rcc STM32_CLOCK(APB3, 11)>,
 		 <&rcc STM32_SRC_LSE LPTIM1_SEL(3)>;
 	status = "okay";
@@ -113,24 +117,24 @@ stm32_lp_tick_source: &lptim1 {
 };
 
 &timers4 {
-	status = "okay";
 	st,prescaler = <1>;
+	status = "okay";
 
 	pwm4: pwm {
-		status = "okay";
 		pinctrl-0 = <&tim4_ch1_pb6>;
 		pinctrl-names = "default";
+		status = "okay";
 	};
 };
 
 &timers3 {
-	status = "okay";
 	st,prescaler = <255>;
+	status = "okay";
 
 	pwm3: pwm {
-		status = "okay";
 		pinctrl-0 = <&tim3_ch2_pe4>;
 		pinctrl-names = "default";
+		status = "okay";
 	};
 };
 
@@ -171,17 +175,17 @@ stm32_lp_tick_source: &lptim1 {
 	ext_flash_ctrl: ospi-flash-controller@0 {
 		compatible = "st,stm32-ospi-nor";
 		reg = <0>;
+
+		ranges = <0x0 0x70000000 DT_SIZE_M(64)>; /* Ext Flash mem-mapped to 0x70000000 */
 		size = <DT_SIZE_M(512)>; /* 512 Megabits */
 		ospi-max-frequency = <DT_FREQ_M(50)>;
 		spi-bus-width = <OSPI_OPI_MODE>;
 		data-rate = <OSPI_DTR_TRANSFER>;
 		four-byte-opcodes;
-		status = "okay";
 
 		#address-cells = <1>;
 		#size-cells = <1>;
-
-		ranges = <0x0 0x70000000 DT_SIZE_M(64)>; /* Ext Flash mem-mapped to 0x70000000 */
+		status = "okay";
 
 		ext_flash: mx25lm51245: ext-flash@0 {
 			compatible = "soc-nv-flash";
@@ -197,8 +201,8 @@ stm32_lp_tick_source: &lptim1 {
 	pinctrl-names = "default";
 	scl-gpios = <&gpiob 8 GPIO_ACTIVE_HIGH>;
 	sda-gpios = <&gpiob 9 GPIO_ACTIVE_HIGH>;
-	status = "okay";
 	clock-frequency = <I2C_BITRATE_FAST>;
+	status = "okay";
 };
 
 &i2c2 {
@@ -206,8 +210,8 @@ stm32_lp_tick_source: &lptim1 {
 	pinctrl-names = "default";
 	scl-gpios = <&gpioh 4 GPIO_ACTIVE_HIGH>;
 	sda-gpios = <&gpioh 5 GPIO_ACTIVE_HIGH>;
-	status = "okay";
 	clock-frequency = <I2C_BITRATE_FAST>;
+	status = "okay";
 
 	veml6030@10 {
 		compatible = "vishay,veml7700";
@@ -221,10 +225,14 @@ stm32_lp_tick_source: &lptim1 {
 		drdy-gpios = <&gpiod 10 GPIO_ACTIVE_HIGH>;
 	};
 
-	ism330dhcx@6b {
-		compatible = "st,ism330dhcx";
-		reg = <0x6b>;
-		drdy-gpios = <&gpioe 11 GPIO_ACTIVE_HIGH>;
+	eeprom0: eeprom@56 {
+		compatible = "atmel,at24";
+		reg = <0x56>;
+		size = <DT_SIZE_K(32)>;
+		pagesize = <64>;
+		address-width = <16>;
+		timeout = <5>;
+		status = "okay";
 	};
 
 	lps22hh@5d {
@@ -233,19 +241,15 @@ stm32_lp_tick_source: &lptim1 {
 		drdy-gpios = <&gpiog 2 GPIO_ACTIVE_HIGH>;
 	};
 
-	eeprom0: eeprom@56 {
-		compatible = "atmel,at24";
-		reg = <0x56>;
-		status = "okay";
-		size = <DT_SIZE_K(32)>;
-		pagesize = <64>;
-		address-width = <16>;
-		timeout = <5>;
-	};
-
 	hts221@5f {
 		compatible = "st,hts221";
 		reg = <0x5f>;
+	};
+
+	ism330dhcx@6b {
+		compatible = "st,ism330dhcx";
+		reg = <0x6b>;
+		drdy-gpios = <&gpioe 11 GPIO_ACTIVE_HIGH>;
 	};
 };
 
@@ -259,10 +263,18 @@ zephyr_udc0: &usbotg_fs {
 	status = "okay";
 };
 
+&adc12_common {
+	st,adc-prescaler = <4>;
+	status = "okay";
+};
+
 &adc1 {
 	pinctrl-0 = <&adc1_in15_pb0>;
 	pinctrl-names = "default";
-	st,adc-clock-source = "ASYNC";
+	status = "okay";
+};
+
+&adc4_common {
 	st,adc-prescaler = <4>;
 	status = "okay";
 };
@@ -270,8 +282,6 @@ zephyr_udc0: &usbotg_fs {
 &adc4 {
 	pinctrl-0 = <&adc4_in19_pb1>;
 	pinctrl-names = "default";
-	st,adc-clock-source = "ASYNC";
-	st,adc-prescaler = <4>;
 	status = "okay";
 };
 

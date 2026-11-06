@@ -49,8 +49,6 @@ static struct net_sockaddr_in local_addr4;
 static int ipv6;
 #endif
 
-static struct net_mgmt_event_callback mgmt_cb;
-
 #define BUF_ALLOC_TIMEOUT K_MSEC(100)
 
 /* This value is recommended by RFC 1035 */
@@ -115,58 +113,6 @@ static void create_ipv4_dst_addr(struct net_sockaddr_in *src_addr,
 			       (uint8_t *)&src_addr->sin_addr);
 }
 #endif
-
-static void llmnr_iface_event_handler(struct net_mgmt_event_callback *cb,
-				      uint64_t mgmt_event, struct net_if *iface)
-{
-	if (mgmt_event == NET_EVENT_IF_UP) {
-		/* When the interface comes back up (e.g. Ethernet cable was
-		 * reattached) the stack has left the LLMNR multicast groups if
-		 * the interface was fully brought down. Rejoin both the IPv4
-		 * and IPv6 groups so that the responder keeps receiving
-		 * queries.
-		 */
-#if defined(CONFIG_NET_IPV4)
-		if (net_if_flag_is_set(iface, NET_IF_IPV4)) {
-			int ret;
-
-			/* Rejoin so that a fresh IGMP membership report is always
-			 * emitted, even when the group is still locally marked as
-			 * joined. Fall back to a join if the group was removed
-			 * while the interface was down.
-			 */
-			ret = net_ipv4_igmp_rejoin(iface, &local_addr4.sin_addr);
-			if (ret == -ENOENT) {
-				ret = net_ipv4_igmp_join(iface, &local_addr4.sin_addr, NULL);
-			}
-
-			if (ret < 0) {
-				NET_DBG("Cannot add IPv4 multicast address to iface %p",
-					iface);
-			}
-		}
-#endif /* defined(CONFIG_NET_IPV4) */
-
-#if defined(CONFIG_NET_IPV6)
-		if (net_if_flag_is_set(iface, NET_IF_IPV6)) {
-			struct net_sockaddr_in6 addr6;
-			int ret;
-
-			create_ipv6_addr(&addr6);
-
-			ret = net_ipv6_mld_rejoin(iface, &addr6.sin6_addr);
-			if (ret == -ENOENT) {
-				ret = net_ipv6_mld_join(iface, &addr6.sin6_addr);
-			}
-
-			if (ret < 0) {
-				NET_DBG("Cannot add IPv6 multicast address to iface %p",
-					iface);
-			}
-		}
-#endif /* defined(CONFIG_NET_IPV6) */
-	}
-}
 
 static int get_socket(net_sa_family_t family)
 {
@@ -279,10 +225,10 @@ static int create_answer(enum dns_rr_type qtype,
 	/* Prepare the response into the query buffer: move the name
 	 * query buffer has to get enough free space: dns_hdr + query + answer
 	 */
-	if ((net_buf_max_len(query) - query->len) < (DNS_MSG_HEADER_SIZE + 1 +
-					  (DNS_QTYPE_LEN + DNS_QCLASS_LEN) * 2 +
-					  DNS_TTL_LEN + DNS_RDLENGTH_LEN +
-					  addr_len)) {
+	if (net_buf_tailroom(query) < (DNS_MSG_HEADER_SIZE + 1 +
+				       (DNS_QTYPE_LEN + DNS_QCLASS_LEN) * 2 +
+				       DNS_TTL_LEN + DNS_RDLENGTH_LEN +
+				       addr_len)) {
 		return -ENOBUFS;
 	}
 
@@ -510,8 +456,8 @@ static int dns_read(int sock,
 		enum dns_rr_type qtype;
 		enum dns_class qclass;
 
-		(void)memset(result->data, 0, net_buf_max_len(result));
 		result->len = 0U;
+		(void)memset(result->data, 0, net_buf_tailroom(result));
 
 		ret = dns_unpack_query(&dns_msg, result, &qtype, &qclass);
 		if (ret < 0) {
@@ -574,7 +520,7 @@ static int recv_data(struct net_socket_service_event *pev)
 	}
 
 	ret = zsock_recvfrom(pev->event.fd, dns_data->data,
-			     net_buf_max_len(dns_data), 0,
+			     net_buf_tailroom(dns_data), 0,
 			     (struct net_sockaddr *)&addr, &addrlen);
 	if (ret < 0) {
 		ret = -errno;
@@ -765,11 +711,6 @@ ipv4_out:
 
 static int llmnr_responder_init(void)
 {
-	net_mgmt_init_event_callback(&mgmt_cb, llmnr_iface_event_handler,
-				     NET_EVENT_IF_UP);
-
-	net_mgmt_add_event_callback(&mgmt_cb);
-
 	return init_listener();
 }
 

@@ -107,8 +107,8 @@ static inline void dcache_clean(uint32_t addr, uint32_t size)
 #define MCK_FREQ_HZ	SOC_ATMEL_SAM0_MCK_FREQ_HZ
 #elif CONFIG_SOC_FAMILY_ATMEL_SAM
 #define MCK_FREQ_HZ	SOC_ATMEL_SAM_MCK_FREQ_HZ
-#elif defined(CONFIG_SOC_SAMA7G54)
-#define MCK_FREQ_HZ	MHZ(125)
+#elif defined(CONFIG_SOC_SERIES_SAMA7G5) || defined(CONFIG_SOC_SERIES_SAMA7D6)
+/* MCK rate is obtained at runtime from the clock controller */
 #else
 #error Unsupported SoC family
 #endif
@@ -371,12 +371,19 @@ static void mac_addr_set(Gmac *gmac, uint8_t index,
 {
 	__ASSERT(index < 4, "index has to be in the range 0..3");
 
+#if defined(CONFIG_SOC_SERIES_SAMA7D6)
+	uint32_t offset = (GMAC_SAB2_REG_OFST - GMAC_SAB1_REG_OFST) * index;
+
+	sys_write32(sys_get_le32(mac_addr), (mm_reg_t)gmac + GMAC_SAB1_REG_OFST + offset);
+	sys_write32(sys_get_le16(&mac_addr[4]), (mm_reg_t)gmac + GMAC_SAT1_REG_OFST + offset);
+#else
 	gmac->GMAC_SA[index].GMAC_SAB =   (mac_addr[3] << 24)
 					| (mac_addr[2] << 16)
 					| (mac_addr[1] <<  8)
 					| (mac_addr[0]);
 	gmac->GMAC_SA[index].GMAC_SAT =   (mac_addr[5] <<  8)
 					| (mac_addr[4]);
+#endif
 }
 
 /*
@@ -595,6 +602,7 @@ static inline void timestamp_rx_pkt(Gmac *gmac, struct gptp_hdr *hdr,
 	}
 
 	net_pkt_set_timestamp(pkt, &timestamp);
+	net_pkt_set_rx_timestamping(pkt, true);
 }
 
 #endif
@@ -925,7 +933,7 @@ static int eth_sam_gmac_setup_qav_delta_bandwidth(Gmac *gmac, int queue_id,
 #endif
 
 #if defined(CONFIG_PTP_CLOCK_SAM_GMAC)
-static void gmac_setup_ptp_clock_divisors(Gmac *gmac)
+static void gmac_setup_ptp_clock_divisors(Gmac *gmac, uint32_t mck_freq_hz)
 {
 	int mck_divs[] = {10, 5, 2};
 	double min_cycles;
@@ -935,7 +943,7 @@ static void gmac_setup_ptp_clock_divisors(Gmac *gmac)
 
 	uint8_t cns, acns, nit;
 
-	min_cycles = MCK_FREQ_HZ;
+	min_cycles = mck_freq_hz;
 	min_period = NSEC_PER_SEC;
 
 	for (i = 0; i < ARRAY_SIZE(mck_divs); ++i) {
@@ -963,11 +971,13 @@ static void gmac_setup_ptp_clock_divisors(Gmac *gmac)
 }
 #endif
 
-static int gmac_init(Gmac *gmac, uint32_t gmac_ncfgr_val, const struct eth_sam_dev_cfg *const cfg)
+static int gmac_init(Gmac *gmac, uint32_t gmac_ncfgr_val, const struct device *dev)
 {
+	const struct eth_sam_dev_data *const dev_data = dev->data;
+	const struct eth_sam_dev_cfg *const cfg = dev->config;
 	int mck_divisor;
 
-	mck_divisor = get_mck_clock_divisor(MCK_FREQ_HZ);
+	mck_divisor = get_mck_clock_divisor(dev_data->mck_freq);
 	if (mck_divisor < 0) {
 		return mck_divisor;
 	}
@@ -992,10 +1002,25 @@ static int gmac_init(Gmac *gmac, uint32_t gmac_ncfgr_val, const struct eth_sam_d
 	/* Default (RMII) is defined at atmel,gmac-common.yaml file */
 	switch (cfg->phy_conn_type) {
 	case 0: /* mii */
+#if defined(GMAC_UR_MIM_MII)
+		gmac->GMAC_UR = GMAC_UR_MIM_MII;
+#if defined(GMAC_NCR_MIIONRGMII_Msk)
+		gmac->GMAC_NCR |= GMAC_NCR_MIIONRGMII_Msk;
+#endif /* GMAC_NCR_MIIONRGMII_Msk */
+#elif defined(GMAC_UR_RMII_Msk)
+		gmac->GMAC_UR = 0;
+#else
 		gmac->GMAC_UR = 0x1;
+#endif
 		break;
 	case 1: /* rmii */
+#if defined(GMAC_UR_MIM_RMII)
+		gmac->GMAC_UR = GMAC_UR_MIM_RMII;
+#elif defined(GMAC_UR_RMII_Msk)
+		gmac->GMAC_UR = GMAC_UR_RMII_Msk;
+#else
 		gmac->GMAC_UR = 0x0;
+#endif
 		break;
 #ifdef GMAC_UR_MIM_RGMII
 	case 3: /* rgmii */
@@ -1016,7 +1041,7 @@ static int gmac_init(Gmac *gmac, uint32_t gmac_ncfgr_val, const struct eth_sam_d
 
 #if defined(CONFIG_PTP_CLOCK_SAM_GMAC)
 	/* Initialize PTP Clock Registers */
-	gmac_setup_ptp_clock_divisors(gmac);
+	gmac_setup_ptp_clock_divisors(gmac, dev_data->mck_freq);
 
 	gmac->GMAC_TN = 0;
 	gmac->GMAC_TSH = 0;
@@ -1639,7 +1664,24 @@ static void queue5_isr(const struct device *dev)
 static int eth_initialize(const struct device *dev)
 {
 	const struct eth_sam_dev_cfg *const cfg = dev->config;
+	struct eth_sam_dev_data *const dev_data = dev->data;
 	int retval;
+
+#if defined(MCK_FREQ_HZ)
+	dev_data->mck_freq = MCK_FREQ_HZ;
+#else /* !MCK_FREQ_HZ */
+	const struct atmel_sam_pmc_config sama5d2_mck_clk_cfg =
+		SAM_DT_CLOCK_PMC_CFG(1, DT_PARENT(DT_INST(0, atmel_sam_gmac)));
+
+	/* Fetch MCK rate once and cache it for later use */
+	retval = clock_control_get_rate(DEVICE_DT_GET(DT_NODELABEL(pmc)),
+					(clock_control_subsys_t)&sama5d2_mck_clk_cfg,
+					&dev_data->mck_freq);
+	if (retval < 0) {
+		LOG_ERR("Failed to get MCK clock rate");
+		return retval;
+	}
+#endif
 
 	DEVICE_MMIO_MAP(dev, K_MEM_CACHE_NONE);
 	cfg->config_func();
@@ -1648,7 +1690,7 @@ static int eth_initialize(const struct device *dev)
 	/* Enable GMAC module's clock */
 	(void)clock_control_on(SAM_DT_PMC_CONTROLLER,
 			       (clock_control_subsys_t)&cfg->clock_cfg);
-#elif defined(CONFIG_SOC_SAMA7G54)
+#elif defined(CONFIG_SOC_SERIES_SAMA7G5) || defined(CONFIG_SOC_SERIES_SAMA7D6)
 #else
 	/* Enable MCLK clock on GMAC */
 	MCLK->AHBMASK.reg |= MCLK_AHBMASK_GMAC;
@@ -1714,14 +1756,14 @@ static void eth_iface_init(struct net_if *iface)
 		  GMAC_NCFGR_MTIHEN  /* Multicast Hash Enable */
 		| GMAC_NCFGR_LFERD   /* Length Field Error Frame Discard */
 		| GMAC_NCFGR_RFCS    /* Remove Frame Check Sequence */
-#ifdef CONFIG_SOC_SAMA7G54
+#if defined(CONFIG_SOC_SERIES_SAMA7G5) || defined(CONFIG_SOC_SERIES_SAMA7D6)
 		| GMAC_NCFGR_DBW(1)  /* Data Bus Width. Must always be written to ‘1’ */
 #endif
 #ifdef CONFIG_NET_VLAN
 		| GMAC_NCFGR_MAXFS
 #endif
 		| GMAC_NCFGR_RXCOEN; /* Receive Checksum Offload Enable */
-	result = gmac_init(gmac, gmac_ncfgr_val, cfg);
+	result = gmac_init(gmac, gmac_ncfgr_val, dev);
 	if (result < 0) {
 		LOG_ERR("%s Unable to initialize ETH driver", dev->name);
 		return;
@@ -1811,9 +1853,6 @@ static enum ethernet_hw_caps eth_sam_gmac_get_capabilities(const struct device *
 	return ETHERNET_LINK_10BASE |
 #if defined(CONFIG_NET_VLAN)
 		ETHERNET_HW_VLAN |
-#endif
-#if defined(CONFIG_PTP_CLOCK_SAM_GMAC)
-		ETHERNET_PTP |
 #endif
 		ETHERNET_PRIORITY_QUEUES |
 #if GMAC_ACTIVE_PRIORITY_QUEUE_NUM >= 1

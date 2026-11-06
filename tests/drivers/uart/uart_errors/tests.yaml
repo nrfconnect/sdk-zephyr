@@ -11,25 +11,31 @@ tests:
   drivers.uart.uart_errors.int_driven:
     filter: CONFIG_SERIAL_SUPPORT_INTERRUPT
     platform_allow:
+      - nrf5340dk/nrf5340/cpuapp
       - nrf54h20dk/nrf54h20/cpuapp
       - nrf54l15dk/nrf54l15/cpuapp
       - nrf54lm20dk/nrf54lm20a/cpuapp
       - nrf54lm20dk/nrf54lm20b/cpuapp
-      - nrf5340dk/nrf5340/cpuapp
+      - nrf54lv10dk/nrf54lv10a/cpuapp
       - nrf7120dk/nrf7120/cpuapp
+      - nrf7120dk/nrf7120e/cpuapp
       - ophelia4ev/nrf54l15/cpuapp
       - sam_e54_xpro
       - pic32cm_jh01_cpro
       - pic32cx_sg41_cult
+      - pic32cm_sg00_cpro
+      - pic32ck_gc01_cult
   drivers.uart.uart_errors.async:
     filter: CONFIG_SERIAL_SUPPORT_ASYNC
     platform_allow:
+      - nrf5340dk/nrf5340/cpuapp
       - nrf54h20dk/nrf54h20/cpuapp
       - nrf54l15dk/nrf54l15/cpuapp
       - nrf54lm20dk/nrf54lm20a/cpuapp
       - nrf54lm20dk/nrf54lm20b/cpuapp
-      - nrf5340dk/nrf5340/cpuapp
+      - nrf54lv10dk/nrf54lv10a/cpuapp
       - nrf7120dk/nrf7120/cpuapp
+      - nrf7120dk/nrf7120e/cpuapp
       - ophelia4ev/nrf54l15/cpuapp
       - sam_e54_xpro
       - pic32cm_jh01_cpro
@@ -41,4 +47,3 @@ tests:
     extra_configs:
       - CONFIG_UART_ASYNC_API=y
       - CONFIG_UART_INTERRUPT_DRIVEN=n
-      - CONFIG_PM_DEVICE=n

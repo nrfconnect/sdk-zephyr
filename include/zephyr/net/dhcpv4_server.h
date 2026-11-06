@@ -12,7 +12,7 @@
 #define ZEPHYR_INCLUDE_NET_DHCPV4_SERVER_H_
 
 #include <zephyr/net/net_ip.h>
-#include <zephyr/sys_clock.h>
+#include <zephyr/sys/clock.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -34,8 +34,7 @@ struct net_if;
 #define DHCPV4_CLIENT_ID_MAX_SIZE 20
 
 /**
- * Max DHCP hardware address size is defined in RFC2131
- * https://www.rfc-editor.org/rfc/rfc2131
+ * Max DHCP hardware address size is defined in @rfc{2131}
  */
 #define DHCPV4_HARDWARE_ADDRESS_MAX_SIZE 16
 
@@ -114,6 +113,8 @@ typedef void (*net_dhcpv4_lease_cb_t)(struct net_if *iface,
  * @param iface Pointer to the network interface, can be NULL
  * @param cb User-supplied callback function to call
  * @param user_data User specified data
+ *
+ * @return 0 on success, a negative error code otherwise.
  */
 int net_dhcpv4_server_foreach_lease(struct net_if *iface,
 				    net_dhcpv4_lease_cb_t cb,

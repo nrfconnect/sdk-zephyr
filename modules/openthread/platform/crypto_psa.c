@@ -8,6 +8,11 @@
 
 #include <psa/crypto.h>
 
+#include <string.h>
+
+#ifdef CONFIG_OPENTHREAD_CRYPTO_PLATFORM_ALLOCS_CONTEXT
+#include <zephyr/kernel.h>
+#endif
 #include <zephyr/sys/__assert.h>
 
 #if !defined(CONFIG_BUILD_WITH_TFM) && defined(CONFIG_OPENTHREAD_CRYPTO_PSA)
@@ -15,7 +20,6 @@
 #endif
 
 #if defined(CONFIG_OPENTHREAD_ECDSA)
-#include <string.h>
 #include <mbedtls/asn1.h>
 #endif
 
@@ -118,6 +122,152 @@ static bool checkContext(otCryptoContext *aContext, size_t aMinSize)
 	return aContext != NULL && aContext->mContext != NULL && aContext->mContextSize >= aMinSize;
 }
 
+/* Identifies the operation, and therefore the slab, that owns a context. */
+enum crypto_context_kind {
+	CRYPTO_CONTEXT_SHA256,
+	CRYPTO_CONTEXT_HMAC_SHA256,
+	CRYPTO_CONTEXT_HKDF,
+	CRYPTO_CONTEXT_AES,
+};
+
+static size_t crypto_context_size(enum crypto_context_kind kind)
+{
+	size_t context_size;
+
+	switch (kind) {
+	case CRYPTO_CONTEXT_SHA256:
+		context_size = sizeof(psa_hash_operation_t);
+		break;
+	case CRYPTO_CONTEXT_HMAC_SHA256:
+		context_size = sizeof(psa_mac_operation_t);
+		break;
+	case CRYPTO_CONTEXT_HKDF:
+		context_size = sizeof(psa_key_derivation_operation_t);
+		break;
+	case CRYPTO_CONTEXT_AES:
+		context_size = sizeof(psa_key_id_t);
+		break;
+	default:
+		context_size = 0;
+		break;
+	}
+
+	return context_size;
+}
+
+#ifdef CONFIG_OPENTHREAD_CRYPTO_PLATFORM_ALLOCS_CONTEXT
+/*
+ * OpenThread aligns context storage to uint64_t. A PSA type may only require
+ * 4-byte alignment, so each slab block is rounded up to at least that.
+ */
+#define CRYPTO_CONTEXT_ALIGN(type) MAX(__alignof(type), sizeof(uint64_t))
+#define CRYPTO_CONTEXT_BLOCK_SIZE(type)                                                            \
+	ROUND_UP(sizeof(type), CRYPTO_CONTEXT_ALIGN(type))
+
+K_MEM_SLAB_DEFINE_STATIC(sha256_ctx_slab, CRYPTO_CONTEXT_BLOCK_SIZE(psa_hash_operation_t),
+			 CONFIG_OPENTHREAD_CRYPTO_PLATFORM_ALLOCS_CONTEXT_SHA256_COUNT,
+			 CRYPTO_CONTEXT_ALIGN(psa_hash_operation_t));
+K_MEM_SLAB_DEFINE_STATIC(hmac_sha256_ctx_slab, CRYPTO_CONTEXT_BLOCK_SIZE(psa_mac_operation_t),
+			 CONFIG_OPENTHREAD_CRYPTO_PLATFORM_ALLOCS_CONTEXT_HMAC_SHA256_COUNT,
+			 CRYPTO_CONTEXT_ALIGN(psa_mac_operation_t));
+K_MEM_SLAB_DEFINE_STATIC(hkdf_ctx_slab,
+			 CRYPTO_CONTEXT_BLOCK_SIZE(psa_key_derivation_operation_t),
+			 CONFIG_OPENTHREAD_CRYPTO_PLATFORM_ALLOCS_CONTEXT_HKDF_COUNT,
+			 CRYPTO_CONTEXT_ALIGN(psa_key_derivation_operation_t));
+K_MEM_SLAB_DEFINE_STATIC(aes_ctx_slab, CRYPTO_CONTEXT_BLOCK_SIZE(psa_key_id_t),
+			 CONFIG_OPENTHREAD_CRYPTO_PLATFORM_ALLOCS_CONTEXT_AES_COUNT,
+			 CRYPTO_CONTEXT_ALIGN(psa_key_id_t));
+
+static struct k_mem_slab *crypto_context_slab(enum crypto_context_kind kind)
+{
+	struct k_mem_slab *slab;
+
+	switch (kind) {
+	case CRYPTO_CONTEXT_SHA256:
+		slab = &sha256_ctx_slab;
+		break;
+	case CRYPTO_CONTEXT_HMAC_SHA256:
+		slab = &hmac_sha256_ctx_slab;
+		break;
+	case CRYPTO_CONTEXT_HKDF:
+		slab = &hkdf_ctx_slab;
+		break;
+	case CRYPTO_CONTEXT_AES:
+		slab = &aes_ctx_slab;
+		break;
+	default:
+		slab = NULL;
+		break;
+	}
+
+	return slab;
+}
+
+static otError allocate_crypto_context(otCryptoContext *context, struct k_mem_slab *slab,
+				       size_t context_size)
+{
+	void *ctx;
+	int err;
+
+	if (context == NULL || slab == NULL || context_size == 0U) {
+		return OT_ERROR_INVALID_ARGS;
+	}
+
+	err = k_mem_slab_alloc(slab, &ctx, K_NO_WAIT);
+	if (err != 0) {
+		k_panic();
+	}
+
+	memset(ctx, 0, context_size);
+	context->mContext = ctx;
+	context->mContextSize = (uint16_t)context_size;
+
+	return OT_ERROR_NONE;
+}
+
+static void free_crypto_context(otCryptoContext *context, struct k_mem_slab *slab,
+				size_t context_size)
+{
+	if (context == NULL || context->mContext == NULL || slab == NULL || context_size == 0U) {
+		return;
+	}
+
+	memset(context->mContext, 0, context_size);
+	k_mem_slab_free(slab, context->mContext);
+	context->mContext = NULL;
+	context->mContextSize = 0;
+}
+#endif /* CONFIG_OPENTHREAD_CRYPTO_PLATFORM_ALLOCS_CONTEXT */
+
+static otError ensure_crypto_context(otCryptoContext *context, enum crypto_context_kind kind)
+{
+	size_t context_size = crypto_context_size(kind);
+
+	if (context_size == 0U) {
+		return OT_ERROR_INVALID_ARGS;
+	}
+
+#ifdef CONFIG_OPENTHREAD_CRYPTO_PLATFORM_ALLOCS_CONTEXT
+	return allocate_crypto_context(context, crypto_context_slab(kind), context_size);
+#else
+	if (!checkContext(context, context_size)) {
+		return OT_ERROR_INVALID_ARGS;
+	}
+
+	return OT_ERROR_NONE;
+#endif
+}
+
+static void release_crypto_context(otCryptoContext *context, enum crypto_context_kind kind)
+{
+#ifdef CONFIG_OPENTHREAD_CRYPTO_PLATFORM_ALLOCS_CONTEXT
+	free_crypto_context(context, crypto_context_slab(kind), crypto_context_size(kind));
+#else
+	ARG_UNUSED(context);
+	ARG_UNUSED(kind);
+#endif
+}
+
 void otPlatCryptoInit(void)
 {
 	psa_crypto_init();
@@ -131,6 +281,44 @@ void otPlatCryptoInit(void)
 	__ASSERT_EVAL((void)settings_subsys_init(), int err = settings_subsys_init(), !err,
 		      "Failed to initialize settings");
 #endif
+}
+
+static otError import_literal_aes_key(psa_key_id_t *key_ref, const otCryptoKey *key)
+{
+	psa_key_attributes_t attributes = PSA_KEY_ATTRIBUTES_INIT;
+	psa_status_t status;
+
+	if (key->mKey == NULL) {
+		return OT_ERROR_INVALID_ARGS;
+	}
+
+	psa_set_key_type(&attributes, PSA_KEY_TYPE_AES);
+	psa_set_key_algorithm(&attributes, PSA_ALG_ECB_NO_PADDING);
+	psa_set_key_usage_flags(&attributes, PSA_KEY_USAGE_ENCRYPT);
+	psa_set_key_lifetime(&attributes, PSA_KEY_LIFETIME_VOLATILE);
+
+	status = psa_import_key(&attributes, key->mKey, key->mKeyLength, key_ref);
+	psa_reset_key_attributes(&attributes);
+
+	return psaToOtError(status);
+}
+
+static otError destroy_literal_key(psa_key_id_t *key_ref)
+{
+	psa_status_t status;
+
+	if (*key_ref == PSA_KEY_ID_NULL) {
+		return OT_ERROR_NONE;
+	}
+
+	status = psa_destroy_key(*key_ref);
+	if (status != PSA_SUCCESS) {
+		return psaToOtError(status);
+	}
+
+	*key_ref = PSA_KEY_ID_NULL;
+
+	return OT_ERROR_NONE;
 }
 
 otError otPlatCryptoImportKey(otCryptoKeyRef *aKeyRef, otCryptoKeyType aKeyType,
@@ -228,9 +416,11 @@ bool otPlatCryptoHasKey(otCryptoKeyRef aKeyRef)
 otError otPlatCryptoHmacSha256Init(otCryptoContext *aContext)
 {
 	psa_mac_operation_t *operation;
+	otError error;
 
-	if (!checkContext(aContext, sizeof(psa_mac_operation_t))) {
-		return OT_ERROR_INVALID_ARGS;
+	error = ensure_crypto_context(aContext, CRYPTO_CONTEXT_HMAC_SHA256);
+	if (error != OT_ERROR_NONE) {
+		return error;
 	}
 
 	operation = aContext->mContext;
@@ -242,14 +432,17 @@ otError otPlatCryptoHmacSha256Init(otCryptoContext *aContext)
 otError otPlatCryptoHmacSha256Deinit(otCryptoContext *aContext)
 {
 	psa_mac_operation_t *operation;
+	otError error;
 
 	if (!checkContext(aContext, sizeof(psa_mac_operation_t))) {
 		return OT_ERROR_INVALID_ARGS;
 	}
 
 	operation = aContext->mContext;
+	error = psaToOtError(psa_mac_abort(operation));
+	release_crypto_context(aContext, CRYPTO_CONTEXT_HMAC_SHA256);
 
-	return psaToOtError(psa_mac_abort(operation));
+	return error;
 }
 
 otError otPlatCryptoHmacSha256Start(otCryptoContext *aContext, const otCryptoKey *aKey)
@@ -299,9 +492,11 @@ otError otPlatCryptoHmacSha256Finish(otCryptoContext *aContext, uint8_t *aBuf, s
 otError otPlatCryptoHkdfInit(otCryptoContext *aContext)
 {
 	psa_key_derivation_operation_t *operation;
+	otError error;
 
-	if (!checkContext(aContext, sizeof(psa_key_derivation_operation_t))) {
-		return OT_ERROR_INVALID_ARGS;
+	error = ensure_crypto_context(aContext, CRYPTO_CONTEXT_HKDF);
+	if (error != OT_ERROR_NONE) {
+		return error;
 	}
 
 	operation = aContext->mContext;
@@ -317,6 +512,7 @@ otError otPlatCryptoHkdfExtract(otCryptoContext *aContext,
 				const otCryptoKey *aInputKey)
 {
 	otError error = OT_ERROR_NONE;
+	otError destroy_err;
 	psa_status_t status = PSA_SUCCESS;
 	psa_key_derivation_operation_t *operation = NULL;
 	otCryptoKeyRef key_ref = PSA_KEY_ID_NULL;
@@ -384,7 +580,12 @@ otError otPlatCryptoHkdfExtract(otCryptoContext *aContext,
 
 exit:
 	psa_reset_key_attributes(&attributes);
-	otPlatCryptoDestroyKey(key_ref);
+	if (key_ref != PSA_KEY_ID_NULL) {
+		destroy_err = otPlatCryptoDestroyKey(key_ref);
+		if (error == OT_ERROR_NONE) {
+			error = destroy_err;
+		}
+	}
 
 	return error;
 }
@@ -422,22 +623,27 @@ otError otPlatCryptoHkdfExpand(otCryptoContext *aContext,
 otError otPlatCryptoHkdfDeinit(otCryptoContext *aContext)
 {
 	psa_key_derivation_operation_t *operation;
+	otError error;
 
 	if (!checkContext(aContext, sizeof(psa_key_derivation_operation_t))) {
 		return OT_ERROR_INVALID_ARGS;
 	}
 
 	operation = aContext->mContext;
+	error = psaToOtError(psa_key_derivation_abort(operation));
+	release_crypto_context(aContext, CRYPTO_CONTEXT_HKDF);
 
-	return psaToOtError(psa_key_derivation_abort(operation));
+	return error;
 }
 
 otError otPlatCryptoAesInit(otCryptoContext *aContext)
 {
 	psa_key_id_t *key_ref;
+	otError error;
 
-	if (!checkContext(aContext, sizeof(psa_key_id_t))) {
-		return OT_ERROR_INVALID_ARGS;
+	error = ensure_crypto_context(aContext, CRYPTO_CONTEXT_AES);
+	if (error != OT_ERROR_NONE) {
+		return error;
 	}
 
 	key_ref = aContext->mContext;
@@ -449,15 +655,28 @@ otError otPlatCryptoAesInit(otCryptoContext *aContext)
 otError otPlatCryptoAesSetKey(otCryptoContext *aContext, const otCryptoKey *aKey)
 {
 	psa_key_id_t *key_ref;
+	otError error;
 
 	if (aKey == NULL || !checkContext(aContext, sizeof(psa_key_id_t))) {
 		return OT_ERROR_INVALID_ARGS;
 	}
 
 	key_ref = aContext->mContext;
-	*key_ref = aKey->mKeyRef;
 
-	return OT_ERROR_NONE;
+	if (IS_ENABLED(CONFIG_OPENTHREAD_PLATFORM_KEY_REF)) {
+		*key_ref = aKey->mKeyRef;
+		return OT_ERROR_NONE;
+	}
+
+	/* Literal key: the context only holds a key ID, so import the key
+	 * material as a volatile PSA key owned by this context.
+	 */
+	error = destroy_literal_key(key_ref);
+	if (error != OT_ERROR_NONE) {
+		return error;
+	}
+
+	return import_literal_aes_key(key_ref, aKey);
 }
 
 otError otPlatCryptoAesEncrypt(otCryptoContext *aContext, const uint8_t *aInput, uint8_t *aOutput)
@@ -480,15 +699,29 @@ otError otPlatCryptoAesEncrypt(otCryptoContext *aContext, const uint8_t *aInput,
 
 otError otPlatCryptoAesFree(otCryptoContext *aContext)
 {
-	return OT_ERROR_NONE;
+	otError error = OT_ERROR_NONE;
+
+	if (!checkContext(aContext, sizeof(psa_key_id_t))) {
+		return OT_ERROR_INVALID_ARGS;
+	}
+
+	if (!IS_ENABLED(CONFIG_OPENTHREAD_PLATFORM_KEY_REF)) {
+		error = destroy_literal_key(aContext->mContext);
+	}
+
+	release_crypto_context(aContext, CRYPTO_CONTEXT_AES);
+
+	return error;
 }
 
 otError otPlatCryptoSha256Init(otCryptoContext *aContext)
 {
 	psa_hash_operation_t *operation;
+	otError error;
 
-	if (!checkContext(aContext, sizeof(psa_hash_operation_t))) {
-		return OT_ERROR_INVALID_ARGS;
+	error = ensure_crypto_context(aContext, CRYPTO_CONTEXT_SHA256);
+	if (error != OT_ERROR_NONE) {
+		return error;
 	}
 
 	operation = aContext->mContext;
@@ -500,14 +733,17 @@ otError otPlatCryptoSha256Init(otCryptoContext *aContext)
 otError otPlatCryptoSha256Deinit(otCryptoContext *aContext)
 {
 	psa_hash_operation_t *operation;
+	otError error;
 
 	if (!checkContext(aContext, sizeof(psa_hash_operation_t))) {
 		return OT_ERROR_INVALID_ARGS;
 	}
 
 	operation = aContext->mContext;
+	error = psaToOtError(psa_hash_abort(operation));
+	release_crypto_context(aContext, CRYPTO_CONTEXT_SHA256);
 
-	return psaToOtError(psa_hash_abort(operation));
+	return error;
 }
 
 otError otPlatCryptoSha256Start(otCryptoContext *aContext)

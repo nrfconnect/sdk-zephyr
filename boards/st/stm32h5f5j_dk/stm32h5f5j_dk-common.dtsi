@@ -7,6 +7,7 @@
 #include <st/h5/stm32h5f5Xj.dtsi>
 #include <st/h5/stm32h5f5ljhxq-pinctrl.dtsi>
 #include "arduino_r3_connector.dtsi"
+#include <zephyr/dt-bindings/display/panel.h>
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 #include <zephyr/dt-bindings/memory-attr/memory-attr.h>
 #include <zephyr/dt-bindings/memory-attr/memory-attr-arm.h>
@@ -14,11 +15,12 @@
 #include <zephyr/dt-bindings/mipi_dbi/mipi_dbi.h>
 
 / {
-	model = "STMicroelectronics STM32H5F5J DISCOVERY KIT board";
 	compatible = "st,stm32h5f5j-dk";
+	model = "STMicroelectronics STM32H5F5J DISCOVERY KIT board";
 
 	chosen {
 		zephyr,console = &usart2;
+		zephyr,display = &ltdc;
 		zephyr,shell-uart = &usart2;
 		zephyr,sram = &sram1;
 		zephyr,canbus = &fdcan1;
@@ -107,6 +109,16 @@
 	status = "okay";
 };
 
+&pll2 {
+	div-m = <40>;
+	mul-n = <129>;
+	div-p = <2>;
+	div-q = <2>;
+	div-r = <16>;
+	clocks = <&clk_hse>;
+	status = "okay";
+};
+
 &rcc {
 	clocks = <&pll>;
 	clock-frequency = <DT_FREQ_M(250)>;
@@ -144,9 +156,9 @@
 	status = "okay";
 
 	pwm5: pwm {
-		status = "okay";
 		pinctrl-0 = <&tim5_ch1_ph10>;
 		pinctrl-names = "default";
+		status = "okay";
 	};
 };
 
@@ -155,9 +167,9 @@
 	status = "okay";
 
 	pwm14: pwm {
-		status = "okay";
 		pinctrl-0 = <&tim14_ch1_pa7>;
 		pinctrl-names = "default";
+		status = "okay";
 	};
 };
 
@@ -166,9 +178,9 @@
 	status = "okay";
 
 	pwm15: pwm {
-		status = "okay";
 		pinctrl-0 = <&tim15_ch2_pe6>;
 		pinctrl-names = "default";
+		status = "okay";
 	};
 };
 
@@ -236,23 +248,42 @@
 	status = "disabled";
 };
 
+&sdmmc1 {
+	pinctrl-0 = <&sdmmc1_d0_pc8 &sdmmc1_d1_pc9
+		     &sdmmc1_d2_pc10 &sdmmc1_d3_pc11
+		     &sdmmc1_ck_pc12 &sdmmc1_cmd_pd2>;
+	pinctrl-names = "default";
+	disk-name = "SD";
+	bus-width = <4>;
+	/*conflict with xspi1 on pc9 and pd2 pins*/
+	status = "disabled";
+};
+
 &digi_die_temp {
+	status = "okay";
+};
+
+&adc12_common {
+	st,adc-prescaler = <6>;
+	st,adc-clock-source = "ASYNC";
 	status = "okay";
 };
 
 &adc1 {
 	pinctrl-0 = <&adc1_inp6_pf12>; /* Arduino A5 */
 	pinctrl-names = "default";
-	st,adc-clock-source = "ASYNC";
+	status = "okay";
+};
+
+&adc3_common {
 	st,adc-prescaler = <6>;
+	st,adc-clock-source = "ASYNC";
 	status = "okay";
 };
 
 &adc3 {
 	pinctrl-0 = <&adc3_inp6_pe12>; /* Arduino A1 */
 	pinctrl-names = "default";
-	st,adc-clock-source = "ASYNC";
-	st,adc-prescaler = <6>;
 	status = "okay";
 };
 
@@ -277,7 +308,9 @@
 		     &eth_rmii_rxd1_pe5
 		     &eth_rmii_tx_en_pb11
 		     &eth_rmii_txd0_pb12
-		     &eth_rmii_txd1_pg12>;
+		     &eth_rmii_txd1_pg12
+		     &eth_mdio_pj6
+		     &eth_mdc_pj7>;
 	pinctrl-names = "default";
 	phy-connection-type = "rmii";
 	phy-handle = <&eth_phy>;
@@ -285,8 +318,6 @@
 };
 
 &mdio {
-	pinctrl-0 = <&eth_mdio_pj6 &eth_mdc_pj7>;
-	pinctrl-names = "default";
 	status = "okay";
 
 	eth_phy: ethernet-phy@0 {
@@ -300,6 +331,11 @@
 };
 
 &xspi1 {
+	/* Change the compatible here, and keep xspi for other boards */
+	compatible = "st,stm32-xspi-controller";
+	op-mode = "MSPI_OP_MODE_CONTROLLER";
+	clock-frequency = <DT_FREQ_M(50)>;
+
 	pinctrl-0 = <&octospim_p1_io0_pc9 &octospim_p1_io1_pf9
 		     &octospim_p1_io2_pe2 &octospim_p1_io3_pa6
 		     &octospim_p1_io4_ph2 &octospim_p1_io5_ph3
@@ -307,32 +343,56 @@
 		     &octospim_p1_clk_pf10 &octospim_p1_ncs1_pg6
 		     &octospim_p1_dqs_pc5>;
 	pinctrl-names = "default";
+	dmas = <&gpdma1 0 57 STM32_DMA_PERIPH_TX
+		&gpdma1 1 57 STM32_DMA_PERIPH_RX>;
+	dma-names = "tx", "rx";
+	st,csbound = <0>;
 
 	status = "okay";
 
-	ext_flash_ctrl: xspi-flash-controller@0 {
-		compatible = "st,stm32-xspi-nor";
+	ext_flash_ctrl: nor-flash-controller@0 {
+		compatible = "st,nor", "mxicy,mx25u", "jedec,nor";
 		reg = <0>;
+		ranges = <0x0 0x90000000 DT_SIZE_M(64)>;
 		size = <DT_SIZE_M(512)>; /* 512 Mbits */
-		ospi-max-frequency = <DT_FREQ_M(50)>;
-		spi-bus-width = <XSPI_OCTO_MODE>;
-		data-rate = <XSPI_DTR_TRANSFER>;
-		four-byte-opcodes;
-		status = "okay";
 
+		read-command = <0xee11>;
+		write-command = <0x12ed>;
+		rx-dummy = <20>;
+		mspi-max-frequency = <DT_FREQ_M(50)>;
+		mspi-io-mode = "MSPI_IO_MODE_OCTAL";
+		mspi-data-rate = "MSPI_DATA_RATE_DUAL";
+		mspi-hardware-ce-num = <0>;
+		command-length = "INSTR_2_BYTE";
+
+		/* Enable Rd and Wr in MemoryMapped mode (permission = 0) */
+		memmap-config = <1 0 DT_SIZE_M(64) 0>;
+
+		/* external flash mapping */
 		#address-cells = <1>;
 		#size-cells = <1>;
+		st,mem-type = "macronix";
+
+		status = "okay";
 
 		ext_flash: mx25lm51245: ext-flash@0 {
 			compatible = "soc-nv-flash";
 			reg = <0x0 DT_SIZE_M(64)>;
+			ranges = <0x0 0x0 DT_SIZE_M(64)>;
 			write-block-size = <1>;
 			erase-block-size = <DT_SIZE_K(4)>;
+			#address-cells = <1>;
+			#size-cells = <1>;
 		};
 	};
 };
 
 &xspi2 {
+	/* Change the compatible here, and keep xspi for other boards */
+	compatible = "st,stm32-xspi-controller";
+	op-mode = "MSPI_OP_MODE_CONTROLLER";
+	clock-frequency = <DT_FREQ_M(66)>;
+
 	pinctrl-0 = <&octospim_p2_io0_pg0 &octospim_p2_io1_pd2
 		     &octospim_p2_io2_pg2 &octospim_p2_io3_pg3
 		     &octospim_p2_io4_pg4 &octospim_p2_io5_pg5
@@ -340,22 +400,89 @@
 		     &octospim_p2_clk_pe14 &octospim_p2_ncs1_pe15
 		     &octospim_p2_dqs_pf5>;
 	pinctrl-names = "default";
+	st,csbound = <10>;
 
 	status = "okay";
 
 	memc: aps6408l: memory@0 {
-		compatible = "st,stm32-xspi-psram";
+		compatible = "st,psram-device", "aps-z8";
 		reg = <0>;
-		size = <DT_SIZE_M(64)>; /* 64 Mbits */
-		max-frequency = <DT_FREQ_M(133)>;
-		fixed-latency;
-		burst-length = <3>;
-		st,refresh = <320>;
-		st,csbound = <10>;
+		size = <DT_SIZE_M(64)>;
+		mspi-max-frequency = <DT_FREQ_M(66)>;
+		mspi-io-mode = "MSPI_IO_MODE_OCTAL";
+		mspi-data-rate = "MSPI_DATA_RATE_S_D_D";
+		mspi-hardware-ce-num = <0>;
+		read-command = <0x20>;
+		write-command = <0xa0>;
+		command-length = "INSTR_1_BYTE";
+		address-length = "ADDR_4_BYTE";
+		rx-dummy = <3>;
+		tx-dummy = <3>;
+		memmap-config = <1 0 DT_SIZE_M(64) 0>;
+		aps-version = "APS6408L";
+		st,timing-config = <1>;
+		zephyr,pm-device-runtime-auto;
+		st,mem-type = "apmem";
 		status = "okay";
 	};
 };
 
+zephyr_udc0: &usbotg_hs {
+	status = "okay";
+};
+
+&otghs_phy {
+	/*
+	 * HSE runs at 48 MHz on this board.
+	 * Use hse_ck/2 as 24 MHz source.
+	 */
+	clocks = <&rcc STM32_CLOCK(AHB2, 13)>,
+		 <&rcc STM32_SRC_HSE OTGHS_SEL(2)>,
+		 <&rcc STM32_SRC_HSE OTGPHYREFCK_SEL(10)>;
+	status = "okay";
+};
+
 zephyr_jpegenc: &jpeg {
 	status = "okay";
+};
+
+&ltdc {
+	clocks = <&rcc STM32_CLOCK(APB2, 27)>,
+		 <&rcc STM32_SRC_PLL2_R LTDC_SEL(1)>;
+	pinctrl-0 = <&ltdc_r0_pi5 &ltdc_r1_pj8 &ltdc_r2_pd0 &ltdc_r3_pb2
+		     &ltdc_r4_pd9 &ltdc_r5_pd8 &ltdc_r6_pd11 &ltdc_r7_ph9
+		     &ltdc_g0_pk15 &ltdc_g1_pe3 &ltdc_g2_pj4 &ltdc_g3_pe4
+		     &ltdc_g4_pb10 &ltdc_g5_pf14 &ltdc_g6_pj15 &ltdc_g7_pb7
+		     &ltdc_b0_pk11 &ltdc_b1_pi11 &ltdc_b2_pk13 &ltdc_b3_pk12
+		     &ltdc_b4_pd3 &ltdc_b5_pe11 &ltdc_b6_pf13 &ltdc_b7_pd4
+		     &ltdc_de_pf6 &ltdc_clk_pj9 &ltdc_hsync_pb3 &ltdc_vsync_pj11>;
+	pinctrl-names = "default";
+	disp-on-gpios = <&gpiof 3 GPIO_ACTIVE_HIGH>;
+	bl-ctrl-gpios = <&gpiof 8 GPIO_ACTIVE_HIGH>;
+
+	width = <480>;
+	height = <272>;
+	pixel-format = <PANEL_PIXEL_FORMAT_RGB_888>;
+
+	ext-sdram = <&psram>;
+
+	def-back-color-red = <0xff>;
+	def-back-color-green = <0xff>;
+	def-back-color-blue = <0xff>;
+
+	status = "okay";
+
+	display-timings {
+		compatible = "zephyr,panel-timing";
+		de-active = <0>;
+		pixelclk-active = <0>;
+		hsync-active = <0>;
+		vsync-active = <0>;
+		hsync-len = <4>;
+		vsync-len = <4>;
+		hback-porch = <43>;
+		vback-porch = <7>;
+		hfront-porch = <0>;
+		vfront-porch = <8>;
+	};
 };

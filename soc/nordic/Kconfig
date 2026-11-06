@@ -46,12 +46,6 @@ config SOC_COMPATIBLE_NRF54LM20A_CPUAPP
 config SOC_COMPATIBLE_NRF71
 	bool
 
-config SOC_COMPATIBLE_NRF7120_ENGA
-	bool
-
-config SOC_COMPATIBLE_NRF7120_ENGA_CPUAPP
-	bool
-
 config SOC_FAMILY_NORDIC_NRF
 	select SOC_COMPATIBLE_NRF
 	select SOC_RESET_HOOK
@@ -253,7 +247,7 @@ config NRF_PLATFORM_DEPRECATED_SYMBOLS
 	bool "Generate the deprecated HALTIUM/LUMOS symbols for downstream compatibility"
 
 config NRF_PLATFORM_HALTIUM
-	bool "[DEPRECATED] Replaced by SOC_SERIES_NRF54H / SOC_SERIES_NRF92"
+	bool "Replaced by SOC_SERIES_NRF54H / SOC_SERIES_NRF92 [DEPRECATED]"
 	default y if SOC_SERIES_NRF54H || SOC_SERIES_NRF92
 	depends on NRF_PLATFORM_DEPRECATED_SYMBOLS
 	select DEPRECATED
@@ -263,7 +257,7 @@ config NRF_PLATFORM_HALTIUM
 	  still references it continues to build, with a deprecation warning.
 
 config NRF_PLATFORM_LUMOS
-	bool "[DEPRECATED] Replaced by SOC_SERIES_NRF54L / SOC_SERIES_NRF71"
+	bool "Replaced by SOC_SERIES_NRF54L / SOC_SERIES_NRF71 [DEPRECATED]"
 	default y if SOC_SERIES_NRF54L || SOC_SERIES_NRF71
 	depends on NRF_PLATFORM_DEPRECATED_SYMBOLS
 	select DEPRECATED

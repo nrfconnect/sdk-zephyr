@@ -10,3 +10,5 @@ tests:
     tags: power
     integration_platforms:
       - nrf52840dk/nrf52840
+    extra_configs:
+      - CONFIG_CLOCK_CONTROL_NRF=n

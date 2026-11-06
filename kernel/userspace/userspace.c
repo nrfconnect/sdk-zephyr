@@ -75,9 +75,13 @@ static struct k_spinlock obj_lock;         /* kobj struct data */
 
 #ifdef CONFIG_DYNAMIC_OBJECTS
 extern uint8_t _thread_idx_map[CONFIG_MAX_THREAD_BYTES];
+
+extern int z_msgq_cleanup(struct k_msgq *q, bool locked);
+extern int z_stack_cleanup(struct k_stack *stack, bool locked);
+extern int z_timer_cleanup(struct k_timer *timer, bool locked);
 #endif /* CONFIG_DYNAMIC_OBJECTS */
 
-static void clear_perms_cb(struct k_object *ko, void *ctx_ptr);
+static void unref_check(struct k_object *ko, uintptr_t index, bool locked);
 
 const char *otype_to_str(enum k_objects otype)
 {
@@ -109,10 +113,19 @@ const char *otype_to_str(enum k_objects otype)
 	return ret;
 }
 
+/*
+ * A permission index names one principal in the perms[] bitmap of every
+ * kernel object. Every principal is a thread today, and a thread's index is
+ * its slot in _thread_idx_map[], but the perms_*_index() primitives below
+ * only deal in indexes; thread_index_get() is the one place that turns a
+ * thread into one.
+ */
+#define PERM_INDEX_NONE (-1)
+
 struct perm_ctx {
 	int parent_id;
 	int child_id;
-	struct k_thread *parent;
+	const void *skip;
 };
 
 #ifdef CONFIG_GEN_PRIV_STACKS
@@ -254,6 +267,13 @@ static struct dyn_obj *dyn_object_find(const void *obj)
 	return node;
 }
 
+static void clear_perms_cb(struct k_object *ko, void *ctx_ptr)
+{
+	uintptr_t id = (uintptr_t)ctx_ptr;
+
+	unref_check(ko, id, false);
+}
+
 /**
  * @internal
  *
@@ -365,6 +385,14 @@ static struct k_object *dynamic_object_create(enum k_objects otype, size_t align
 		}
 
 		adjusted_size = STACK_ELEMENT_DATA_SIZE(size);
+		if (adjusted_size < size) {
+			/* The size adjustment above overflowed, which would
+			 * hand out an allocation smaller than requested.
+			 */
+			k_free(dyn);
+			return NULL;
+		}
+
 		dyn->data = z_thread_aligned_alloc(DYN_OBJ_DATA_ALIGN_K_THREAD_STACK,
 						     adjusted_size);
 		if (dyn->data == NULL) {
@@ -402,7 +430,14 @@ static struct k_object *dynamic_object_create(enum k_objects otype, size_t align
 		dyn->kobj.data.stack_size = adjusted_size;
 #endif /* CONFIG_GEN_PRIV_STACKS */
 	} else {
-		dyn->data = z_thread_aligned_alloc(align, obj_size_get(otype) + size);
+		size_t total_size = obj_size_get(otype) + size;
+
+		if (total_size < size) {
+			k_free(dyn);
+			return NULL;
+		}
+
+		dyn->data = z_thread_aligned_alloc(align, total_size);
 		if (dyn->data == NULL) {
 			k_free(dyn);
 			return NULL;
@@ -451,9 +486,10 @@ static void *z_object_alloc(enum k_objects otype, size_t size)
 		}
 		break;
 	/* The following are currently not allowed at all */
-	case K_OBJ_FUTEX:			/* Lives in user memory */
-	case K_OBJ_SYS_MUTEX:			/* Lives in user memory */
-	case K_OBJ_NET_SOCKET:			/* Indeterminate size */
+#ifdef CONFIG_SYS_MUTEX_IMPL_K_MUTEX
+	case K_OBJ_SYS_MUTEX:  /* Lives in user memory */
+#endif                         /* CONFIG_SYS_MUTEX_IMPL_K_MUTEX */
+	case K_OBJ_NET_SOCKET: /* Indeterminate size */
 		LOG_ERR("forbidden object type '%s' requested",
 			otype_to_str(otype));
 		return NULL;
@@ -535,6 +571,11 @@ void k_object_free(void *obj)
 	}
 
 	if (dyn != NULL) {
+#ifdef CONFIG_OBJ_CORE
+		if (dyn->kobj.type != K_OBJ_THREAD_STACK_ELEMENT) {
+			k_obj_core_evict_range(obj, obj_size_get(dyn->kobj.type));
+		}
+#endif /* CONFIG_OBJ_CORE */
 #ifdef CONFIG_DYNAMIC_OBJECTS_FORCE_STACK_CACHED
 		/* We may have nudged the pointer to point to the cached area
 		 * in dynamic_object_create() when we first created the thread
@@ -606,11 +647,14 @@ void k_object_wordlist_foreach(_wordlist_cb_func_t func, void *context)
 Z_GENERIC_SECTION(.kobject_data.text.dummies)
 __weak struct k_object *z_object_gperf_find(const void *obj)
 {
+	ARG_UNUSED(obj);
 	return NULL;
 }
 Z_GENERIC_SECTION(.kobject_data.text.dummies)
 __weak void z_object_gperf_wordlist_foreach(_wordlist_cb_func_t func, void *context)
 {
+	ARG_UNUSED(func);
+	ARG_UNUSED(context);
 }
 #else
 Z_GENERIC_SECTION(.kobject_data.text.dummies)
@@ -624,14 +668,17 @@ __weak void k_object_wordlist_foreach(_wordlist_cb_func_t func, void *context)
 }
 #endif
 
-static unsigned int thread_index_get(struct k_thread *thread)
+/* Permission index of a thread, or PERM_INDEX_NONE for a thread that is not
+ * a kernel object (declared on a stack or in supervisor-only memory).
+ */
+static int thread_index_get(struct k_thread *thread)
 {
 	struct k_object *ko;
 
 	ko = k_object_find(thread);
 
 	if (ko == NULL) {
-		return -1;
+		return PERM_INDEX_NONE;
 	}
 
 	return ko->data.thread_id;
@@ -640,8 +687,11 @@ static unsigned int thread_index_get(struct k_thread *thread)
 /* Caller must hold lists_lock for the duration of this call so that the
  * sys_dlist_remove() below is mutually exclusive with concurrent
  * obj_list traversal in k_object_wordlist_foreach() on another CPU.
+ *
+ * Note: The 'locked' parameter in this function refers to the scheduler's
+ * spinlock.
  */
-static void unref_check(struct k_object *ko, uintptr_t index)
+static void unref_check(struct k_object *ko, uintptr_t index, bool locked)
 {
 	k_spinlock_key_t key = k_spin_lock(&obj_lock);
 
@@ -672,10 +722,10 @@ static void unref_check(struct k_object *ko, uintptr_t index)
 	 */
 	switch (ko->type) {
 	case K_OBJ_MSGQ:
-		k_msgq_cleanup((struct k_msgq *)ko->name);
+		(void)z_msgq_cleanup((struct k_msgq *)ko->name, locked);
 		break;
 	case K_OBJ_STACK:
-		k_stack_cleanup((struct k_stack *)ko->name);
+		(void)z_stack_cleanup((struct k_stack *)ko->name, locked);
 		break;
 	case K_OBJ_TIMER:
 		/* k_timer_cleanup() does not check whether the timer has
@@ -684,7 +734,7 @@ static void unref_check(struct k_object *ko, uintptr_t index)
 		 * explicitly here.
 		 */
 		if ((ko->flags & K_OBJ_FLAG_INITIALIZED) != 0U) {
-			k_timer_cleanup((struct k_timer *)ko->name);
+			(void)z_timer_cleanup((struct k_timer *)ko->name, locked);
 		}
 		break;
 	default:
@@ -705,38 +755,37 @@ static void wordlist_cb(struct k_object *ko, void *ctx_ptr)
 	struct perm_ctx *ctx = (struct perm_ctx *)ctx_ptr;
 
 	if (sys_bitfield_test_bit((mem_addr_t)&ko->perms, ctx->parent_id) &&
-				  ((struct k_thread *)ko->name != ctx->parent)) {
+	    (ko->name != ctx->skip)) {
 		sys_bitfield_set_bit((mem_addr_t)&ko->perms, ctx->child_id);
 	}
 }
 
-void k_thread_perms_inherit(struct k_thread *parent, struct k_thread *child)
+/* Give child_id every permission parent_id holds, except on the object at
+ * skip (a thread must not hand out access to itself).
+ */
+static void perms_inherit_index(int parent_id, int child_id, const void *skip)
 {
 	struct perm_ctx ctx = {
-		thread_index_get(parent),
-		thread_index_get(child),
-		parent
+		.parent_id = parent_id,
+		.child_id = child_id,
+		.skip = skip,
 	};
 
-	if ((ctx.parent_id != -1) && (ctx.child_id != -1)) {
+	if ((parent_id != PERM_INDEX_NONE) && (child_id != PERM_INDEX_NONE)) {
 		k_object_wordlist_foreach(wordlist_cb, &ctx);
 	}
 }
 
-void k_thread_perms_set(struct k_object *ko, struct k_thread *thread)
+static void perms_set_index(struct k_object *ko, int index)
 {
-	int index = thread_index_get(thread);
-
-	if (index != -1) {
+	if (index != PERM_INDEX_NONE) {
 		sys_bitfield_set_bit((mem_addr_t)&ko->perms, index);
 	}
 }
 
-void k_thread_perms_clear(struct k_object *ko, struct k_thread *thread)
+static void perms_clear_index(struct k_object *ko, int index)
 {
-	int index = thread_index_get(thread);
-
-	if (index != -1) {
+	if (index != PERM_INDEX_NONE) {
 		sys_bitfield_clear_bit((mem_addr_t)&ko->perms, index);
 		/* unref_check() requires lists_lock so its dlist remove is
 		 * SMP-safe.
@@ -744,43 +793,72 @@ void k_thread_perms_clear(struct k_object *ko, struct k_thread *thread)
 #ifdef CONFIG_DYNAMIC_OBJECTS
 		k_spinlock_key_t key = k_spin_lock(&lists_lock);
 
-		unref_check(ko, index);
+		unref_check(ko, index, false);
 		k_spin_unlock(&lists_lock, key);
 #else
-		unref_check(ko, index);
+		unref_check(ko, index, false);
 #endif /* CONFIG_DYNAMIC_OBJECTS */
 	}
 }
 
-static void clear_perms_cb(struct k_object *ko, void *ctx_ptr)
+static void clear_perms_cb_locked(struct k_object *ko, void *ctx_ptr)
 {
 	uintptr_t id = (uintptr_t)ctx_ptr;
 
-	unref_check(ko, id);
+	unref_check(ko, id, true);
 }
 
-void k_thread_perms_all_clear(struct k_thread *thread)
+/* Drop index from every object's bitmap. Only used while the scheduler's
+ * spinlock is held, which the lower layers must know so that they do not
+ * try to reacquire it (leading to deadlock).
+ */
+static void perms_all_clear_index(int index)
 {
-	uintptr_t index = thread_index_get(thread);
-
-	if ((int)index != -1) {
-		k_object_wordlist_foreach(clear_perms_cb, (void *)index);
+	if (index != PERM_INDEX_NONE) {
+		k_object_wordlist_foreach(clear_perms_cb_locked, (void *)(uintptr_t)index);
 	}
 }
 
-static int thread_perms_test(struct k_object *ko)
+static int perms_test_index(struct k_object *ko, int index)
 {
-	int index;
-
 	if ((ko->flags & K_OBJ_FLAG_PUBLIC) != 0U) {
 		return 1;
 	}
 
-	index = thread_index_get(_current);
-	if (index != -1) {
+	if (index != PERM_INDEX_NONE) {
 		return sys_bitfield_test_bit((mem_addr_t)&ko->perms, index);
 	}
 	return 0;
+}
+
+void k_thread_perms_inherit(struct k_thread *parent, struct k_thread *child)
+{
+	perms_inherit_index(thread_index_get(parent), thread_index_get(child), parent);
+}
+
+void k_thread_perms_set(struct k_object *ko, struct k_thread *thread)
+{
+	perms_set_index(ko, thread_index_get(thread));
+}
+
+void k_thread_perms_clear(struct k_object *ko, struct k_thread *thread)
+{
+	perms_clear_index(ko, thread_index_get(thread));
+}
+
+/*
+ * The only place where this routine is presently used in the Zephyr tree
+ * is in halt_thread() when a thread is being aborted and the scheduler's
+ * spinlock is held.
+ */
+void k_thread_perms_all_clear(struct k_thread *thread)
+{
+	perms_all_clear_index(thread_index_get(thread));
+}
+
+static int thread_perms_test(struct k_object *ko)
+{
+	return perms_test_index(ko, thread_index_get(_current));
 }
 
 static void dump_permission_error(struct k_object *ko)

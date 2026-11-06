@@ -52,6 +52,14 @@ config UART_NS16550_VARIANT_NS16550
 	help
 	  This enables support for 16-bytes FIFO if UART controller is 16550.
 
+config UART_NS16550_VARIANT_NS16450
+	bool "UART 16450 (no FIFO)"
+	help
+	  Run the controller in 16450 mode, without FIFOs. Select this on
+	  hardware whose FIFO-mode receive interrupts (trigger level and
+	  character timeout) do not work: in 16450 mode the received data
+	  available interrupt is raised for every character instead.
+
 config UART_NS16550_VARIANT_NS16750
 	bool "UART 16750 (64-bytes FIFO and auto flow control)"
 	help
@@ -71,6 +79,16 @@ config UART_NS16550_ACCESS_WORD_ONLY
 	  16550 (DesignWare UART) only allows word access, byte access will raise
 	  exception.
 
+config UART_NS16550_BCM283X_AUX
+	bool "Add support for NS16550 variant specific to Broadcom BCM283x SoCs"
+	default y
+	depends on DT_HAS_BRCM_BCM283X_AUX_UART_ENABLED
+	select UART_NS16550_ACCESS_WORD_ONLY
+	select PINCTRL
+	help
+	  Enabling this configuration allows the users to use the auxiliary UART port in
+	  Broadcom BCM283x SoCs by enabling a vendor specific extended register set.
+
 config UART_NS16550_TI_K3
 	bool "Add support for NS16550 variant specific to TI K3 SoCs"
 	select PINCTRL
@@ -81,6 +99,8 @@ config UART_NS16550_TI_K3
 
 config UART_NS16550_DW8250_DW_APB
 	bool "Synopsys DesignWare 8250"
+	default y
+	depends on DT_HAS_SNPS_DW_APB_UART_ENABLED
 	help
 	  This enables support for Synopsys DesignWare 8250 UART controller.
 

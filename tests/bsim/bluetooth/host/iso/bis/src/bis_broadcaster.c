@@ -132,6 +132,7 @@ static void init(void)
 		.disconnected = iso_disconnected_cb,
 		.connected = iso_connected_cb,
 		.sent = iso_tx_sent_cb,
+		.send_failed = iso_tx_send_failed_cb,
 	};
 	struct bt_le_local_features local_features;
 	int err;
@@ -186,11 +187,6 @@ static void start_ext_adv(struct bt_le_ext_adv *adv)
 	/* Start extended advertising */
 	err = bt_le_ext_adv_start(adv, BT_LE_EXT_ADV_START_DEFAULT);
 	TEST_ASSERT(err == 0, "Failed to start extended advertising: %d", err);
-
-	/* FIXME: Temporary workaround to get around an assert in the controller
-	 * Open issue: https://github.com/zephyrproject-rtos/zephyr/issues/72852
-	 */
-	k_sleep(K_MSEC(100));
 
 	/* Enable Periodic Advertising */
 	err = bt_le_per_adv_start(adv);

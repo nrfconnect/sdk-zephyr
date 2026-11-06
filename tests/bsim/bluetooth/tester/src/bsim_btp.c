@@ -19,7 +19,7 @@
 #include <zephyr/sys/atomic_types.h>
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/sys/util.h>
-#include <zephyr/sys_clock.h>
+#include <zephyr/sys/clock.h>
 
 #include "babblekit/testcase.h"
 
@@ -219,6 +219,8 @@ static bool is_valid_gap_packet_len(const struct btp_hdr *hdr, struct net_buf_si
 		}
 	case BTP_GAP_EV_PERIODIC_BIGINFO:
 		return buf_simple->len == sizeof(struct btp_gap_periodic_biginfo_ev);
+	case BTP_GAP_EV_PEER_CAR_RECEIVED:
+		return buf_simple->len == sizeof(struct btp_gap_peer_car_status_ev);
 	default:
 		LOG_ERR("Unhandled opcode 0x%02X", hdr->opcode);
 		return false;

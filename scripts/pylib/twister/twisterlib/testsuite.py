@@ -80,7 +80,8 @@ def scan_file(inf_name):
         br"^\s*ZTEST_SUITE\(\s*(?P<suite_name>[a-zA-Z0-9_]+)\s*,",
         re.MULTILINE)
     testcase_regex = re.compile(
-        br"^\s*(?:ZTEST|ZTEST_F|ZTEST_USER|ZTEST_USER_F)\(\s*(?P<suite_name>[a-zA-Z0-9_]+)\s*,"
+        br"^\s*(?:static\s+)?(?:ZTEST|ZTEST_F|ZTEST_USER|ZTEST_USER_F)\("
+        br"\s*(?P<suite_name>[a-zA-Z0-9_]+)\s*,"
         br"\s*(?P<testcase_name>[a-zA-Z0-9_]+)\s*",
         re.MULTILINE)
     # Checks if the file contains a definition of "void test_main(void)"
@@ -244,9 +245,15 @@ def _find_new_ztest_testcases(search_area):
     Find regular ztest testcases like "ZTEST", "ZTEST_F" etc. Return
     testcases' names and eventually found warnings.
     """
+    # The negative lookahead rejects names built with the ## token-paste
+    # operator (e.g. ZTEST(suite, test_dma##idx##_m2m_loop)); those cannot be
+    # resolved statically, so registering the truncated name would create a
+    # phantom testcase that never runs. Such cases are still discovered at
+    # runtime from the harness output.
     testcase_regex = re.compile(
-        br"^\s*(?:ZTEST|ZTEST_F|ZTEST_USER|ZTEST_USER_F)\(\s*(?P<suite_name>[a-zA-Z0-9_]+)\s*,"
-        br"\s*(?P<testcase_name>[a-zA-Z0-9_]+)\s*",
+        br"^\s*(?:static\s+)?(?:ZTEST|ZTEST_F|ZTEST_USER|ZTEST_USER_F)\("
+        br"\s*(?P<suite_name>[a-zA-Z0-9_]+)\s*,"
+        br"\s*(?P<testcase_name>[a-zA-Z0-9_]+)(?![a-zA-Z0-9_#])\s*",
         re.MULTILINE)
 
     return _find_ztest_testcases(search_area, testcase_regex)
@@ -449,6 +456,11 @@ class TestSuite(StatusMixin):
         self._status = TwisterStatus.NONE
 
         self.harness_config: HarnessConfig | None = None
+        self.sidecar: str | None = None
+        # Per-sidecar configuration, namespaced by sidecar name (see the
+        # `sidecar_config` schema key). Left as a raw dict here; each sidecar
+        # coerces its own block into a typed config when it is configured.
+        self.sidecar_config: dict = {}
         self.required_applications: list[RequiredApplication] = []
 
         if data:

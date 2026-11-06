@@ -26,7 +26,6 @@
 #include <zephyr/sys/util_macro.h>
 
 #include "common/bt_str.h"
-#include "common/rpa.h"
 #include "conn_internal.h"
 #include "gatt_internal.h"
 #include "hci_core.h"
@@ -102,6 +101,17 @@ static bool key_is_in_use(uint8_t id)
 void bt_keys_reset(void)
 {
 	memset(key_pool, 0, sizeof(key_pool));
+}
+
+bool bt_keys_has_bond(uint8_t id)
+{
+	for (size_t i = 0U; i < ARRAY_SIZE(key_pool); i++) {
+		if ((key_pool[i].keys != 0U) && (key_pool[i].id == id)) {
+			return true;
+		}
+	}
+
+	return false;
 }
 
 struct bt_keys *bt_keys_get_addr(uint8_t id, const bt_addr_le_t *addr)
@@ -197,6 +207,31 @@ void bt_foreach_bond(uint8_t id, void (*func)(const struct bt_bond_info *info,
 	}
 }
 
+enum bt_le_addr_res_support bt_le_bond_addr_res_support(uint8_t id, const bt_addr_le_t *peer)
+{
+	struct bt_keys *keys;
+
+	__ASSERT_NO_MSG(peer != NULL);
+
+	if (!IS_ENABLED(CONFIG_BT_GATT_AUTO_READ_CENTRAL_ADDR_RES)) {
+		/* Also ignores an answer stored by a previous firmware that
+		 * had the option enabled.
+		 */
+		return BT_LE_ADDR_RES_SUPPORT_UNKNOWN;
+	}
+
+	keys = bt_keys_find_addr(id, peer);
+	if (keys == NULL || (keys->flags & BT_KEYS_CENTRAL_ADDR_RES_KNOWN) == 0) {
+		return BT_LE_ADDR_RES_SUPPORT_UNKNOWN;
+	}
+
+	if ((keys->flags & BT_KEYS_CENTRAL_ADDR_RES_SUPPORT) != 0) {
+		return BT_LE_ADDR_RES_SUPPORT_YES;
+	}
+
+	return BT_LE_ADDR_RES_SUPPORT_NO;
+}
+
 void bt_keys_foreach_type(enum bt_keys_type type, void (*func)(struct bt_keys *keys, void *data),
 			  void *data)
 {
@@ -286,7 +321,7 @@ struct bt_keys *bt_keys_find_irk(uint8_t id, const bt_addr_le_t *addr)
 			continue;
 		}
 
-		if (bt_rpa_irk_matches(key_pool[i].irk.val, &addr->a)) {
+		if (bt_addr_matches_irk(&addr->a, key_pool[i].irk.val)) {
 			LOG_DBG("RPA %s matches %s", bt_addr_str(&key_pool[i].irk.rpa),
 				bt_addr_le_str(&key_pool[i].addr));
 
@@ -499,7 +534,7 @@ static int keys_set(const char *name, size_t len_rd, settings_read_cb read_cb,
 	 * previous version that did not enforce this requirement.
 	 */
 	if ((keys->flags & BT_KEYS_AUTHENTICATED) &&
-	    !((keys->flags & BT_KEYS_OOB) || (keys->flags & BT_KEYS_SC))) {
+	    !(keys->flags & (BT_KEYS_OOB | BT_KEYS_SC))) {
 		LOG_WRN("The keys for %s are downgraded to unauthenticated as they no longer meet "
 			"authentication requirements",
 			bt_addr_le_str(&addr));
@@ -518,6 +553,10 @@ static int keys_set(const char *name, size_t len_rd, settings_read_cb read_cb,
 static void id_add(struct bt_keys *keys, void *user_data)
 {
 	__ASSERT_NO_MSG(keys != NULL);
+
+	if ((keys->state & BT_KEYS_ID_ADDED) != 0U) {
+		return;
+	}
 
 	/* Only mark as pending here. Keys are added to the controller RL on
 	 * demand when advertising or scanning starts, avoiding bt_id_add()

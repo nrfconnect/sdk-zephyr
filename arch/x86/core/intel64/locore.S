@@ -15,7 +15,7 @@
 #include <zephyr/arch/cpu.h>
 #include <zephyr/kernel/mm.h>
 #ifdef CONFIG_HW_SHADOW_STACK
-#include <x86_shstk.h>
+#include <zephyr/x86_shstk.h>
 #endif
 
 /*
@@ -152,9 +152,15 @@ x86_ap_start:
 	 */
 
 #ifdef CONFIG_X2APIC
-	/* In x2APIC mode the MMIO registers are inaccessible; read the
-	 * 32-bit x2APIC ID from MSR 0x802 instead.
+	/*
+	 * x2APIC: read the ID from the MSR (MMIO is inaccessible). An AP may
+	 * still be in xAPIC mode, where that MSR faults, so enable x2APIC
+	 * first -- faults can't be handled this early.
 	 */
+	movl $X86_APIC_BASE_MSR, %ecx
+	rdmsr
+	orl $X86_APIC_BASE_MSR_X2APIC, %eax
+	wrmsr
 	movl $(X86_X2APIC_BASE_MSR + (LOAPIC_ID >> 4)), %ecx
 	rdmsr
 #else
@@ -972,9 +978,31 @@ irq_dispatch:
 	call z_sched_usage_stop
 	popq %rcx
 #endif
+
+/* CONFIG_SYS_IDLE_HOOKS also needs this hook, for the same reason as on the
+ * 32-bit path; see the comment in arch/x86/core/ia32/intstub.S.
+ */
+#if defined(CONFIG_TRACING_ISR) || defined(CONFIG_SYS_IDLE_HOOKS)
+	/* RCX still holds the vector number the dispatch below indexes with, so
+	 * save it. It is pushed twice to keep RSP 16-byte aligned for the call.
+	 */
+	pushq %rcx
+	pushq %rcx
+	call sys_trace_isr_enter
+	popq %rcx
+	popq %rcx
+#endif
+
 	movq x86_irq_funcs(,%rcx,8), %rax
 	movq x86_irq_args(,%rcx,8), %rdi
 	call *%rax
+
+#if defined(CONFIG_TRACING_ISR)
+	/* Nothing is live across this call: the EOI sequence below recomputes
+	 * RAX/RCX/RDX and reloads RSI from the TSS.
+	 */
+	call sys_trace_isr_exit
+#endif
 
 	xorq %rax, %rax
 #ifdef CONFIG_X2APIC

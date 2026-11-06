@@ -21,7 +21,7 @@ enum net_ipv4_autoconf_state {
 struct net_if;
 
 /**
- * @brief Start IPv4 autoconfiguration RFC 3927: IPv4 Link Local
+ * @brief Start IPv4 autoconfiguration @rfc{3927}: IPv4 Link Local
  *
  * @details Start IPv4 IP autoconfiguration
  *
@@ -51,18 +51,5 @@ static inline void net_ipv4_autoconf_reset(struct net_if *iface)
 	ARG_UNUSED(iface);
 }
 #endif
-
-/** @cond INTERNAL_HIDDEN */
-
-/**
- * @brief Initialize IPv4 auto configuration engine.
- */
-#if defined(CONFIG_NET_IPV4_AUTO)
-void net_ipv4_autoconf_init(void);
-#else
-static inline void net_ipv4_autoconf_init(void) { }
-#endif
-
-/** @endcond */
 
 #endif /* ZEPHYR_INCLUDE_NET_IPV4_AUTOCONF_H_ */

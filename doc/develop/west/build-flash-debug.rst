@@ -5,7 +5,7 @@ Building, Flashing and Debugging
 
 Zephyr provides several :ref:`west extension commands <west-extensions>` for
 building, flashing, and interacting with Zephyr programs running on a board:
-``build``, ``flash``, ``debug``, ``debugserver`` and ``attach``.
+``build``, ``flash``, ``debug``, ``debugserver``, ``rtt``, and ``attach``.
 
 For information on adding board support for the flashing and debugging
 commands, see :ref:`flash-and-debug-support` in the board porting guide.
@@ -400,8 +400,10 @@ You can :ref:`configure <west-config-cmd>` ``west build`` using these options.
          - ``board``: The board name
          - ``source_dir``: Path to the CMake source directory, relative to the
            current working directory. If the current working directory is
-           inside the source directory, this is an empty string. If no source
-           directory is specified, it defaults to current working directory.
+           inside the source directory, this is an empty string, as it is on
+           Windows for a source directory on another drive, which has no
+           relative path to the current one. If no source directory is
+           specified, it defaults to current working directory.
            E.g. if ``west build ../app`` is run from ``<west_topdir>/app1``,
            ``source_dir`` resolves to ``../app`` (which is the relative path
            to the current working dir).
@@ -458,9 +460,6 @@ From a Zephyr build directory, re-build the binary and flash it to
 your board::
 
   west flash
-
-Without options, the behavior is the same as ``ninja flash`` (or
-``make flash``, etc.).
 
 To specify the build directory, use ``--build-dir`` (or ``-d``)::
 
@@ -599,9 +598,6 @@ To attach a debugger to your board and open up a local network port
 you can connect a debugger to (e.g. an IDE debugger)::
 
   west debugserver
-
-Without options, the behavior is the same as ``ninja debug`` and
-``ninja debugserver`` (or ``make debug``, etc.).
 
 To specify the build directory, use ``--build-dir`` (or ``-d``)::
 

@@ -116,11 +116,37 @@ static int scmi_clock_set_rate(const struct device *dev,
 	return scmi_clock_rate_set(proto, &cfg);
 }
 
+static enum clock_control_status scmi_clock_get_status(const struct device *dev,
+						       clock_control_subsys_t clk)
+{
+	struct scmi_clock_data *data;
+	struct scmi_protocol *proto;
+	uint32_t clk_id, config;
+	int ret;
+
+	proto = dev->data;
+	data = proto->data;
+	clk_id = POINTER_TO_UINT(clk);
+
+	if (clk_id >= data->clk_num) {
+		return CLOCK_CONTROL_STATUS_UNKNOWN;
+	}
+
+	ret = scmi_clock_config_get(proto, clk_id, 0, &config);
+	if (ret < 0) {
+		return CLOCK_CONTROL_STATUS_UNKNOWN;
+	}
+
+	return SCMI_CLK_CONFIG_ENABLE_DISABLE(config) == 1U ? CLOCK_CONTROL_STATUS_ON
+							    : CLOCK_CONTROL_STATUS_OFF;
+}
+
 static DEVICE_API(clock_control, scmi_clock_api) = {
 	.on = scmi_clock_on,
 	.off = scmi_clock_off,
 	.get_rate = scmi_clock_get_rate,
 	.set_rate = scmi_clock_set_rate,
+	.get_status = scmi_clock_get_status,
 };
 
 static int scmi_clock_init(const struct device *dev)
@@ -147,5 +173,5 @@ static int scmi_clock_init(const struct device *dev)
 static struct scmi_clock_data data;
 
 DT_INST_SCMI_PROTOCOL_DEFINE(0, &scmi_clock_init, NULL, &data, NULL,
-			     PRE_KERNEL_1, CONFIG_CLOCK_CONTROL_INIT_PRIORITY,
+			     SCMI_PROTOCOL_INIT_LEVEL, CONFIG_CLOCK_CONTROL_SCMI_INIT_PRIORITY,
 			     &scmi_clock_api, SCMI_CLK_PROTOCOL_SUPPORTED_VERSION, NULL);

@@ -173,9 +173,7 @@ static inline int start_stream(const struct i2s_max32_stream *stream, enum i2s_d
 	 */
 	struct dma_config dma_cfg = {
 		.dma_slot = stream->dma.slot,
-		.source_data_size = stream_data->i2s_cfg.word_size / 8,
 		.source_burst_length = 4,
-		.dest_data_size = stream_data->i2s_cfg.word_size / 8,
 		.dest_burst_length = 4,
 		.block_count = 1,
 		.user_data = (void *)stream,
@@ -210,6 +208,8 @@ static inline int start_stream(const struct i2s_max32_stream *stream, enum i2s_d
 		dma_block.dest_addr_adj = DMA_ADDR_ADJ_INCREMENT;
 		/* Configure DMA */
 		dma_cfg.channel_direction = PERIPHERAL_TO_MEMORY;
+		dma_cfg.source_data_size = sizeof(uint32_t);
+		dma_cfg.dest_data_size = stream_data->i2s_cfg.word_size / 8;
 		dma_cfg.dma_callback = i2s_max32_rx_dma_callback;
 		dma_cfg.channel_priority = 1;
 	} else {
@@ -226,6 +226,8 @@ static inline int start_stream(const struct i2s_max32_stream *stream, enum i2s_d
 		dma_block.dest_addr_adj = DMA_ADDR_ADJ_NO_CHANGE;
 		/* Configure DMA */
 		dma_cfg.channel_direction = MEMORY_TO_PERIPHERAL;
+		dma_cfg.source_data_size = stream_data->i2s_cfg.word_size / 8;
+		dma_cfg.dest_data_size = sizeof(uint32_t);
 		dma_cfg.dma_callback = i2s_max32_tx_dma_callback;
 		dma_cfg.channel_priority = 0;
 	}
@@ -668,7 +670,7 @@ static int i2s_max32_read(const struct device *dev, void **mem_block, size_t *si
 		return -EIO;
 	}
 
-	err = k_msgq_get(stream_data->queue, &block, K_MSEC(stream_data->i2s_cfg.timeout));
+	err = k_msgq_get(stream_data->queue, &block, SYS_TIMEOUT_MS(stream_data->i2s_cfg.timeout));
 	if (err < 0) {
 		LOG_ERR("RX queue empty");
 		return err;
@@ -698,7 +700,7 @@ static int i2s_max32_write(const struct device *dev, void *mem_block, size_t siz
 		return -EINVAL;
 	}
 
-	err = k_msgq_put(stream_data->queue, &block, K_MSEC(stream_data->i2s_cfg.timeout));
+	err = k_msgq_put(stream_data->queue, &block, SYS_TIMEOUT_MS(stream_data->i2s_cfg.timeout));
 	if (err < 0) {
 		LOG_ERR("TX queue full");
 		return err;
@@ -707,10 +709,39 @@ static int i2s_max32_write(const struct device *dev, void *mem_block, size_t siz
 	return 0;
 }
 
+static const struct i2s_config *i2s_max32_config_get(const struct device *dev,
+						    enum i2s_dir dir)
+{
+	const struct i2s_max32_cfg *cfg = dev->config;
+	const struct i2s_max32_stream *stream;
+	struct i2s_max32_stream_data *stream_data;
+
+	switch (dir) {
+	case I2S_DIR_TX:
+		stream = &cfg->tx;
+		break;
+	case I2S_DIR_RX:
+		stream = &cfg->rx;
+		break;
+	default:
+		LOG_ERR("Invalid I2S direction: %d", (int)dir);
+		return NULL;
+	}
+
+	stream_data = stream->data;
+
+	if (stream_data->state == I2S_STATE_NOT_READY) {
+		return NULL;
+	}
+
+	return &stream_data->i2s_cfg;
+}
+
 static DEVICE_API(i2s, i2s_max32_driver_api) = {
 	.read = i2s_max32_read,
 	.write = i2s_max32_write,
 	.configure = i2s_max32_configure,
+	.config_get = i2s_max32_config_get,
 	.trigger = i2s_max32_trigger,
 };
 
@@ -732,8 +763,8 @@ static int i2s_max32_init(const struct device *dev)
 #define MAX32_DT_INST_DMA_CELL(n, name, cell) DT_INST_DMAS_CELL_BY_NAME(n, name, cell)
 
 #define I2S_MAX32_STREAM_DATA_CREATE_AND_INIT(n, dir)                                              \
-	K_MSGQ_DEFINE(i2s_max32_##dir##_q_##n, sizeof(struct i2s_mem_block),                       \
-		      CONFIG_I2S_MAX32_QUEUE_SIZE, 1);                                             \
+	K_MSGQ_DEFINE_STATIC_TYPE(i2s_max32_##dir##_q_##n, struct i2s_mem_block,                   \
+				  CONFIG_I2S_MAX32_QUEUE_SIZE);                                    \
 	static struct i2s_max32_stream_data i2s_max32_##dir##_data_##n = {                         \
 		.state = I2S_STATE_NOT_READY,                                                      \
 		.drain = false,                                                                    \

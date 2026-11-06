@@ -381,7 +381,9 @@ GROUP_START(DTCM)
 		__dtcm_data_end = .;
 	} GROUP_LINK_IN(DTCM AT> ROMABLE_REGION)
 
+	MPU_ALIGN(__dtcm_data_end - __dtcm_start);
 	__dtcm_end = .;
+	__dtcm_size = __dtcm_end - __dtcm_start;
 
 	__dtcm_data_load_start = LOADADDR(_DTCM_DATA_SECTION_NAME);
 
@@ -395,7 +397,6 @@ GROUP_END(DTCM)
 
 #include <zephyr/linker/debug-sections.ld>
 
-    /DISCARD/ : { *(.note.GNU-stack) }
 
     SECTION_PROLOGUE(.ARM.attributes, 0,)
 	{
@@ -431,10 +432,10 @@ _flash_used = LOADADDR(.last_section) + SIZEOF(.last_section) - __rom_region_sta
 SECTION_PROLOGUE(.sig,,)
 {
     KEEP(*(.sig))
-    /* Reserve 256 bytes for signature */
-    LONG(0xDEADBEEF)  /* 4 bytes to give section contents */
-	FILL(0xDEADBEEF);
-    . += 252;         /* 252 + 4 = 256 bytes total */
+    /* Reserve space for signature */
+    LONG(0xDEADBEEF) /* 4 bytes to give section contents */
+    FILL(0xDEADBEEF);
+    . += CONFIG_SOC_FAMILY_MAX32_SECURE_SOC_SIGNATURE_SECTION_SIZE - 4; /* - 4 as we add 4 for 0xDEADBEEF */
 } GROUP_LINK_IN(ROMABLE_REGION)
 
     SECTION_DATA_PROLOGUE(_BSS_SECTION_NAME,(NOLOAD),)

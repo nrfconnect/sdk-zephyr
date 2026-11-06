@@ -14,6 +14,7 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
 import time
 import traceback
 from collections import deque
@@ -48,7 +49,12 @@ if version.parse(elftools.__version__) < version.parse('0.24'):
 
 # Job server only works on Linux for now.
 if sys.platform == 'linux':
-    from twisterlib.jobserver import GNUMakeJobClient, GNUMakeJobServer, JobClient
+    from twisterlib.jobserver import (
+        GNUMakeJobClient,
+        GNUMakeJobServer,
+        JobClient,
+        fifo_supported,
+    )
 
 from domains import Domains
 from twisterlib.coverage import run_coverage_instance
@@ -56,6 +62,8 @@ from twisterlib.environment import TwisterEnv
 from twisterlib.harness import Harness, HarnessImporter
 from twisterlib.log_helper import log_command
 from twisterlib.platform import Platform
+from twisterlib.runmonitor import console_ui_active, make_event
+from twisterlib.sidecars import SidecarImporter
 from twisterlib.testinstance import TestInstance
 from twisterlib.testplan import change_skip_to_error_if_integration
 from twisterlib.testsuite import TestSuite
@@ -354,7 +362,7 @@ class CMake:
             if log_msg:
                 pattern = (
                     r"region `(FLASH|ROM|RAM|ICCM|DCCM|SRAM|"
-                    r"dram\d_\d_seg|iram\d_\d_seg)' "
+                    r"dram\d_\d_seg|iram\d_\d_seg|sram\d_\d_seg)' "
                     "overflowed by"
                 )
                 overflow_found = re.findall(pattern, log_msg)
@@ -394,8 +402,10 @@ class CMake:
             gen_edt_args = ""
 
         warning_command = 'CONFIG_COMPILER_WARNINGS_AS_ERRORS'
+        kconfig_deprecation_command = 'CONFIG_DEPRECATED_KCONFIGS_AS_ERRORS'
         if self.instance.sysbuild:
             warning_command = 'SB_' + warning_command
+            kconfig_deprecation_command = 'SB_' + kconfig_deprecation_command
 
         logger.debug(f"Running cmake on {self.source_dir} for {self.platform.name}")
         cmake_args = [
@@ -403,6 +413,7 @@ class CMake:
             f'-DTC_RUNID={self.instance.run_id}',
             f'-DTC_NAME={self.instance.testsuite.name}',
             f'-D{warning_command}={warnings_as_errors}',
+            f'-D{kconfig_deprecation_command}={warnings_as_errors}',
             f'-DEXTRA_GEN_EDT_ARGS={gen_edt_args}',
             f'-G{self.env.generator}',
             f'-DPython3_EXECUTABLE={pathlib.Path(sys.executable).as_posix()}'
@@ -458,6 +469,24 @@ class CMake:
             cmd += cmake_filter_args
 
         kwargs = dict()
+
+        # A sidecar may need environment or extra CMake arguments for the
+        # configure step (e.g. the virtiofs sidecar injects a -chardev socket
+        # path into QEMU's flags; the net-tools sidecar bakes the host interface
+        # name and addresses). Ask it generically so the runner stays agnostic of
+        # any specific sidecar; an unknown name is reported later by the run stage.
+        try:
+            sidecar = SidecarImporter.get_sidecar(self.instance.sidecar)
+        except ValueError:
+            sidecar = None
+        if sidecar is not None:
+            sidecar.configure(self.instance)
+            sidecar_env = sidecar.cmake_env(self.build_dir)
+            if sidecar_env:
+                env = os.environ.copy()
+                env.update(sidecar_env)
+                kwargs['env'] = env
+            cmd += sidecar.cmake_args(self.build_dir)
 
         log_command(logger, "Calling cmake", cmd)
 
@@ -648,10 +677,25 @@ class ProjectBuilder(FilterBuilder):
     def trace(self) -> bool:
         return self.options.verbose > 2
 
-    def log_info(self, filename, inline_logs, log_testcases=False):
+    def log_info(self, filename, inline_logs, log_only_failed=False):
         filename = os.path.abspath(os.path.realpath(filename))
         if inline_logs:
             logger.info(f"{filename:-^100}")
+
+            if log_only_failed:
+                any_found = False
+                for tc in self.instance.testcases:
+                    if not tc.reason:
+                        continue
+                    logger.error(
+                        f"\n{str(tc.name).center(100, '_')}\n"
+                        f"{tc.reason}\n"
+                        f"{100*'_'}\n"
+                        f"{tc.output}"
+                    )
+                    any_found = True
+                if any_found:
+                    return
 
             try:
                 with open(filename) as fp:
@@ -670,16 +714,6 @@ class ProjectBuilder(FilterBuilder):
 
             logger.info(f"{filename:-^100}")
 
-            if log_testcases:
-                for tc in self.instance.testcases:
-                    if not tc.reason:
-                        continue
-                    logger.info(
-                        f"\n{str(tc.name).center(100, '_')}\n"
-                        f"{tc.reason}\n"
-                        f"{100*'_'}\n"
-                        f"{tc.output}"
-                    )
         else:
             logger.error("see: " + Fore.YELLOW + filename + Fore.RESET)
 
@@ -690,14 +724,20 @@ class ProjectBuilder(FilterBuilder):
         b_log = f"{build_dir}/build.log"
         v_log = f"{build_dir}/valgrind.log"
         d_log = f"{build_dir}/device.log"
-        pytest_log = f"{build_dir}/twister_harness.log"
+        script_log = f"{build_dir}/twister_harness.log"
 
         if os.path.exists(v_log) and "Valgrind" in self.instance.reason:
             self.log_info(f"{v_log}", inline_logs)
-        elif os.path.exists(pytest_log) and os.path.getsize(pytest_log) > 0:
-            self.log_info(f"{pytest_log}", inline_logs, log_testcases=True)
+        elif os.path.exists(script_log) and os.path.getsize(script_log) > 0:
+            self.log_info(f"{script_log}", inline_logs, log_only_failed=True)
         elif os.path.exists(h_log) and os.path.getsize(h_log) > 0:
             self.log_info(f"{h_log}", inline_logs)
+            # What the process wrote to stderr (a loader or sanitizer
+            # message, QEMU refusing to start) explains a console log
+            # that stops short; show it with the console output like the
+            # JSON report does.
+            if os.path.exists(he_log) and os.path.getsize(he_log) > 0:
+                self.log_info(f"{he_log}", inline_logs)
         elif os.path.exists(he_log) and os.path.getsize(he_log) > 0:
             self.log_info(f"{he_log}", inline_logs)
         elif os.path.exists(d_log) and os.path.getsize(d_log) > 0:
@@ -718,294 +758,298 @@ class ProjectBuilder(FilterBuilder):
             logger.error(f"RuntimeError: {e}")
             traceback.print_exc()
 
+    def _mark_status_error(self, sae, op_label=None):
+        # Shared handling for an illegal status assignment raised by a pipeline
+        # stage: log it, force the instance to ERROR and block its remaining
+        # cases with a uniform reason.
+        logger.error(str(sae))
+        self.instance.status = TwisterStatus.ERROR
+        reason = INCORRECT_STATUS_REASON if op_label is None \
+            else f"{INCORRECT_STATUS_REASON} on {op_label}"
+        self.instance.reason = reason
+        self.instance.add_missing_case_status(TwisterStatus.BLOCK, reason)
+
+    # Maps a pipeline op name to the ProjectBuilder method that runs it. Each
+    # handler computes the next op, enqueues follow-up work and owns its own
+    # error handling (via _mark_status_error).
+    _PIPELINE_OPS = {
+        "filter": "_op_filter",
+        "cmake": "_op_cmake",
+        "build": "_op_build",
+        "post_build": "_op_post_build",
+        "gather_metrics": "_op_gather_metrics",
+        "run": "_op_run",
+        "coverage": "_op_coverage",
+        "report": "_op_report",
+        "cleanup": "_op_cleanup",
+    }
+
     def process(self, processing_queue: deque, processing_ready: dict[str, TestInstance],
                 message, lock, results: ExecutionCounter):
-        next_op = None
-        additionals = {}
-
         op = message.get('op')
         options = self.options
         if not logger.handlers:
             setup_logging(options.outdir, options.log_file, options.log_level, options.timestamps)
         self.instance.setup_handler(self.env)
 
-        if op == "filter":
-            try:
-                ret = self.cmake(filter_stages=self.instance.filter_stages)
-                if self.instance.status in [TwisterStatus.FAIL, TwisterStatus.ERROR]:
+        handler_name = self._PIPELINE_OPS.get(op)
+        if handler_name is not None:
+            getattr(self, handler_name)(
+                processing_queue, processing_ready, message, lock, results
+            )
+
+    def _op_filter(self, processing_queue, processing_ready, message, lock, results):
+        next_op = None
+        try:
+            ret = self.cmake(filter_stages=self.instance.filter_stages)
+            if self.instance.status in [TwisterStatus.FAIL, TwisterStatus.ERROR]:
+                next_op = 'report'
+            else:
+                # Here we check the dt/kconfig filter results coming from running cmake
+                if self.instance.name in ret['filter'] and ret['filter'][self.instance.name]:
+                    logger.debug(f"filtering {self.instance.name}")
+                    self.instance.status = TwisterStatus.FILTER
+                    self.instance.reason = RUNTIME_FILTER_REASON
+                    results.filtered_runtime_increment()
+                    self.instance.add_missing_case_status(TwisterStatus.FILTER)
                     next_op = 'report'
                 else:
-                    # Here we check the dt/kconfig filter results coming from running cmake
-                    if self.instance.name in ret['filter'] and ret['filter'][self.instance.name]:
-                        logger.debug(f"filtering {self.instance.name}")
-                        self.instance.status = TwisterStatus.FILTER
-                        self.instance.reason = RUNTIME_FILTER_REASON
-                        results.filtered_runtime_increment()
-                        self.instance.add_missing_case_status(TwisterStatus.FILTER)
-                        next_op = 'report'
-                    else:
-                        next_op = 'cmake'
-            except StatusAttributeError as sae:
-                logger.error(str(sae))
-                self.instance.status = TwisterStatus.ERROR
-                reason = INCORRECT_STATUS_REASON
-                self.instance.reason = reason
-                self.instance.add_missing_case_status(TwisterStatus.BLOCK, reason)
-                next_op = 'report'
-            finally:
-                self._add_to_processing_queue(processing_queue, next_op)
+                    next_op = 'cmake'
+        except StatusAttributeError as sae:
+            self._mark_status_error(sae)
+            next_op = 'report'
+        finally:
+            self._add_to_processing_queue(processing_queue, next_op)
 
-        # The build process, call cmake and build with configured generator
-        elif op == "cmake":
-            try:
-                ret = self.cmake()
-                if self.instance.status in [TwisterStatus.FAIL, TwisterStatus.ERROR]:
-                    next_op = 'report'
-                elif self.options.cmake_only:
-                    if self.instance.status == TwisterStatus.NONE:
-                        logger.debug(f"CMake only: PASS {self.instance.name}")
-                        self.instance.status = TwisterStatus.NOTRUN
-                        self.instance.add_missing_case_status(TwisterStatus.NOTRUN, 'CMake only')
+    # The build process, call cmake and build with configured generator
+    def _op_cmake(self, processing_queue, processing_ready, message, lock, results):
+        next_op = None
+        try:
+            ret = self.cmake()
+            if self.instance.status in [TwisterStatus.FAIL, TwisterStatus.ERROR]:
+                next_op = 'report'
+            elif self.options.cmake_only:
+                if self.instance.status == TwisterStatus.NONE:
+                    logger.debug(f"CMake only: PASS {self.instance.name}")
+                    self.instance.status = TwisterStatus.NOTRUN
+                    self.instance.add_missing_case_status(TwisterStatus.NOTRUN, 'CMake only')
+                next_op = 'report'
+            else:
+                # Here we check the runtime filter results coming from running cmake
+                if self.instance.name in ret['filter'] and ret['filter'][self.instance.name]:
+                    logger.debug(f"filtering {self.instance.name}")
+                    self.instance.status = TwisterStatus.FILTER
+                    self.instance.reason = RUNTIME_FILTER_REASON
+                    results.filtered_runtime_increment()
+                    self.instance.add_missing_case_status(TwisterStatus.FILTER)
                     next_op = 'report'
                 else:
-                    # Here we check the runtime filter results coming from running cmake
-                    if self.instance.name in ret['filter'] and ret['filter'][self.instance.name]:
-                        logger.debug(f"filtering {self.instance.name}")
-                        self.instance.status = TwisterStatus.FILTER
-                        self.instance.reason = RUNTIME_FILTER_REASON
-                        results.filtered_runtime_increment()
-                        self.instance.add_missing_case_status(TwisterStatus.FILTER)
-                        next_op = 'report'
-                    else:
-                        next_op = 'build'
-            except StatusAttributeError as sae:
-                logger.error(str(sae))
+                    next_op = 'build'
+        except StatusAttributeError as sae:
+            self._mark_status_error(sae)
+            next_op = 'report'
+        finally:
+            self._add_to_processing_queue(processing_queue, next_op)
+
+    def _op_build(self, processing_queue, processing_ready, message, lock, results):
+        next_op = None
+        try:
+            logger.debug(f"build test: {self.instance.name}")
+            ret = self.build()
+            if not ret:
                 self.instance.status = TwisterStatus.ERROR
-                reason = INCORRECT_STATUS_REASON
-                self.instance.reason = reason
-                self.instance.add_missing_case_status(TwisterStatus.BLOCK, reason)
+                self.instance.reason = "Build Failure"
                 next_op = 'report'
-            finally:
-                self._add_to_processing_queue(processing_queue, next_op)
+            else:
+                # Count skipped cases during build, for example
+                # due to ram/rom overflow.
+                if  self.instance.status == TwisterStatus.SKIP:
+                    results.skipped_increment()
+                    self.instance.add_missing_case_status(
+                        TwisterStatus.SKIP,
+                        self.instance.reason
+                    )
 
-        elif op == "build":
-            try:
-                logger.debug(f"build test: {self.instance.name}")
-                ret = self.build()
-                if not ret:
-                    self.instance.status = TwisterStatus.ERROR
-                    self.instance.reason = "Build Failure"
-                    next_op = 'report'
-                else:
-                    # Count skipped cases during build, for example
-                    # due to ram/rom overflow.
-                    if  self.instance.status == TwisterStatus.SKIP:
-                        results.skipped_increment()
-                        self.instance.add_missing_case_status(
-                            TwisterStatus.SKIP,
-                            self.instance.reason
-                        )
-
-                    if ret.get('returncode', 1) > 0:
-                        self.instance.add_missing_case_status(
-                            TwisterStatus.BLOCK,
-                            self.instance.reason
-                        )
-                        next_op = 'report'
-                    else:
-                        if self.instance.testsuite.harness in ['ztest', 'test']:
-                            logger.debug(
-                                f"Determine test cases for test instance: {self.instance.name}"
-                            )
-                            try:
-                                self.determine_testcases(results)
-                                next_op = 'post_build'
-                            except BuildError as e:
-                                logger.error(str(e))
-                                self.instance.status = TwisterStatus.ERROR
-                                self.instance.reason = str(e)
-                                next_op = 'report'
-                        else:
-                            next_op = 'post_build'
-            except StatusAttributeError as sae:
-                logger.error(str(sae))
-                self.instance.status = TwisterStatus.ERROR
-                reason = INCORRECT_STATUS_REASON
-                self.instance.reason = reason
-                self.instance.add_missing_case_status(TwisterStatus.BLOCK, reason)
-                next_op = 'report'
-            finally:
-                self._add_to_processing_queue(processing_queue, next_op)
-
-        # Run post-build checks on the freshly built artifacts
-        elif op == "post_build":
-            try:
-                ret = self.post_build()
                 if ret.get('returncode', 1) > 0:
-                    self.instance.status = TwisterStatus.ERROR
-                    self.instance.reason = ret.get('reason', 'Post-build check failure')
                     self.instance.add_missing_case_status(
                         TwisterStatus.BLOCK,
                         self.instance.reason
                     )
                     next_op = 'report'
                 else:
-                    next_op = 'gather_metrics'
-            except StatusAttributeError as sae:
-                logger.error(str(sae))
-                self.instance.status = TwisterStatus.ERROR
-                reason = INCORRECT_STATUS_REASON
-                self.instance.reason = reason
-                self.instance.add_missing_case_status(TwisterStatus.BLOCK, reason)
-                next_op = 'report'
-            finally:
-                self._add_to_processing_queue(processing_queue, next_op)
-
-        elif op == "gather_metrics":
-            try:
-                ret = self.gather_metrics(self.instance)
-                if not ret or ret.get('returncode', 1) > 0:
-                    self.instance.status = TwisterStatus.ERROR
-                    self.instance.reason = "Build Failure at gather_metrics."
-                    next_op = 'report'
-                elif self.instance.run and self.instance.handler.ready:
-                    next_op = 'run'
-                else:
-                    if self.instance.status == TwisterStatus.NOTRUN:
-                        run_conditions =  (
-                            f"(run:{self.instance.run},"
-                            f" handler.ready:{self.instance.handler.ready})"
+                    if self.instance.testsuite.harness in ['ztest', 'test']:
+                        logger.debug(
+                            f"Determine test cases for test instance: {self.instance.name}"
                         )
-                        logger.debug(f"Instance {self.instance.name} can't run {run_conditions}")
-                        self.instance.add_missing_case_status(
-                            TwisterStatus.NOTRUN,
-                            "Nowhere to run"
-                        )
-                    next_op = 'report'
-            except StatusAttributeError as sae:
-                logger.error(str(sae))
+                        try:
+                            self.determine_testcases(results)
+                            next_op = 'post_build'
+                        except BuildError as e:
+                            logger.error(str(e))
+                            self.instance.status = TwisterStatus.ERROR
+                            self.instance.reason = str(e)
+                            next_op = 'report'
+                    else:
+                        next_op = 'post_build'
+        except StatusAttributeError as sae:
+            self._mark_status_error(sae)
+            next_op = 'report'
+        finally:
+            self._add_to_processing_queue(processing_queue, next_op)
+
+    # Run post-build checks on the freshly built artifacts
+    def _op_post_build(self, processing_queue, processing_ready, message, lock, results):
+        next_op = None
+        try:
+            ret = self.post_build()
+            if ret.get('returncode', 1) > 0:
                 self.instance.status = TwisterStatus.ERROR
-                reason = INCORRECT_STATUS_REASON
-                self.instance.reason = reason
-                self.instance.add_missing_case_status(TwisterStatus.BLOCK, reason)
+                self.instance.reason = ret.get('reason', 'Post-build check failure')
+                self.instance.add_missing_case_status(
+                    TwisterStatus.BLOCK,
+                    self.instance.reason
+                )
                 next_op = 'report'
-            finally:
-                self._add_to_processing_queue(processing_queue, next_op)
+            else:
+                next_op = 'gather_metrics'
+        except StatusAttributeError as sae:
+            self._mark_status_error(sae)
+            next_op = 'report'
+        finally:
+            self._add_to_processing_queue(processing_queue, next_op)
 
-        # Run the generated binary using one of the supported handlers
-        elif op == "run":
-            processing_queue_updated = False
-            try:
-                if self.ensure_required_apps_ready(processing_ready):
-                    with self.reserve_hardware() as ready_to_run:
-                        if ready_to_run:
-                            logger.debug(f"run test: {self.instance.name}")
-                            self.run()
-                            logger.debug(f"run status: {self.instance.name} {self.instance.status}")
-
-                # to make it work with pickle
-                self.instance.handler.thread = None
-
-                next_op = "coverage" if self.options.coverage else "report"
-                additionals = {
-                    "status": self.instance.status,
-                    "reason": self.instance.reason
-                }
-            except StatusAttributeError as sae:
-                logger.error(str(sae))
+    def _op_gather_metrics(self, processing_queue, processing_ready, message, lock, results):
+        next_op = None
+        try:
+            ret = self.gather_metrics(self.instance)
+            if not ret or ret.get('returncode', 1) > 0:
                 self.instance.status = TwisterStatus.ERROR
-                reason = INCORRECT_STATUS_REASON
-                self.instance.reason = reason
-                self.instance.add_missing_case_status(TwisterStatus.BLOCK, reason)
+                self.instance.reason = "Build Failure at gather_metrics."
                 next_op = 'report'
-                additionals = {}
-            except (NoDeviceAvailableException, NoRequiredApplicationNotReadyException):
-                if processing_ready.get(self.instance.name) is None:
-                    # Register this instance as ready (build succeeded) so that other instances
-                    # listing it as a required application can unblock and proceed.
-                    # This also handles mutual dependencies between instances,
-                    # letting the pair resolve without deadlock.
-                    # The entry will be overwritten with the final state in the 'report' stage.
-                    with lock:
-                        processing_ready.update({self.instance.name: self.instance})
-
-                # no device available to run the test or required application not ready,
-                # add the task back to the pipeline to process it later
-                processing_queue.appendleft(message)
-                processing_queue_updated = True
-                # to avoid busy waiting
-                time.sleep(1)
-            finally:
-                if not processing_queue_updated:
-                    self._add_to_processing_queue(processing_queue, next_op, additionals)
-
-        # Run per-instance code coverage
-        elif op == "coverage":
-            try:
-                logger.debug(f"Run coverage for '{self.instance.name}'")
-                self.instance.coverage_status, self.instance.coverage = \
-                        run_coverage_instance(self.options, self.instance)
+            elif self.instance.run and self.instance.handler.ready:
+                next_op = 'run'
+            else:
+                if self.instance.status == TwisterStatus.NOTRUN:
+                    run_conditions =  (
+                        f"(run:{self.instance.run},"
+                        f" handler.ready:{self.instance.handler.ready})"
+                    )
+                    logger.debug(f"Instance {self.instance.name} can't run {run_conditions}")
+                    self.instance.add_missing_case_status(
+                        TwisterStatus.NOTRUN,
+                        "Nowhere to run"
+                    )
                 next_op = 'report'
-                additionals = {
-                    "status": self.instance.status,
-                    "reason": self.instance.reason
-                }
-            except StatusAttributeError as sae:
-                logger.error(str(sae))
-                self.instance.status = TwisterStatus.ERROR
-                reason = f"{INCORRECT_STATUS_REASON} on {op}"
-                self.instance.reason = reason
-                self.instance.add_missing_case_status(TwisterStatus.BLOCK, reason)
-                next_op = 'report'
-                additionals = {}
-            finally:
-                self._add_to_processing_queue(processing_queue, next_op, additionals)
+        except StatusAttributeError as sae:
+            self._mark_status_error(sae)
+            next_op = 'report'
+        finally:
+            self._add_to_processing_queue(processing_queue, next_op)
 
-        # Report results and output progress to screen
-        elif op == "report":
-            try:
+    # Run the generated binary using one of the supported handlers
+    def _op_run(self, processing_queue, processing_ready, message, lock, results):
+        next_op = None
+        additionals = {}
+        processing_queue_updated = False
+        try:
+            if self.ensure_required_apps_ready(processing_ready):
+                with self.reserve_hardware() as ready_to_run:
+                    if ready_to_run:
+                        logger.debug(f"run test: {self.instance.name}")
+                        self.run()
+                        logger.debug(f"run status: {self.instance.name} {self.instance.status}")
+
+            # to make it work with pickle
+            self.instance.handler.thread = None
+
+            next_op = "coverage" if self.options.coverage else "report"
+            additionals = {
+                "status": self.instance.status,
+                "reason": self.instance.reason
+            }
+        except StatusAttributeError as sae:
+            self._mark_status_error(sae)
+            next_op = 'report'
+            additionals = {}
+        except (NoDeviceAvailableException, NoRequiredApplicationNotReadyException):
+            if processing_ready.get(self.instance.name) is None:
+                # Register this instance as ready (build succeeded) so that other instances
+                # listing it as a required application can unblock and proceed.
+                # This also handles mutual dependencies between instances,
+                # letting the pair resolve without deadlock.
+                # The entry will be overwritten with the final state in the 'report' stage.
                 with lock:
                     processing_ready.update({self.instance.name: self.instance})
-                    self.report_out(results)
 
-                if not self.options.coverage:
-                    if self.options.prep_artifacts_for_testing:
-                        next_op = 'cleanup'
-                        additionals = {"mode": "device"}
-                    elif self.options.runtime_artifact_cleanup == "pass" and \
-                        self.instance.status in [TwisterStatus.PASS, TwisterStatus.NOTRUN]:
-                        next_op = 'cleanup'
-                        additionals = {"mode": "passed"}
-                    elif self.options.runtime_artifact_cleanup == "all":
-                        next_op = 'cleanup'
-                        additionals = {"mode": "all"}
-            except StatusAttributeError as sae:
-                logger.error(str(sae))
-                self.instance.status = TwisterStatus.ERROR
-                reason = INCORRECT_STATUS_REASON
-                self.instance.reason = reason
-                self.instance.add_missing_case_status(TwisterStatus.BLOCK, reason)
-                next_op = None
-                additionals = {}
-            finally:
+            # no device available to run the test or required application not ready,
+            # add the task back to the pipeline to process it later
+            processing_queue.appendleft(message)
+            processing_queue_updated = True
+            # to avoid busy waiting
+            time.sleep(1)
+        finally:
+            if not processing_queue_updated:
                 self._add_to_processing_queue(processing_queue, next_op, additionals)
 
-        elif op == "cleanup":
-            try:
-                mode = message.get("mode")
-                if mode == "device":
-                    self.cleanup_device_testing_artifacts()
-                elif (
-                    mode == "passed"
-                    or (mode == "all" and self.instance.reason != "CMake build failure")
-                ):
-                    self.cleanup_artifacts()
-            except StatusAttributeError as sae:
-                logger.error(str(sae))
-                self.instance.status = TwisterStatus.ERROR
-                reason = INCORRECT_STATUS_REASON
-                self.instance.reason = reason
-                self.instance.add_missing_case_status(TwisterStatus.BLOCK, reason)
+    # Run per-instance code coverage
+    def _op_coverage(self, processing_queue, processing_ready, message, lock, results):
+        next_op = None
+        additionals = {}
+        try:
+            logger.debug(f"Run coverage for '{self.instance.name}'")
+            self.instance.coverage_status, self.instance.coverage = \
+                    run_coverage_instance(self.options, self.instance)
+            next_op = 'report'
+            additionals = {
+                "status": self.instance.status,
+                "reason": self.instance.reason
+            }
+        except StatusAttributeError as sae:
+            self._mark_status_error(sae, op_label='coverage')
+            next_op = 'report'
+            additionals = {}
+        finally:
+            self._add_to_processing_queue(processing_queue, next_op, additionals)
+
+    # Report results and output progress to screen
+    def _op_report(self, processing_queue, processing_ready, message, lock, results):
+        next_op = None
+        additionals = {}
+        try:
+            with lock:
+                processing_ready.update({self.instance.name: self.instance})
+                self.report_out(results)
+
+            if not self.options.coverage:
+                if self.options.prep_artifacts_for_testing:
+                    next_op = 'cleanup'
+                    additionals = {"mode": "device"}
+                elif self.options.runtime_artifact_cleanup == "pass" and \
+                    self.instance.status in [TwisterStatus.PASS, TwisterStatus.NOTRUN]:
+                    next_op = 'cleanup'
+                    additionals = {"mode": "passed"}
+                elif self.options.runtime_artifact_cleanup == "all":
+                    next_op = 'cleanup'
+                    additionals = {"mode": "all"}
+        except StatusAttributeError as sae:
+            self._mark_status_error(sae)
+            next_op = None
+            additionals = {}
+        finally:
+            self._add_to_processing_queue(processing_queue, next_op, additionals)
+
+    def _op_cleanup(self, processing_queue, processing_ready, message, lock, results):
+        try:
+            mode = message.get("mode")
+            if mode == "device":
+                self.cleanup_device_testing_artifacts()
+            elif (
+                mode == "passed"
+                or (mode == "all" and self.instance.reason != "CMake build failure")
+            ):
+                self.cleanup_artifacts()
+        except StatusAttributeError as sae:
+            self._mark_status_error(sae)
 
     def demangle(self, symbol_name):
         if symbol_name[:2] == '_Z':
@@ -1431,7 +1475,11 @@ class ProjectBuilder(FilterBuilder):
 
             if instance.status in [TwisterStatus.ERROR, TwisterStatus.FAIL]:
                 self.log_info_file(self.options.inline_logs)
-        else:
+        elif not console_ui_active():
+            # The single-line progress ticker owns stdout; skip it while the
+            # full-screen console monitor owns the terminal. The gate is the
+            # live UI flag, not the option, so the ticker resumes as soon as
+            # the user leaves the dashboard mid-run.
             completed_perc = 0
             if total_to_do > 0:
                 completed_perc = int(
@@ -1511,7 +1559,10 @@ class ProjectBuilder(FilterBuilder):
                 if self.instance.platform.arch == cond_args[1]:
                     args.append(cond_args[2])
             elif cond_args[0] == "platform" and len(cond_args) == 3:
-                if self.instance.platform.name == cond_args[1]:
+                if (
+                    cond_args[1] in self.instance.platform.name
+                    or cond_args[1] in self.instance.platform.aliases
+                ):
                     args.append(cond_args[2])
             elif cond_args[0] == "simulation" and len(cond_args) == 3:
                 if self.instance.platform.simulation == cond_args[1]:
@@ -1620,6 +1671,10 @@ class ProjectBuilder(FilterBuilder):
         if instance.handler.ready:
             logger.debug(f"Reset instance status from '{instance.status}' to None before run.")
             instance.status = TwisterStatus.NONE
+            # The handler only fills in a reason of its own, such as the exit
+            # code, when none is set: drop whatever a loaded test plan or an
+            # earlier retry iteration left behind.
+            instance.reason = None
 
             if(self.options.seed is not None and instance.platform.name.startswith("native_")):
                 self.parse_generated()
@@ -1639,9 +1694,37 @@ class ProjectBuilder(FilterBuilder):
                 logger.error(instance.reason)
                 return
 
-            # If the harness does not handle execution itself, delegate to the handler.
-            if not harness.run(instance.handler.get_test_timeout()):
-                instance.handler.handle(harness)
+            # A sidecar (selected with the `sidecar:` field, or attached by
+            # twister e.g. for ivshmem coverage) provisions a host-side resource
+            # around the run, e.g. a virtiofsd daemon or an ivshmem backing file.
+            # It is set up before the test executes by whichever path runs it --
+            # a harness that executes the test itself, or the handler -- and torn
+            # down afterwards. Teardown always runs once the sidecar has been
+            # configured, including when setup() failed part way through, so a
+            # sidecar never leaks what it already provisioned.
+            try:
+                sidecar = SidecarImporter.get_sidecar(instance.sidecar)
+            except ValueError as error:
+                instance.status = TwisterStatus.ERROR
+                instance.reason = str(error)
+                logger.error(instance.reason)
+                return
+            if sidecar is not None:
+                sidecar.configure(instance)
+
+            try:
+                # Provision on its own, before anything executes the test: a
+                # sidecar must never be short-circuited away by how the test is
+                # run. setup() reports whether execution should proceed at all.
+                proceed = sidecar.setup() if sidecar is not None else True
+
+                # If the harness does not handle execution itself, delegate to
+                # the handler.
+                if proceed and not harness.run(instance.handler.get_test_timeout()):
+                    instance.handler.handle(harness)
+            finally:
+                if sidecar is not None:
+                    sidecar.teardown()
 
         sys.stdout.flush()
 
@@ -1820,6 +1903,99 @@ class TwisterRunner:
         self.jobs = 1
         self.results = None
         self.jobserver = None
+        # multiprocessing.Queue carrying run-monitor events from the worker
+        # processes; stays None unless monitoring is enabled.
+        self.event_queue = None
+
+    def _emit_event(self, kind, op, instance, **extra):
+        '''Post a monitoring event; never let monitoring break the pipeline.'''
+        if self.event_queue is None:
+            return
+        with contextlib.suppress(Exception):
+            self.event_queue.put_nowait(make_event(kind, op, instance, **extra))
+
+    def _console_monitor_wanted(self):
+        '''--console-monitor requested and usable in this environment.'''
+        if getattr(self.options, 'console_monitor', False) is not True:
+            return False
+        if not (sys.stdout.isatty() and sys.stdin.isatty()):
+            logger.warning(
+                "console monitor requires an interactive terminal, "
+                "continuing with normal output"
+            )
+            return False
+        try:
+            import curses  # noqa: F401
+        except ImportError:
+            logger.warning(
+                "console monitor requires curses (unavailable on this "
+                "platform), continuing with normal output"
+            )
+            return False
+        return True
+
+    def _start_monitors(self):
+        '''Start the run monitor and console UI if --console-monitor is on.
+
+        Returns (monitor, console_ui, console_ui_thread), all None when
+        monitoring is off. The monitor and UI objects hold threads, so they
+        are deliberately NOT stored on self: self is pickled/forked into the
+        worker processes, which only need the picklable event_queue.
+        '''
+        if not self._console_monitor_wanted():
+            return None, None, None
+        from twisterlib.runmonitor import RunMonitor
+
+        self.event_queue = mp.Queue()
+        monitor = RunMonitor(self.event_queue, self.results)
+        monitor.state.init_plan(self.instances, self.options.outdir)
+        monitor.state.set_meta(
+            jobs=self.jobs,
+            version=getattr(self.env, 'version', ''),
+            iteration=1,
+        )
+        if not monitor.start():
+            self.event_queue = None
+            return None, None, None
+
+        console_ui, ui_thread = self._start_console_ui(monitor)
+        return monitor, console_ui, ui_thread
+
+    def _start_console_ui(self, monitor):
+        '''Run the console dashboard in a thread of this (main) process.
+
+        Console logging is muted while the UI owns the terminal (everything
+        still goes to twister.log) and restored when the UI exits, whether
+        the user left with 'q' or the run ended.
+        '''
+        from twisterlib.consolemonitor import ConsoleUI, LocalMonitorSource
+        from twisterlib.log_helper import mute_console_logging, restore_console_logging
+
+        ui = ConsoleUI(LocalMonitorSource(monitor), interval=1.0)
+        ui.embedded = True
+        muted = mute_console_logging()
+        # Arm the shared UI-active flag the worker processes watch: while it
+        # is set they skip the progress ticker and terminal resets. It is
+        # cleared the moment the UI exits so normal output resumes
+        # immediately, even when the user leaves the dashboard mid-run. Must
+        # be created here, before execute() forks the workers.
+        from twisterlib.runmonitor import clear_ui_active_flag, create_ui_active_flag
+
+        create_ui_active_flag()
+
+        def run_ui():
+            try:
+                ui.run()
+            except Exception as e:
+                logger.error(f"console monitor UI failed: {e}")
+            finally:
+                clear_ui_active_flag()
+                restore_console_logging(muted)
+                logger.info("Console monitor closed")
+
+        thread = threading.Thread(target=run_ui, name='twister-console-ui', daemon=True)
+        thread.start()
+        return ui, thread
 
     def run(self):
 
@@ -1847,7 +2023,14 @@ class TwisterRunner:
             if os.name == 'posix':
                 self.jobserver = GNUMakeJobClient.from_environ(jobs=self.options.jobs)
                 if not self.jobserver:
-                    self.jobserver = GNUMakeJobServer(self.jobs)
+                    # One job server serves every build, so any suite counts
+                    cmake_args = list(self.options.extra_args)
+                    for instance in self.instances.values():
+                        cmake_args.extend(instance.testsuite.extra_args)
+                    self.jobserver = GNUMakeJobServer(
+                        self.jobs,
+                        fifo=fifo_supported(self.env.generator_cmd, cmake_args),
+                    )
                 elif self.jobserver.jobs:
                     self.jobs = self.jobserver.jobs
             # TODO: Implement this on windows/mac also
@@ -1858,10 +2041,15 @@ class TwisterRunner:
 
         self.update_counting_before_pipeline()
 
+        monitor, console_ui, console_ui_thread = self._start_monitors()
+
+        aborted = False
         while True:
             self.results.iteration_increment()
 
             if self.results.iteration > 1:
+                if monitor:
+                    monitor.state.note_iteration(self.results.iteration)
                 logger.info(f"{self.results.iteration} Iteration:")
                 time.sleep(self.options.retry_interval)  # waiting for the system to settle down
                 self.results.done = self.results.total - self.results.failed
@@ -1872,13 +2060,18 @@ class TwisterRunner:
             else:
                 self.results.done = self.results.filtered_static + self.results.skipped
 
-            self.execute(processing_queue, processing_ready)
+            aborted = self.execute(processing_queue, processing_ready) is True
 
             for inst in processing_ready.values():
                 inst.metrics["handler_time"] = inst.execution_time
                 self.instances[inst.name] = inst
 
-            print("")
+            if console_ui is None:
+                print("")
+
+            if aborted:
+                # The user interrupted the run; do not start retry iterations.
+                break
 
             retry_errors = False
             if self.results.error and self.options.retry_build_errors:
@@ -1887,6 +2080,24 @@ class TwisterRunner:
             retries = retries - 1
             if retries == 0 or ( self.results.failed == 0 and not retry_errors):
                 break
+
+        if monitor:
+            monitor.finish()
+        if console_ui_thread and console_ui_thread.is_alive():
+            if aborted or not sys.stdout.isatty():
+                # The run was interrupted (or the terminal went away): shut
+                # the dashboard down instead of waiting for a keypress.
+                console_ui.stop_requested.set()
+                console_ui_thread.join(timeout=5)
+            else:
+                # Leave the dashboard up so failures can be inspected; the
+                # user exits it with 'q', then reports are written as usual.
+                # A Ctrl-C here counts as that exit, not as a hang.
+                try:
+                    console_ui_thread.join()
+                except KeyboardInterrupt:
+                    console_ui.stop_requested.set()
+                    console_ui_thread.join(timeout=5)
 
         self.show_brief()
 
@@ -1949,6 +2160,15 @@ class TwisterRunner:
                         self.results,
                         decrement=True
                     )
+                    # Testcase results from the failed attempt must not survive
+                    # into the retry: cases that do not report on the retry
+                    # (for example ones not built into the image) would keep a
+                    # stale "blocked" or "failed" status inside a passing suite.
+                    for case in instance.testcases:
+                        case.status = TwisterStatus.NONE
+                        case.reason = None
+                        case.duration = 0
+                        case.output = ""
 
                 # Check if cmake package_helper script can be run in advance.
                 instance.filter_stages = []
@@ -1987,8 +2207,14 @@ class TwisterRunner:
                 break
             else:
                 instance: TestInstance = task['test']
+                op = task.get('op')
                 pb = ProjectBuilder(instance, self.env, self.jobserver)
+                self._emit_event('op_start', op, instance)
+                op_start_time = time.time()
                 pb.process(processing_queue, processing_ready, task, lock, results)
+                self._emit_event(
+                    'op_done', op, pb.instance, duration=time.time() - op_start_time
+                )
                 if (
                     self.env.options.quit_on_failure
                     and pb.instance.status in [TwisterStatus.FAIL, TwisterStatus.ERROR]
@@ -2012,7 +2238,11 @@ class TwisterRunner:
             logger.error(f"General exception: {e}\n{traceback.format_exc()}")
             sys.exit(1)
 
-    def execute(self, processing_queue: deque, processing_ready: dict[str, TestInstance]):
+    def execute(self, processing_queue: deque, processing_ready: dict[str, TestInstance]) -> bool:
+        '''Run the worker processes to completion.
+
+        Returns True if the execution was interrupted by the user.
+        '''
         lock = Lock()
         logger.info("Adding tasks to the queue...")
         self.add_tasks_to_queue(processing_queue, self.options.build_only, self.options.test_only,
@@ -2040,6 +2270,8 @@ class TwisterRunner:
             logger.info("Execution interrupted")
             for p in processes:
                 p.terminate()
+            return True
+        return False
 
     @staticmethod
     def get_cmake_filter_stages(filt, logic_keys):
@@ -2060,7 +2292,7 @@ class TwisterRunner:
         # Remove brackets
         filt = filt.replace("(", "")
         filt = filt.replace(")", "")
-        # Splite by whitespaces
+        # Split by whitespaces
         filt = filt.split()
         for expression in filt:
             if expression.startswith("dt_"):

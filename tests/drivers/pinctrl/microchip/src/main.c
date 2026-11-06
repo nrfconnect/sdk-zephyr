@@ -124,6 +124,9 @@ ZTEST_SUITE(pinctrl_mchp_mec, NULL, NULL, NULL, NULL, NULL);
 #else
 #define MCHP_PINCTRL_FLAG_GET(pincfg, pos) (((pincfg.pinflag) >> pos) & MCHP_PINCTRL_FLAG_MASK)
 
+/* for field checking */
+#define MCHP_PINCTRL_FIELD_GET(pincfg, pos, mask) (((pincfg.pinflag) >> (pos)) & (mask))
+
 ZTEST(pinctrl_mchp, test_pullup_pulldown_none)
 {
 	const struct pinctrl_state *scfg;
@@ -164,7 +167,7 @@ ZTEST(pinctrl_mchp, test_input_output_enable)
 	zassert_equal(MCHP_PINCTRL_FLAG_GET(scfg->pins[4], MCHP_PINCTRL_OUTPUTENABLE_POS), 1);
 }
 
-#if defined(CONFIG_TEST_PINCTRL_MCHP_SAM)
+#ifdef CONFIG_PIN_DRIVE_STRENGTH
 ZTEST(pinctrl_mchp, test_drive_strength)
 {
 	const struct pinctrl_state *scfg;
@@ -173,7 +176,34 @@ ZTEST(pinctrl_mchp, test_drive_strength)
 
 	zassert_equal(MCHP_PINCTRL_FLAG_GET(scfg->pins[5], MCHP_PINCTRL_DRIVESTRENGTH_POS), 1);
 }
+#endif /* CONFIG_PIN_DRIVE_STRENGTH */
+
+#ifdef CONFIG_PIN_OPEN_DRAIN
+ZTEST(pinctrl_mchp, test_open_drain)
+{
+	const struct pinctrl_state *scfg;
+
+	scfg = &pcfg->states[0];
+
+	zassert_equal(MCHP_PINCTRL_FLAG_GET(scfg->pins[6], MCHP_PINCTRL_OPENDRAIN_POS), 1);
+}
+#endif /* CONFIG_PIN_OPEN_DRAIN */
+
+#ifdef CONFIG_PIN_SLEW_RATE
+ZTEST(pinctrl_mchp, test_slew_rate)
+{
+	const struct pinctrl_state *scfg;
+
+	scfg = &pcfg->states[0];
+
+	zassert_equal(MCHP_PINCTRL_FIELD_GET(scfg->pins[7], MCHP_PINCTRL_SLEWRATE_POS, 0x3), 0);
+	zassert_equal(MCHP_PINCTRL_FIELD_GET(scfg->pins[8], MCHP_PINCTRL_SLEWRATE_POS, 0x3), 1);
+#if DT_NODE_HAS_PROP(DT_CHILD(DT_NODELABEL(test_device_default), group9), slew_rate)
+	zassert_equal(MCHP_PINCTRL_FIELD_GET(scfg->pins[9], MCHP_PINCTRL_SLEWRATE_POS, 0x3), 2);
+	zassert_equal(MCHP_PINCTRL_FIELD_GET(scfg->pins[10], MCHP_PINCTRL_SLEWRATE_POS, 0x3), 3);
 #endif
+}
+#endif /* CONFIG_PIN_SLEW_RATE */
 
 ZTEST(pinctrl_mchp, test_apply_state)
 {

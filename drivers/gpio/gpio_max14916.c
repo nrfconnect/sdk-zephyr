@@ -115,7 +115,7 @@ static int gpio_max14916_diag_chan_get(const struct device *dev)
 	int diag_ret = 0;
 
 	if (!gpio_pin_get_dt(&config->fault_gpio)) {
-		LOG_ERR("FLT flag is rised");
+		LOG_ERR("FLT flag is raised");
 		diag_ret = -EIO;
 	}
 
@@ -480,7 +480,7 @@ static DEVICE_API(gpio, gpio_max14916_api) = {
 #define GPIO_MAX14906_DEVICE(id, model)                                                            \
 	static const struct max14916_config max##model##_##id##_cfg = {                            \
 		.common = GPIO_COMMON_CONFIG_FROM_DT_INST(id),                                     \
-		.spi = SPI_DT_SPEC_INST_GET(id, SPI_OP_MODE_MASTER | SPI_WORD_SET(8U)),            \
+		.spi = SPI_DT_SPEC_INST_GET(id, SPI_OP_MODE_CONTROLLER | SPI_WORD_SET(8U)),        \
 		.ready_gpio = GPIO_DT_SPEC_INST_GET(id, drdy_gpios),                               \
 		.fault_gpio = GPIO_DT_SPEC_INST_GET(id, fault_gpios),                              \
 		.sync_gpio = GPIO_DT_SPEC_INST_GET(id, sync_gpios),                                \

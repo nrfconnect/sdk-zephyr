@@ -1,4 +1,4 @@
-# Copyright 2025 NXP
+# Copyright 2025-2026 NXP
 # SPDX-License-Identifier: Apache-2.0
 
 identifier: frdm_mcxe31b
@@ -14,9 +14,15 @@ supported:
   - arduino_gpio
   - can
   - gpio
+  - ptp_clock
   - rtc
   - dma
   - watchdog
   - adc
   - hwinfo
+  - i2c
+  - pwm
+  - i2s
+  - spi
+  - netif:eth
 vendor: nxp

@@ -354,16 +354,17 @@ int enabled_clock(uint32_t src_clk)
 	return r;
 }
 
+static int stm32_clock_control_configure(const struct device *dev,
+					 clock_control_subsys_t sub_system, void *data);
+
 static int stm32_clock_control_on(const struct device *dev, clock_control_subsys_t sub_system)
 {
 	struct stm32_pclken *pclken = (struct stm32_pclken *)(sub_system);
 	volatile int temp;
 
-	ARG_UNUSED(dev);
-
 	if (!IN_RANGE(pclken->bus, STM32_PERIPH_BUS_MIN, STM32_PERIPH_BUS_MAX)) {
-		/* Attempt to change a wrong periph clock bit */
-		return -ENOTSUP;
+		/* Source selection entry: apply it instead of toggling a gate */
+		return stm32_clock_control_configure(dev, sub_system, NULL);
 	}
 
 	sys_set_bits(DT_REG_ADDR(DT_NODELABEL(rcc)) + pclken->bus,
@@ -372,7 +373,7 @@ static int stm32_clock_control_on(const struct device *dev, clock_control_subsys
 	 * See (for example) RM0440 7.2.17
 	 */
 	temp = sys_read32(DT_REG_ADDR(DT_NODELABEL(rcc)) + pclken->bus);
-	UNUSED(temp);
+	(void)temp;
 
 	return 0;
 }

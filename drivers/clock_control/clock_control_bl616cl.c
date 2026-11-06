@@ -78,14 +78,17 @@ LOG_MODULE_REGISTER(clock_control_bl616cl, CONFIG_CLOCK_CONTROL_LOG_LEVEL);
 #define BL616CL_TARGET_BASIC_CLOCK	MHZ(40)
 
 #define CRYSTAL_FREQ_TO_ID(freq) CONCAT(CRYSTAL_ID_FREQ_, freq)
+#define CRYSTAL_FREQ DT_PROP(DT_INST_CLOCKS_CTLR_BY_NAME(0, crystal), clock_frequency)
 
 #if CLK_SRC_IS(root, pll_top)
-#define CLK_AT_LEAST_MUL (BFLB_MUL_CLK(32,					\
+#define CLK_AT_LEAST_MUL (BFLB_MUL_CLK_XIP(32,					\
 	DT_PROP(DT_INST_CLOCKS_CTLR_BY_NAME(0, pll_top), top_frequency),	\
 		BL616CL_PLL_TOP_FREQ))
 #else
 #define CLK_AT_LEAST_MUL 32
 #endif
+
+#define TARGET_TIMEBASE_FREQ DT_PROP(DT_PATH(cpus), timebase_frequency)
 
 enum bl616cl_clkid {
 	bl616cl_clkid_clk_root = BL616CL_CLKID_CLK_ROOT,
@@ -465,7 +468,7 @@ static void clock_control_bl616cl_init_pll_setup(const bl616cl_pll_config *const
 
 	tmp = sys_read32(GLB_BASE + GLB_WIFIPLL_SDMIN_OFFSET);
 	tmp = (tmp & GLB_WIFIPLL_SDM_IN_UMSK)
-		| (BFLB_MUL_CLK(config->sdmin, top_frequency, BL616CL_PLL_TOP_FREQ)
+		| (BFLB_MUL_CLK_XIP(config->sdmin, top_frequency, BL616CL_PLL_TOP_FREQ)
 		<< GLB_WIFIPLL_SDM_IN_POS);
 	sys_write32(tmp, GLB_BASE + GLB_WIFIPLL_SDMIN_OFFSET);
 
@@ -671,7 +674,7 @@ static __ramfunc uint32_t clock_control_bl616cl_get_xclk(const struct device *de
 	if (tmp == 0) {
 		return clock_control_bl616cl_get_rc32m_speed(dev);
 	} else if (tmp == 1) {
-		return DT_PROP(DT_INST_CLOCKS_CTLR_BY_NAME(0, crystal), clock_frequency);
+		return CRYSTAL_FREQ;
 	} else {
 		return 0;
 	}
@@ -679,7 +682,11 @@ static __ramfunc uint32_t clock_control_bl616cl_get_xclk(const struct device *de
 
 static uint32_t clock_control_bl616cl_mtimer_get_xclk_src_div(const struct device *dev)
 {
-	return (clock_control_bl616cl_get_xclk(dev) / 1000 / 1000 - 1);
+	if (clock_control_bl616cl_get_xclk(dev) < TARGET_TIMEBASE_FREQ) {
+		LOG_ERR("Timebase frequency is invalid for this configuration");
+		return 0;
+	}
+	return (clock_control_bl616cl_get_xclk(dev) / TARGET_TIMEBASE_FREQ - 1);
 }
 
 /* Almost always CPU, AXI bus, SRAM Memory, Cache, use HCLK query instead */
@@ -797,7 +804,9 @@ static __bflb_critfunc void clock_control_bl616cl_init_root_as_crystal(const str
 	clock_bflb_set_root_clock(BFLB_MAIN_CLOCK_XTAL);
 }
 
-static __ramfunc void clock_control_bl616cl_update_flash_clk(const struct device *dev)
+static __ramfunc void clock_control_bl616cl_update_flash_clk(const struct device *dev,
+							     const enum bl616cl_clkid source,
+							     bool final)
 {
 	struct clock_control_bl616cl_data *data = dev->data;
 	volatile uint32_t tmp;
@@ -811,11 +820,11 @@ static __ramfunc void clock_control_bl616cl_update_flash_clk(const struct device
 	tmp = *(volatile uint32_t *)(GLB_BASE + GLB_SF_CFG0_OFFSET);
 	tmp &= GLB_SF_CLK_SEL_UMSK;
 	tmp &= GLB_SF_CLK_SEL2_UMSK;
-	if (data->flashclk.source == bl616cl_clkid_clk_pll) {
+	if (source == bl616cl_clkid_clk_pll) {
 		clk = clock_control_bl616cl_get_hclk(dev);
 		tmp |= 0U << GLB_SF_CLK_SEL_POS;
 		tmp |= 0U << GLB_SF_CLK_SEL2_POS;
-	} else if (data->flashclk.source == bl616cl_clkid_clk_crystal) {
+	} else if (source == bl616cl_clkid_clk_crystal) {
 		clk = clock_control_bl616cl_get_xclk(dev);
 		tmp |= 0U << GLB_SF_CLK_SEL_POS;
 		tmp |= 1U << GLB_SF_CLK_SEL2_POS;
@@ -828,12 +837,12 @@ static __ramfunc void clock_control_bl616cl_update_flash_clk(const struct device
 	/* If flash controller will manage flash, set to standard speed
 	 * and let it set the divider.
 	 */
-#if defined(CONFIG_SOC_FLASH_BFLB)
-	clk = DIV_ROUND_CLOSEST(clk, BL616CL_TARGET_BASIC_CLOCK);
-	tmp |= clamp(clk - 1, 0x0, 0x7) << GLB_SF_CLK_DIV_POS;
-#else
-	tmp |= (data->flashclk.divider - 1) << GLB_SF_CLK_DIV_POS;
-#endif
+	if (IS_ENABLED(CONFIG_SOC_FLASH_BFLB) || !final) {
+		clk = DIV_ROUND_CLOSEST(clk, BL616CL_TARGET_BASIC_CLOCK);
+		tmp |= clamp(clk - 1, 0x0, 0x7) << GLB_SF_CLK_DIV_POS;
+	} else {
+		tmp |= (data->flashclk.divider - 1) << GLB_SF_CLK_DIV_POS;
+	}
 
 	*(volatile uint32_t *)(GLB_BASE + GLB_SF_CFG0_OFFSET) = tmp;
 
@@ -1002,7 +1011,7 @@ static __bflb_critfunc int clock_control_bl616cl_update_clocks(const struct devi
 
 	clock_control_bl616cl_set_crystal_type(6U);
 
-	clock_control_bl616cl_update_flash_clk(dev);
+	clock_control_bl616cl_update_flash_clk(dev, bl616cl_clkid_clk_rc32m, false);
 
 	ret = clock_control_bl616cl_update_f32k(dev);
 	if (ret < 0) {
@@ -1073,6 +1082,8 @@ static __bflb_critfunc int clock_control_bl616cl_update_clocks(const struct devi
 	} else {
 		/* Root clock already setup as RC32M */
 	}
+
+	clock_control_bl616cl_update_flash_clk(dev, data->flashclk.source, true);
 
 	ret = clock_control_bl616cl_clock_trim_32M();
 	if (ret < 0) {
@@ -1359,7 +1370,7 @@ static int clock_control_bl616cl_get_rate(const struct device *dev, clock_contro
 	} else if  ((enum bl616cl_clkid)sys == bl616cl_clkid_clk_bclk) {
 		*rate = clock_control_bl616cl_get_bclk(dev);
 	} else if  ((enum bl616cl_clkid)sys == bl616cl_clkid_clk_crystal) {
-		*rate = DT_PROP(DT_INST_CLOCKS_CTLR_BY_NAME(0, crystal), clock_frequency);
+		*rate = CRYSTAL_FREQ;
 	} else if  ((enum bl616cl_clkid)sys == bl616cl_clkid_clk_160mux) {
 		if (data->pll.enabled) {
 			*rate = clock_control_bl616cl_get_160m(dev);
@@ -1406,8 +1417,7 @@ static DEVICE_API(clock_control, clock_control_bl616cl_api) = {
 };
 
 static const struct clock_control_bl616cl_config clock_control_bl616cl_config = {
-	.crystal_id = CRYSTAL_FREQ_TO_ID(DT_PROP(DT_INST_CLOCKS_CTLR_BY_NAME(0, crystal),
-						 clock_frequency)),
+	.crystal_id = CRYSTAL_FREQ_TO_ID(CRYSTAL_FREQ),
 };
 
 static struct clock_control_bl616cl_data clock_control_bl616cl_data = {
@@ -1484,6 +1494,11 @@ BUILD_ASSERT(CLK_SRC_IS(f32k, xtal32k)
 
 BUILD_ASSERT(DT_PROP(DT_INST_CLOCKS_CTLR_BY_NAME(0, rc32m),
 		     clock_frequency) == BFLB_RC32M_FREQUENCY, "RC32M must be 32M");
+
+BUILD_ASSERT(TARGET_TIMEBASE_FREQ > KHZ(40)
+	     && TARGET_TIMEBASE_FREQ <=
+	     (CRYSTAL_FREQ > BFLB_RC32M_FREQUENCY ? CRYSTAL_FREQ : BFLB_RC32M_FREQUENCY),
+	     "Timebase frequency should be greater than 40 KHz and <= than the fastest XCLK");
 
 DEVICE_DT_INST_DEFINE(0, clock_control_bl616cl_init, NULL, &clock_control_bl616cl_data,
 		      &clock_control_bl616cl_config, PRE_KERNEL_1,

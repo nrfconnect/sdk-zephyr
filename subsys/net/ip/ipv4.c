@@ -133,11 +133,11 @@ int net_ipv4_finalize(struct net_pkt *pkt, uint8_t next_header_proto)
 
 	ipv4_hdr->len   = net_htons(net_pkt_get_len(pkt));
 	ipv4_hdr->proto = next_header_proto;
+	ipv4_hdr->chksum = 0U;
 
 	if (net_if_need_calc_tx_checksum(net_pkt_iface(pkt), NET_IF_CHECKSUM_IPV4_HEADER)) {
 		uint16_t chksum = 0;
 
-		ipv4_hdr->chksum = 0;
 		ret = net_calc_chksum_ipv4(pkt, &chksum);
 		if (ret < 0) {
 			return ret;
@@ -231,6 +231,7 @@ int net_ipv4_parse_hdr_options(struct net_pkt *pkt,
 			break;
 		case NET_IPV4_OPTS_RR:
 		case NET_IPV4_OPTS_TS:
+		case NET_IPV4_OPTS_RA:
 			if (net_pkt_read(pkt, opt_data, opt_len)) {
 				return -EINVAL;
 			}
@@ -257,7 +258,7 @@ int net_ipv4_parse_hdr_options(struct net_pkt *pkt,
 }
 #endif
 
-#if defined(CONFIG_NET_IPV4_ROUTE)
+#if defined(CONFIG_NET_IPV4_FORWARDING)
 static enum net_verdict ipv4_route_packet(struct net_pkt *pkt,
 					  struct net_ipv4_hdr *hdr)
 {
@@ -265,31 +266,30 @@ static enum net_verdict ipv4_route_packet(struct net_pkt *pkt,
 	struct net_in_addr *nexthop;
 	struct net_if *iface = NULL;
 	struct net_in_addr dst_ip;
-	bool found;
 	int ret;
+
+	/* Broadcasts stay on the link they were sent to, RFC 1812 ch. 5.3.5 */
+	if (net_ipv4_is_addr_bcast_raw(NULL, hdr->dst) ||
+	    net_ipv4_is_addr_unspecified_raw(hdr->dst)) {
+		return NET_DROP;
+	}
 
 	net_ipv4_addr_copy_raw(dst_ip.s4_addr, hdr->dst);
 
-	if (IS_ENABLED(CONFIG_NET_IPV4_FORWARDING)) {
-		found = net_route_ipv4_get_info(NULL, &dst_ip, &route, &nexthop);
-	} else {
-		found = net_route_ipv4_get_info(net_pkt_iface(pkt), &dst_ip,
-						&route, &nexthop);
-	}
-
-	if (found) {
+	if (net_route_ipv4_get_info(NULL, &dst_ip, &route, &nexthop)) {
 		net_pkt_set_orig_iface(pkt, net_pkt_iface(pkt));
 
 		if (route != NULL) {
 			net_pkt_set_iface(pkt, route->iface);
 		}
 
-		if (IS_ENABLED(CONFIG_NET_IPV4_FORWARDING) &&
-		    net_pkt_orig_iface(pkt) != net_pkt_iface(pkt)) {
-			net_pkt_set_forwarding(pkt, true);
-		} else {
-			net_pkt_set_forwarding(pkt, false);
-		}
+		/* Re-sending a packet received for another host is forwarding
+		 * even when it leaves through the interface it arrived on. The
+		 * flag makes the send path decrement the TTL. The transport
+		 * layer checksum is the sender's.
+		 */
+		net_pkt_set_forwarding(pkt, true);
+		net_pkt_set_chksum_done(pkt, true);
 
 		ret = net_route_ipv4_packet(pkt, nexthop);
 		if (ret < 0) {
@@ -302,6 +302,9 @@ static enum net_verdict ipv4_route_packet(struct net_pkt *pkt,
 		return NET_OK;
 	}
 
+	/* iface is NULL here so that net_if_ipv4_addr_onlink() searches all
+	 * interfaces for the best on-link match, mirroring the IPv6 path.
+	 */
 	if (net_if_ipv4_addr_onlink(&iface, &dst_ip)) {
 		ret = net_route_packet_if(pkt, iface);
 		if (ret < 0) {
@@ -325,7 +328,7 @@ static inline enum net_verdict ipv4_route_packet(struct net_pkt *pkt,
 
 	return NET_DROP;
 }
-#endif /* CONFIG_NET_IPV4_ROUTE */
+#endif /* CONFIG_NET_IPV4_FORWARDING */
 
 enum net_verdict net_ipv4_input(struct net_pkt *pkt)
 {
@@ -381,6 +384,11 @@ enum net_verdict net_ipv4_input(struct net_pkt *pkt)
 	net_pkt_set_ipv4_opts_len(pkt, opts_len);
 
 	pkt_len = net_ntohs(hdr->len);
+	if (pkt_len < hdr_len) {
+		NET_DBG("DROP: pkt len per hdr %d < hdr len %u", pkt_len, hdr_len);
+		goto drop;
+	}
+
 	if (real_len < pkt_len) {
 		NET_DBG("DROP: pkt len per hdr %d != pkt real len %d",
 			pkt_len, real_len);
@@ -450,6 +458,7 @@ enum net_verdict net_ipv4_input(struct net_pkt *pkt)
 		net_dhcpv4_accept_unicast(pkt)))) ||
 	    (hdr->proto == NET_IPPROTO_TCP &&
 	     net_ipv4_is_addr_bcast_raw(net_pkt_iface(pkt), hdr->dst))) {
+		/* Only a forwarder may keep a packet that is not for us */
 		if (ipv4_route_packet(pkt, hdr) == NET_OK) {
 			return NET_OK;
 		}
@@ -574,7 +583,13 @@ drop:
 
 enum net_verdict net_ipv4_prepare_for_send(struct net_pkt *pkt)
 {
-	if (IS_ENABLED(CONFIG_NET_IPV4_PMTU)) {
+	/* ARP packets share the AF_INET family but are not IPv4 datagrams, so
+	 * their L2 protocol type is used to skip them here. Otherwise the code
+	 * below would read the ARP body as an IPv4 header and create bogus PMTU
+	 * cache entries.
+	 */
+	if (IS_ENABLED(CONFIG_NET_IPV4_PMTU) &&
+	    net_pkt_ll_proto_type(pkt) == NET_ETH_PTYPE_IP) {
 		struct net_pmtu_entry *entry;
 		struct net_sockaddr_in dst = {
 			.sin_family = NET_AF_INET,
@@ -606,10 +621,6 @@ void net_ipv4_init(void)
 {
 	if (IS_ENABLED(CONFIG_NET_IPV4_FRAGMENT)) {
 		net_ipv4_setup_fragment_buffers();
-	}
-
-	if (IS_ENABLED(CONFIG_NET_IPV4_ACD)) {
-		net_ipv4_acd_init();
 	}
 
 	if (IS_ENABLED(CONFIG_NET_IPV4_NAT)) {

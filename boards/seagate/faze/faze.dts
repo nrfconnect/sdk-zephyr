@@ -6,15 +6,15 @@
 
 /dts-v1/;
 
-#include <nxp/lpc/nxp_lpc11u67.dtsi>
+#include <nxp/lpc/lpc11u6x/nxp_lpc11u67.dtsi>
 #include <zephyr/dt-bindings/led/led.h>
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 
 #include "faze-pinctrl.dtsi"
 
 / {
-	model = "Seagate FireCuda Gaming SSD (FaZe)";
 	compatible = "faze", "seagate,faze";
+	model = "Seagate FireCuda Gaming SSD (FaZe)";
 
 	chosen {
 		zephyr,sram = &sram0;
@@ -67,8 +67,8 @@
 
 	asm2364: asm2364@30 {
 		compatible = "asmedia,asm2364";
-		int-gpios = <&gpio0 2 0>;
 		reg = <0x30>;
+		int-gpios = <&gpio0 2 0>;
 	};
 };
 

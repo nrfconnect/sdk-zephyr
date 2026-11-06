@@ -26,10 +26,12 @@ LOG_MODULE_REGISTER(net_ipv4_acd, CONFIG_NET_IPV4_ACD_LOG_LEVEL);
 #include "net_private.h"
 #include "../l2/ethernet/arp.h"
 
-static K_MUTEX_DEFINE(lock);
+static K_MUTEX_DEFINE(ipv4_acd_lock);
+
+static void ipv4_acd_timeout(struct k_work *work);
 
 /* Address conflict detection timer. */
-static struct k_work_delayable ipv4_acd_timer;
+static K_WORK_DELAYABLE_DEFINE(ipv4_acd_timer, ipv4_acd_timeout);
 
 /* List of IPv4 addresses under an active conflict detection. */
 static sys_slist_t active_acd_timers;
@@ -225,7 +227,7 @@ static void ipv4_acd_timeout(struct k_work *work)
 
 	ARG_UNUSED(work);
 
-	k_mutex_lock(&lock, K_FOREVER);
+	k_mutex_lock(&ipv4_acd_lock, K_FOREVER);
 
 	SYS_SLIST_FOR_EACH_NODE_SAFE(&active_acd_timers, current, next) {
 		struct net_if_addr *ifaddr =
@@ -238,7 +240,7 @@ static void ipv4_acd_timeout(struct k_work *work)
 
 	acd_timer_reschedule();
 
-	k_mutex_unlock(&lock);
+	k_mutex_unlock(&ipv4_acd_lock);
 }
 
 static void acd_start_timer(struct net_if *iface, struct net_if_addr *ifaddr)
@@ -269,6 +271,7 @@ enum net_verdict net_ipv4_acd_input(struct net_if *iface, struct net_pkt *pkt)
 	struct net_arp_hdr *arp_hdr;
 	struct net_if_ipv4 *ipv4;
 	struct net_linkaddr *dst_lladdr;
+	struct net_linkaddr *ll_addr;
 
 	if (net_pkt_get_len(pkt) < sizeof(struct net_arp_hdr)) {
 		NET_DBG("Invalid ARP header (len %zu, min %zu bytes)",
@@ -283,15 +286,18 @@ enum net_verdict net_ipv4_acd_input(struct net_if *iface, struct net_pkt *pkt)
 		return NET_DROP;
 	}
 
+	ll_addr = net_if_get_link_addr(iface);
+
+	NET_ASSERT(ll_addr != NULL);
+
 	arp_hdr = NET_ARP_HDR(pkt);
 
-	k_mutex_lock(&lock, K_FOREVER);
+	k_mutex_lock(&ipv4_acd_lock, K_FOREVER);
 
 	SYS_SLIST_FOR_EACH_NODE_SAFE(&active_acd_timers, current, next) {
 		struct net_if_addr *ifaddr =
 			CONTAINER_OF(current, struct net_if_addr, acd_node);
 		struct net_if *addr_iface = net_if_get_by_index(ifaddr->ifindex);
-		struct net_linkaddr *ll_addr;
 
 		if (iface != addr_iface) {
 			continue;
@@ -300,8 +306,6 @@ enum net_verdict net_ipv4_acd_input(struct net_if *iface, struct net_pkt *pkt)
 		if (ifaddr->acd_state != IPV4_ACD_PROBE) {
 			continue;
 		}
-
-		ll_addr = net_if_get_link_addr(addr_iface);
 
 		/* RFC 5227, ch. 2.1.1 Probe Details:
 		 * - ARP Request/Reply with Sender IP address match OR,
@@ -326,13 +330,13 @@ enum net_verdict net_ipv4_acd_input(struct net_if *iface, struct net_pkt *pkt)
 
 			net_if_ipv4_acd_failed(addr_iface, ifaddr);
 
-			k_mutex_unlock(&lock);
+			k_mutex_unlock(&ipv4_acd_lock);
 
 			return NET_DROP;
 		}
 	}
 
-	k_mutex_unlock(&lock);
+	k_mutex_unlock(&ipv4_acd_lock);
 
 	ipv4 = iface->config.ip.ipv4;
 	if (ipv4 == NULL) {
@@ -344,7 +348,6 @@ enum net_verdict net_ipv4_acd_input(struct net_if *iface, struct net_pkt *pkt)
 	 */
 	ARRAY_FOR_EACH(ipv4->unicast, i) {
 		struct net_if_addr *ifaddr = &ipv4->unicast[i].ipv4;
-		struct net_linkaddr *ll_addr = net_if_get_link_addr(iface);
 
 		if (!ifaddr->is_used) {
 			continue;
@@ -389,11 +392,6 @@ out:
 	return NET_CONTINUE;
 }
 
-void net_ipv4_acd_init(void)
-{
-	k_work_init_delayable(&ipv4_acd_timer, ipv4_acd_timeout);
-}
-
 int net_ipv4_acd_start(struct net_if *iface, struct net_if_addr *ifaddr)
 {
 	/* Address conflict detection is based on ARP, so can only be done on
@@ -405,7 +403,7 @@ int net_ipv4_acd_start(struct net_if *iface, struct net_if_addr *ifaddr)
 		return 0;
 	}
 
-	k_mutex_lock(&lock, K_FOREVER);
+	k_mutex_lock(&ipv4_acd_lock, K_FOREVER);
 
 	ifaddr->ifindex = net_if_get_by_iface(iface);
 	ifaddr->acd_state = IPV4_ACD_PROBE;
@@ -413,7 +411,7 @@ int net_ipv4_acd_start(struct net_if *iface, struct net_if_addr *ifaddr)
 
 	acd_start_timer(iface, ifaddr);
 
-	k_mutex_unlock(&lock);
+	k_mutex_unlock(&ipv4_acd_lock);
 
 	return 0;
 }
@@ -428,10 +426,10 @@ void net_ipv4_acd_cancel(struct net_if *iface, struct net_if_addr *ifaddr)
 		return;
 	}
 
-	k_mutex_lock(&lock, K_FOREVER);
+	k_mutex_lock(&ipv4_acd_lock, K_FOREVER);
 
 	sys_slist_find_and_remove(&active_acd_timers, &ifaddr->acd_node);
 	acd_timer_reschedule();
 
-	k_mutex_unlock(&lock);
+	k_mutex_unlock(&ipv4_acd_lock);
 }

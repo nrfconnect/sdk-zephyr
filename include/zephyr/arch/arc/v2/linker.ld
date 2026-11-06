@@ -260,6 +260,11 @@ SECTIONS {
 		. = ALIGN(4);
 		__bss_start = .;
 
+/* Located in generated directory. This file is populated by the
+ * zephyr_linker_sources() Cmake function.
+ */
+#include <snippets-bss.ld>
+
 		*(".bss")
 		*(".bss.*")
 		*(".bss$*")
@@ -344,7 +349,6 @@ SECTIONS {
 		/* Discard all destructors */
 		*(.dtors*)
 		*(.fini*)
-		*(.note.GNU-stack)
 		*(.got.plt)
 		*(.igot.plt)
 		*(.got)

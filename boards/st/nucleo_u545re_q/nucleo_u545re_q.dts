@@ -11,8 +11,8 @@
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 
 / {
-	model = "STMicroelectronics STM32U545RE-NUCLEO-Q board";
 	compatible = "st,stm32u545re-nucleo-q";
+	model = "STMicroelectronics STM32U545RE-NUCLEO-Q board";
 
 	chosen {
 		zephyr,console = &usart1;
@@ -21,6 +21,7 @@
 		zephyr,flash = &flash0;
 		zephyr,canbus = &fdcan1;
 		zephyr,code-partition = &slot0_partition;
+		zephyr,system-timer = &lptim1;
 	};
 
 	aliases {
@@ -79,26 +80,26 @@
 		 */
 		boot_partition: partition@0 {
 			compatible = "zephyr,mapped-partition";
-			label = "mcuboot";
 			reg = <0x00000000 DT_SIZE_K(32)>;
+			label = "mcuboot";
 		};
 
 		slot0_partition: partition@8000 {
 			compatible = "zephyr,mapped-partition";
-			label = "image-0";
 			reg = <0x00008000 DT_SIZE_K(224)>;
+			label = "image-0";
 		};
 
 		slot1_partition: partition@40000 {
 			compatible = "zephyr,mapped-partition";
-			label = "image-1";
 			reg = <0x00040000 DT_SIZE_K(232)>;
+			label = "image-1";
 		};
 
 		storage_partition: partition@78000 {
 			compatible = "zephyr,mapped-partition";
-			label = "storage";
 			reg = <0x00078000 DT_SIZE_K(24)>;
+			label = "storage";
 		};
 	};
 };
@@ -116,9 +117,9 @@
 };
 
 &clk_msis {
-	status = "okay";
 	msi-range = <4>;
 	msi-pll-mode;
+	status = "okay";
 };
 
 &pll1 {
@@ -158,8 +159,8 @@
 	pinctrl-names = "default";
 	scl-gpios = <&gpiob 6 GPIO_ACTIVE_HIGH>;
 	sda-gpios = <&gpiob 7 GPIO_ACTIVE_HIGH>;
-	status = "okay";
 	clock-frequency = <I2C_BITRATE_FAST>;
+	status = "okay";
 };
 
 &i2c2 {
@@ -167,8 +168,8 @@
 	pinctrl-names = "default";
 	scl-gpios = <&gpiob 10 GPIO_ACTIVE_HIGH>;
 	sda-gpios = <&gpiob 14 GPIO_ACTIVE_HIGH>;
-	status = "okay";
 	clock-frequency = <I2C_BITRATE_FAST>;
+	status = "okay";
 };
 
 &spi1 {
@@ -179,19 +180,25 @@
 	status = "okay";
 };
 
+&adc12_common {
+	st,adc-prescaler = <4>;
+	status = "okay";
+};
+
+&adc4_common {
+	st,adc-prescaler = <4>;
+	status = "okay";
+};
+
 &adc1 {
 	pinctrl-0 = <&adc1_in5_pa0 &adc1_in6_pa1>; /* Arduino A0 & A1 */
 	pinctrl-names = "default";
-	st,adc-clock-source = "ASYNC";
-	st,adc-prescaler = <4>;
 	status = "okay";
 };
 
 &adc4 {
 	pinctrl-0 = <&adc4_in18_pb0>; /* Arduino A3 */
 	pinctrl-names = "default";
-	st,adc-clock-source = "ASYNC";
-	st,adc-prescaler = <4>;
 	status = "okay";
 };
 
@@ -248,7 +255,7 @@
 	};
 };
 
-stm32_lp_tick_source: &lptim1 {
+&lptim1 {
 	clocks = <&rcc STM32_CLOCK(APB3, 11)>,
 		 <&rcc STM32_SRC_LSI LPTIM1_SEL(1)>;
 	status = "okay";

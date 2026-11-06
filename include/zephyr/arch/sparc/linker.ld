@@ -129,6 +129,12 @@ SECTIONS
 		 */
 		 . = ALIGN(4);
 		 __bss_start = .;
+
+/* Located in generated directory. This file is populated by the
+ * zephyr_linker_sources() Cmake function.
+ */
+#include <snippets-bss.ld>
+
 		 *(.dynbss)
 		 *(.bss)
 		 *(.bss.*)
@@ -170,7 +176,6 @@ SECTIONS
 
 #include <zephyr/linker/debug-sections.ld>
 
-    /DISCARD/ : { *(.note.GNU-stack) }
     /DISCARD/ : { *(.gnu_debuglink) }
     /DISCARD/ : { *(.gnu.lto_*) }
 

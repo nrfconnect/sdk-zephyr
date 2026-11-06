@@ -7,6 +7,7 @@
 /**
  * @file
  * @brief FIDO2 authenticator public API.
+ * @ingroup fido2
  */
 
 #ifndef ZEPHYR_INCLUDE_AUTHENTICATION_FIDO2_FIDO2_H_
@@ -18,7 +19,7 @@
  * @brief FIDO2 authenticator subsystem
  * @defgroup fido2 FIDO2
  * @since 4.5
- * @version 0.1.0
+ * @version 0.1.1
  * @ingroup authentication
  * @{
  */

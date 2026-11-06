@@ -6,6 +6,43 @@
 
 static int quic_send_max_stream_data(struct quic_endpoint *ep,
 				     struct quic_stream *stream);
+
+/*
+ * Several frame types are answered with a packet of their own, and a single
+ * datagram can carry hundreds of them. Cap how many such replies one received
+ * payload may produce, so a peer cannot turn one small datagram into hundreds
+ * of encrypted sends.
+ *
+ * The budget lives on the parser's stack, not on the endpoint: payloads for
+ * one endpoint can be parsed concurrently by the socket-service thread and
+ * the QUIC service thread, and a counter shared between them would let one
+ * parser reset the budget the other is still consuming.
+ *
+ * Frames whose reply is required for correctness, such as CONNECTION_CLOSE and
+ * the ACK for the packet as a whole, are sent outside this budget.
+ */
+struct quic_reply_budget {
+	uint16_t used;
+};
+
+#if defined(CONFIG_NET_TEST)
+uint16_t quic_test_reply_budget_spent;
+#endif
+
+static bool quic_reply_budget_take(struct quic_reply_budget *budget)
+{
+	if (budget->used >= CONFIG_QUIC_MAX_REPLIES_PER_PAYLOAD) {
+		return false;
+	}
+
+	budget->used++;
+
+#if defined(CONFIG_NET_TEST)
+	quic_test_reply_budget_spent = budget->used;
+#endif
+
+	return true;
+}
 static int quic_send_frame_close(struct quic_endpoint *ep, uint8_t frame_type,
 				 uint64_t error_code, const char *reason)
 {
@@ -33,19 +70,61 @@ static int quic_handle_frame_error(struct quic_endpoint *ep, uint8_t frame_type,
 
 static int quic_handle_crypto_frame_error(struct quic_endpoint *ep, int ret)
 {
-	if (ret == -EPROTO) {
-		return quic_send_frame_close(ep, QUIC_FRAME_TYPE_CRYPTO,
-					     QUIC_ERROR_PROTOCOL_VIOLATION,
-					     "CRYPTO overlap mismatch");
+	uint64_t error_code;
+	const char *reason;
+
+	switch (ret) {
+	/* Transport-level errors kept as-is. -EPROTO covers a CRYPTO overlap
+	 * mismatch and a prohibited TLS KeyUpdate (RFC 9001 Section 6).
+	 */
+	case -EPROTO:
+		error_code = QUIC_ERROR_PROTOCOL_VIOLATION;
+		reason = "CRYPTO protocol violation";
+		break;
+	case -ENOMEM:
+		error_code = QUIC_ERROR_CRYPTO_BUFFER_EXCEEDED;
+		reason = "CRYPTO reassembly exceeded";
+		break;
+	/* RFC 9001 Section 4.8: surface TLS handshake failures as a
+	 * CONNECTION_CLOSE with error 0x0100 + TLS alert so a standard peer
+	 * gets a meaningful reason instead of a generic frame-encoding error.
+	 *
+	 * -EACCES means the peer certificate was required but not
+	 * provided/verifiable, which maps to the "certificate_required" alert
+	 * (116), not "bad_certificate" (42).
+	 */
+	case -EACCES:
+		error_code = QUIC_ERROR_CRYPTO_BASE + QUIC_CRYPTO_ERROR_CERTIFICATE_REQUIRED;
+		reason = "certificate required";
+		break;
+	case -EBADMSG:
+		error_code = QUIC_ERROR_CRYPTO_BASE + QUIC_CRYPTO_ERROR_DECRYPT_ERROR;
+		reason = "decrypt error";
+		break;
+	case -ENOPROTOOPT:
+		error_code = QUIC_ERROR_CRYPTO_BASE + QUIC_CRYPTO_ERROR_NO_APPLICATION_PROTOCOL;
+		reason = "no application protocol";
+		break;
+	case -ENOTSUP:
+		error_code = QUIC_ERROR_CRYPTO_BASE + QUIC_CRYPTO_ERROR_HANDSHAKE_FAILURE;
+		reason = "handshake failure";
+		break;
+	case -EIO:
+		error_code = QUIC_ERROR_CRYPTO_BASE + QUIC_CRYPTO_ERROR_INTERNAL_ERROR;
+		reason = "internal error";
+		break;
+	case -EINVAL:
+		error_code = QUIC_ERROR_CRYPTO_BASE + QUIC_CRYPTO_ERROR_DECODE_ERROR;
+		reason = "decode error";
+		break;
+	default:
+		/* Not a recognized crypto/handshake failure: let the caller
+		 * decide (no CONNECTION_CLOSE emitted here).
+		 */
+		return ret;
 	}
 
-	if (ret == -ENOMEM) {
-		return quic_send_frame_close(ep, QUIC_FRAME_TYPE_CRYPTO,
-					     QUIC_ERROR_CRYPTO_BUFFER_EXCEEDED,
-					     "CRYPTO reassembly exceeded");
-	}
-
-	return quic_handle_frame_error(ep, QUIC_FRAME_TYPE_CRYPTO, ret);
+	return quic_send_frame_close(ep, QUIC_FRAME_TYPE_CRYPTO, error_code, reason);
 }
 
 static int quic_handle_stream_frame_error(struct quic_endpoint *ep, uint8_t frame_type,
@@ -231,20 +310,30 @@ static int handle_stream_frame(struct quic_endpoint *ep,
 			/* Consume one slot from the open-stream budget */
 			if (is_bidi) {
 				ep->rx_sl.open_bidi++;
+				ep->rx_sl.total_bidi++;
 			} else {
 				ep->rx_sl.open_uni++;
+				ep->rx_sl.total_uni++;
 			}
 		}
 
 		/* New stream from peer, create and queue for accept */
 		stream = quic_create_stream_from_peer(conn, ep, stream_id);
 		if (stream == NULL) {
-			/* Pool exhausted, roll back the counter we just incremented */
+			/* Pool exhausted, roll back the counters we just
+			 * incremented. The total must go back too: no stream
+			 * ever opened, and the totals feed the limit handed
+			 * out for STREAMS_BLOCKED, so retransmissions of an
+			 * unallocatable stream would otherwise grow the
+			 * advertised limit without bound.
+			 */
 			if (peer_init) {
 				if (is_bidi && ep->rx_sl.open_bidi > 0) {
 					ep->rx_sl.open_bidi--;
+					ep->rx_sl.total_bidi--;
 				} else if (!is_bidi && ep->rx_sl.open_uni > 0) {
 					ep->rx_sl.open_uni--;
+					ep->rx_sl.total_uni--;
 				}
 			}
 
@@ -255,6 +344,12 @@ static int handle_stream_frame(struct quic_endpoint *ep,
 
 		sys_slist_find_and_remove(&conn->streams, &stream->node);
 		sys_slist_prepend(&conn->streams, &stream->node);
+
+		/* The reference of the new stream goes to the accept queue,
+		 * where the application can take the stream and close it at
+		 * once. Keep one until the data of this frame is delivered.
+		 */
+		quic_stream_ref(stream);
 
 		/* Queue for accept() call */
 		k_fifo_put(&conn->incoming.stream_q, stream);
@@ -275,7 +370,7 @@ static int handle_stream_frame(struct quic_endpoint *ep,
 		 */
 		NET_DBG("[CO:%p/%d] Failed to deliver stream data: %d",
 			conn, quic_get_by_conn(conn), ret);
-		return ret;
+		goto out;
 	}
 
 	if (level == QUIC_SECRET_LEVEL_EARLY) {
@@ -292,8 +387,12 @@ static int handle_stream_frame(struct quic_endpoint *ep,
 	}
 
 	*consumed = pos + data_len;
+	ret = pos + data_len;
 
-	return pos + data_len;
+out:
+	quic_stream_unref(stream);
+
+	return ret;
 }
 
 /*
@@ -429,10 +528,13 @@ static int quic_send_stop_sending(struct quic_endpoint *ep,
 }
 
 static int handle_stop_sending_frame(struct quic_endpoint *ep,
-				     const uint8_t *buf, size_t len)
+				     const uint8_t *buf, size_t len,
+				     struct quic_reply_budget *budget)
 {
 	uint64_t stream_id, error_code;
 	struct quic_stream *stream;
+	bool local_init;
+	bool is_uni;
 	int pos = 1;
 	int ret;
 
@@ -453,6 +555,25 @@ static int handle_stop_sending_frame(struct quic_endpoint *ep,
 	NET_DBG("[EP:%p/%d] STOP_SENDING: stream=%" PRIu64 ", error=0x%" PRIx64,
 		ep, quic_get_by_ep(ep), stream_id, error_code);
 
+	/* Stream ID encoding (RFC 9000 ch. 2.1): bit 0 is the initiator,
+	 * 0 for the client and 1 for the server, bit 1 is set for a
+	 * unidirectional stream.
+	 */
+	local_init = ((stream_id & 1U) != 0U) == ep->is_server;
+	is_uni = (stream_id & 2U) != 0U;
+
+	/* RFC 9000 ch. 19.5: a unidirectional stream opened by the peer is
+	 * receive-only for us, there is nothing we could stop sending on it.
+	 * The frame is a connection error of type STREAM_STATE_ERROR.
+	 */
+	if (is_uni && !local_init) {
+		NET_DBG("[EP:%p/%d] STOP_SENDING for receive-only stream %" PRIu64,
+			ep, quic_get_by_ep(ep), stream_id);
+		quic_endpoint_send_connection_close(ep, QUIC_ERROR_STREAM_STATE_ERROR,
+						    "STOP_SENDING for a receive-only stream");
+		return -EPROTO;
+	}
+
 	/*
 	 * RFC 9000 ch. 3.5: a sender that receives STOP_SENDING MUST respond
 	 * with either RESET_STREAM or a stream FIN. Send RESET_STREAM to
@@ -461,9 +582,41 @@ static int handle_stop_sending_frame(struct quic_endpoint *ep,
 	 *
 	 * Re-use the peer's error code so the HTTP layer (and any logging)
 	 * can see why the stream was reset.
+	 *
+	 * Every stream is answered, but one payload can carry a great many
+	 * STOP_SENDING frames and the RESET_STREAM is a packet of its own.
+	 * The first frame for a stream is always answered, which is bounded
+	 * by the number of streams. A frame for a stream that was reset
+	 * already is a repeat, sent by a peer that did not get our
+	 * RESET_STREAM: it is answered again, but out of the reply budget of
+	 * the payload.
 	 */
 	stream = quic_find_stream_by_id(ep, stream_id);
-	if (stream != NULL) {
+	if (stream == NULL && local_init) {
+		struct quic_context *conn = quic_find_context(ep);
+
+		/* RFC 9000 ch. 19.5: a STOP_SENDING for a stream of ours that
+		 * was never created is a connection error of type
+		 * STREAM_STATE_ERROR. A stream that is not found can also be
+		 * one that is closed already, which is fine, so only an ID
+		 * past everything opened so far is taken as never created.
+		 */
+		if (conn != NULL && (stream_id >> 2) >= conn->stream_id_counter) {
+			NET_DBG("[EP:%p/%d] STOP_SENDING for stream %" PRIu64
+				" that was never opened",
+				ep, quic_get_by_ep(ep), stream_id);
+			quic_endpoint_send_connection_close(
+				ep, QUIC_ERROR_STREAM_STATE_ERROR,
+				"STOP_SENDING for a stream that was never opened");
+			return -EPROTO;
+		}
+	}
+
+	if (stream != NULL && stream->tx_reset) {
+		if (quic_reply_budget_take(budget)) {
+			quic_send_reset_stream(ep, stream_id, error_code);
+		}
+	} else if (stream != NULL) {
 		/* Send RESET_STREAM, our TX side is being abandoned */
 		quic_send_reset_stream(ep, stream_id, error_code);
 
@@ -785,7 +938,8 @@ static int quic_send_stream_data_blocked(struct quic_endpoint *ep,
 }
 
 static int handle_data_blocked_frame(struct quic_endpoint *ep,
-				     const uint8_t *buf, size_t len)
+				     const uint8_t *buf, size_t len,
+				     struct quic_reply_budget *budget)
 {
 	uint64_t max_data;
 	int pos = 1;
@@ -802,7 +956,7 @@ static int handle_data_blocked_frame(struct quic_endpoint *ep,
 		ep, quic_get_by_ep(ep), max_data);
 
 	/* Peer is blocked, send MAX_DATA to increase their limit */
-	if (ep->rx_fc.max_data > max_data) {
+	if (ep->rx_fc.max_data > max_data && quic_reply_budget_take(budget)) {
 		quic_send_max_data(ep);
 	}
 
@@ -810,7 +964,8 @@ static int handle_data_blocked_frame(struct quic_endpoint *ep,
 }
 
 static int handle_stream_data_blocked_frame(struct quic_endpoint *ep,
-					    const uint8_t *buf, size_t len)
+					    const uint8_t *buf, size_t len,
+					    struct quic_reply_budget *budget)
 {
 	struct quic_stream *stream;
 	uint64_t stream_id, max_stream_data;
@@ -836,7 +991,8 @@ static int handle_stream_data_blocked_frame(struct quic_endpoint *ep,
 
 	/* Find the stream and send MAX_STREAM_DATA */
 	stream = quic_find_stream_by_id(ep, stream_id);
-	if (stream != NULL && stream->local_max_data > max_stream_data) {
+	if (stream != NULL && stream->local_max_data > max_stream_data &&
+	    quic_reply_budget_take(budget)) {
 		quic_send_max_stream_data(ep, stream);
 	}
 
@@ -868,7 +1024,8 @@ static int quic_send_max_streams(struct quic_endpoint *ep, bool bidi)
 }
 
 static int handle_streams_blocked_frame(struct quic_endpoint *ep,
-					const uint8_t *buf, size_t len)
+					const uint8_t *buf, size_t len,
+					struct quic_reply_budget *budget)
 {
 	bool is_bidi = (buf[0] == QUIC_FRAME_TYPE_STREAMS_BLOCKED_BIDI);
 	uint64_t max_streams;
@@ -894,9 +1051,17 @@ static int handle_streams_blocked_frame(struct quic_endpoint *ep,
 	if (is_bidi) {
 		uint64_t free_slots = (uint64_t)CONFIG_QUIC_MAX_STREAMS_BIDI
 							- ep->rx_sl.open_bidi;
+		/* MAX_STREAMS is a cumulative limit, so derive it from how many
+		 * streams the peer has actually opened. Adding the free slots
+		 * to the current limit instead would let a peer raise it once
+		 * per frame without ever opening or closing anything.
+		 */
+		uint64_t new_limit = ep->rx_sl.total_bidi + free_slots;
 
-		if (free_slots > 0 && ep->rx_sl.max_bidi <= max_streams) {
-			ep->rx_sl.max_bidi += free_slots;
+		if (free_slots > 0 && new_limit > ep->rx_sl.max_bidi &&
+		    ep->rx_sl.max_bidi <= max_streams &&
+		    quic_reply_budget_take(budget)) {
+			ep->rx_sl.max_bidi = new_limit;
 			quic_send_max_streams(ep, true);
 
 			NET_DBG("[EP:%p/%d] STREAMS_BLOCKED: advanced bidi limit to "
@@ -904,15 +1069,19 @@ static int handle_streams_blocked_frame(struct quic_endpoint *ep,
 				ep, quic_get_by_ep(ep),
 				ep->rx_sl.max_bidi, free_slots);
 		} else {
-			NET_DBG("[EP:%p/%d] STREAMS_BLOCKED: pool full "
-				"(open=%" PRIu64 "), not advancing limit",
-				ep, quic_get_by_ep(ep), ep->rx_sl.open_bidi);
+			NET_DBG("[EP:%p/%d] STREAMS_BLOCKED: not advancing bidi limit "
+				"(open=%" PRIu64 ", limit=%" PRIu64 ")",
+				ep, quic_get_by_ep(ep), ep->rx_sl.open_bidi,
+				ep->rx_sl.max_bidi);
 		}
 	} else {
 		uint64_t free_slots = (uint64_t)CONFIG_QUIC_MAX_STREAMS_UNI - ep->rx_sl.open_uni;
+		uint64_t new_limit = ep->rx_sl.total_uni + free_slots;
 
-		if (free_slots > 0 && ep->rx_sl.max_uni <= max_streams) {
-			ep->rx_sl.max_uni += free_slots;
+		if (free_slots > 0 && new_limit > ep->rx_sl.max_uni &&
+		    ep->rx_sl.max_uni <= max_streams &&
+		    quic_reply_budget_take(budget)) {
+			ep->rx_sl.max_uni = new_limit;
 			quic_send_max_streams(ep, false);
 		}
 	}
@@ -940,8 +1109,60 @@ static int send_retire_connection_id(struct quic_endpoint *ep, uint64_t seq_num)
 	return quic_send_packet(ep, QUIC_SECRET_LEVEL_APPLICATION, frame, pos);
 }
 
+/* Remember a RETIRE_CONNECTION_ID that could not be sent right away */
+static void quic_cid_retire_defer(struct quic_endpoint *ep, uint64_t seq_num)
+{
+	k_spinlock_key_t key = k_spin_lock(&ep->retire_backlog.lock);
+
+	if (ep->retire_backlog.count == ARRAY_SIZE(ep->retire_backlog.seq)) {
+		NET_WARN("[EP:%p/%d] Retire backlog full, dropping seq=%" PRIu64,
+			 ep, quic_get_by_ep(ep), ep->retire_backlog.seq[0]);
+		ep->retire_backlog.count--;
+		memmove(&ep->retire_backlog.seq[0], &ep->retire_backlog.seq[1],
+			ep->retire_backlog.count * sizeof(uint64_t));
+	}
+
+	ep->retire_backlog.seq[ep->retire_backlog.count++] = seq_num;
+
+	k_spin_unlock(&ep->retire_backlog.lock, key);
+}
+
+/* Send retirements deferred by earlier payloads, using this payload's budget */
+static void quic_cid_retire_flush(struct quic_endpoint *ep,
+				  struct quic_reply_budget *budget)
+{
+	while (true) {
+		k_spinlock_key_t key;
+		uint64_t seq_num;
+
+		key = k_spin_lock(&ep->retire_backlog.lock);
+		if (ep->retire_backlog.count == 0U) {
+			k_spin_unlock(&ep->retire_backlog.lock, key);
+			return;
+		}
+		seq_num = ep->retire_backlog.seq[0];
+		k_spin_unlock(&ep->retire_backlog.lock, key);
+
+		if (!quic_reply_budget_take(budget) ||
+		    send_retire_connection_id(ep, seq_num) != 0) {
+			/* Keep it queued and try again with a later payload */
+			return;
+		}
+
+		key = k_spin_lock(&ep->retire_backlog.lock);
+		if (ep->retire_backlog.count > 0U &&
+		    ep->retire_backlog.seq[0] == seq_num) {
+			ep->retire_backlog.count--;
+			memmove(&ep->retire_backlog.seq[0], &ep->retire_backlog.seq[1],
+				ep->retire_backlog.count * sizeof(uint64_t));
+		}
+		k_spin_unlock(&ep->retire_backlog.lock, key);
+	}
+}
+
 static int handle_new_connection_id_frame(struct quic_endpoint *ep,
-					  const uint8_t *buf, size_t len)
+					  const uint8_t *buf, size_t len,
+					  struct quic_reply_budget *budget)
 {
 	uint64_t seq_num, retire_prior_to;
 	uint8_t cid_len;
@@ -1002,8 +1223,21 @@ static int handle_new_connection_id_frame(struct quic_endpoint *ep,
 			    ep->peer_cid_pool[i].seq_num < retire_prior_to) {
 				NET_DBG("[EP:%p/%d] Retiring peer CID seq=%" PRIu64,
 					ep, quic_get_by_ep(ep), ep->peer_cid_pool[i].seq_num);
-				/* Send RETIRE_CONNECTION_ID frame */
-				send_retire_connection_id(ep, ep->peer_cid_pool[i].seq_num);
+				/* RFC 9000 ch. 5.1.2: the peer counts this CID
+				 * as active until it sees RETIRE_CONNECTION_ID,
+				 * and the packet carrying this frame is ACKed
+				 * whether or not we manage to reply. When the
+				 * reply budget is used up or the send fails,
+				 * remember the sequence number and send it with
+				 * a later payload's budget instead of dropping
+				 * the retirement.
+				 */
+				if (!quic_reply_budget_take(budget) ||
+				    send_retire_connection_id(
+					    ep, ep->peer_cid_pool[i].seq_num) != 0) {
+					quic_cid_retire_defer(
+						ep, ep->peer_cid_pool[i].seq_num);
+				}
 				ep->peer_cid_pool[i].active = false;
 			}
 		}
@@ -1054,7 +1288,8 @@ static int handle_retire_connection_id_frame(struct quic_endpoint *ep,
 }
 
 static int handle_path_challenge_frame(struct quic_endpoint *ep,
-				       const uint8_t *buf, size_t len)
+				       const uint8_t *buf, size_t len,
+				       struct quic_reply_budget *budget)
 {
 	uint8_t response[9];
 	int pos = 1;
@@ -1067,6 +1302,12 @@ static int handle_path_challenge_frame(struct quic_endpoint *ep,
 	NET_DBG("[EP:%p/%d] PATH_CHALLENGE received", ep, quic_get_by_ep(ep));
 
 	/* Must respond with PATH_RESPONSE containing same 8 bytes */
+	if (!quic_reply_budget_take(budget)) {
+		NET_DBG("[EP:%p/%d] PATH_RESPONSE budget for this payload used up",
+			ep, quic_get_by_ep(ep));
+		return pos + 8;
+	}
+
 	response[0] = QUIC_FRAME_TYPE_PATH_RESPONSE;
 	memcpy(&response[1], &buf[pos], 8);
 
@@ -1168,6 +1409,17 @@ static int handle_ack_frame(struct quic_endpoint *ep,
 	ranges[range_idx].start = largest_ack - first_ack_range;
 	range_idx++;
 
+	/* RFC 9001 Section 6.1: a new key update may only be initiated once
+	 * the peer has acknowledged a packet sent in the current key phase.
+	 * The peer acknowledging a packet number from this phase means it
+	 * decrypted it, so record that the gate is open.
+	 */
+	if (level == QUIC_SECRET_LEVEL_APPLICATION && ep->crypto.ku.initialized &&
+	    !ep->crypto.ku.tx_phase_acked &&
+	    largest_ack >= ep->crypto.ku.tx_phase_first_pn) {
+		ep->crypto.ku.tx_phase_acked = true;
+	}
+
 	NET_DBG("[EP:%p/%d] ACK frame: largest=%" PRIu64 ", delay=%" PRIu64
 		", ranges=%" PRIu64 ", first_range=%" PRIu64,
 		ep, quic_get_by_ep(ep), largest_ack, ack_delay, ack_range_count,
@@ -1204,11 +1456,19 @@ static int handle_ack_frame(struct quic_endpoint *ep,
 			uint64_t smallest = ranges[range_idx - 1].start;
 
 			if (smallest < gap + 2) {
-				/* Malformed: gap exceeds available PN space */
-				break;
+				/* Malformed: gap exceeds available PN space
+				 * (RFC 9000 19.3.1, FRAME_ENCODING_ERROR)
+				 */
+				return -EINVAL;
 			}
 
 			ranges[range_idx].end = smallest - gap - 2;
+
+			if (ranges[range_idx].end < ack_range) {
+				/* Malformed: the range extends below zero */
+				return -EINVAL;
+			}
+
 			ranges[range_idx].start = ranges[range_idx].end - ack_range;
 			range_idx++;
 		}
@@ -1525,7 +1785,7 @@ ZTESTABLE_STATIC int handle_crypto_frame(struct quic_endpoint *ep,
 	*consumed = pos + crypto_len;
 
 	/* Initialize crypto context if needed (first CRYPTO frame) */
-	if (!ep->crypto.initial.initialized) {
+	if (!ep->crypto.initial.initialized && !ep->crypto.initial.discarded) {
 		if (!quic_conn_init_setup(ep, ep->my_cid, ep->my_cid_len)) {
 			NET_DBG("[EP:%p/%d] Failed to setup Initial crypto context",
 				ep, quic_get_by_ep(ep));
@@ -1685,6 +1945,7 @@ static int handle_1rtt_packet(struct quic_pkt *pkt)
 	int pending_pos = pkt->pos;
 	size_t len = pkt->len;
 	uint8_t *buf = &pkt->data[pending_pos];
+	struct quic_reply_budget budget = { 0 };
 	size_t consumed;
 	int pos = 0;
 	int ret = 0;
@@ -1693,7 +1954,11 @@ static int handle_1rtt_packet(struct quic_pkt *pkt)
 	NET_DBG("[EP:%p/%d] Processing 1-RTT packet, pn=%" PRIu64 ", len=%zu",
 		ep, quic_get_by_ep(ep), pkt->pkt_num, len);
 
+	/* Retirements deferred by earlier payloads go out under this budget */
+	quic_cid_retire_flush(ep, &budget);
+
 	/* Parse frames in the packet */
+
 	while (pos < (int)len) {
 		uint8_t frame_type = buf[pos];
 
@@ -1776,7 +2041,8 @@ static int handle_1rtt_packet(struct quic_pkt *pkt)
 			break;
 
 		case QUIC_FRAME_TYPE_STOP_SENDING:
-			ret = handle_stop_sending_frame(ep, &buf[pos], len - pos);
+			ret = handle_stop_sending_frame(ep, &buf[pos], len - pos,
+							&budget);
 			if (ret < 0) {
 				ret = quic_handle_frame_error(ep, frame_type, ret);
 				if (ret == -EPROTO) {
@@ -1858,7 +2124,8 @@ static int handle_1rtt_packet(struct quic_pkt *pkt)
 			break;
 
 		case QUIC_FRAME_TYPE_DATA_BLOCKED:
-			ret = handle_data_blocked_frame(ep, &buf[pos], len - pos);
+			ret = handle_data_blocked_frame(ep, &buf[pos], len - pos,
+							&budget);
 			if (ret < 0) {
 				ret = quic_handle_frame_error(ep, frame_type, ret);
 				if (ret == -EPROTO) {
@@ -1871,7 +2138,8 @@ static int handle_1rtt_packet(struct quic_pkt *pkt)
 			break;
 
 		case QUIC_FRAME_TYPE_STREAM_DATA_BLOCKED:
-			ret = handle_stream_data_blocked_frame(ep, &buf[pos], len - pos);
+			ret = handle_stream_data_blocked_frame(ep, &buf[pos], len - pos,
+							       &budget);
 			if (ret < 0) {
 				ret = quic_handle_frame_error(ep, frame_type, ret);
 				if (ret == -EPROTO) {
@@ -1885,7 +2153,8 @@ static int handle_1rtt_packet(struct quic_pkt *pkt)
 
 		case QUIC_FRAME_TYPE_STREAMS_BLOCKED_BIDI:
 		case QUIC_FRAME_TYPE_STREAMS_BLOCKED_UNI:
-			ret = handle_streams_blocked_frame(ep, &buf[pos], len - pos);
+			ret = handle_streams_blocked_frame(ep, &buf[pos], len - pos,
+							   &budget);
 			if (ret < 0) {
 				ret = quic_handle_frame_error(ep, frame_type, ret);
 				if (ret == -EPROTO) {
@@ -1898,7 +2167,8 @@ static int handle_1rtt_packet(struct quic_pkt *pkt)
 			break;
 
 		case QUIC_FRAME_TYPE_NEW_CONNECTION_ID:
-			ret = handle_new_connection_id_frame(ep, &buf[pos], len - pos);
+			ret = handle_new_connection_id_frame(ep, &buf[pos], len - pos,
+							     &budget);
 			if (ret < 0) {
 				ret = quic_handle_frame_error(ep, frame_type, ret);
 				if (ret == -EPROTO) {
@@ -1924,7 +2194,8 @@ static int handle_1rtt_packet(struct quic_pkt *pkt)
 			break;
 
 		case QUIC_FRAME_TYPE_PATH_CHALLENGE:
-			ret = handle_path_challenge_frame(ep, &buf[pos], len - pos);
+			ret = handle_path_challenge_frame(ep, &buf[pos], len - pos,
+							  &budget);
 			if (ret < 0) {
 				ret = quic_handle_frame_error(ep, frame_type, ret);
 				if (ret == -EPROTO) {
@@ -1972,9 +2243,15 @@ static int handle_1rtt_packet(struct quic_pkt *pkt)
 			NET_DBG("[EP:%p/%d] Received HANDSHAKE_DONE frame", ep, quic_get_by_ep(ep));
 			pos++;
 
-			/* Mark handshake as complete on client side */
+			/* Mark handshake as complete and confirmed on client
+			 * side (RFC 9001 Section 4.1.2)
+			 */
 			if (!ep->is_server) {
 				ep->crypto.tls.state = QUIC_TLS_STATE_CONNECTED;
+				ep->handshake_confirmed = true;
+
+				/* RFC 9001 ch. 4.9.2 */
+				quic_endpoint_discard_keys(ep, QUIC_SECRET_LEVEL_HANDSHAKE);
 			}
 
 			break;
@@ -2032,13 +2309,14 @@ fail:
  * - PING frames (0x01): Keep-alive
  * - CONNECTION_CLOSE frames (0x1c, 0x1d): Connection termination
  */
-static int handle_crypto_level_packet(struct quic_endpoint *ep,
-				      enum quic_secret_level level,
-				      const uint8_t *payload,
-				      size_t payload_len,
-				      size_t total_packet_len,
-				      bool *ack_only)
+ZTESTABLE_STATIC int handle_crypto_level_packet(struct quic_endpoint *ep,
+						enum quic_secret_level level,
+						const uint8_t *payload,
+						size_t payload_len,
+						size_t total_packet_len,
+						bool *ack_only)
 {
+	struct quic_reply_budget budget = { 0 };
 	size_t pos = 0;
 	int ret;
 	bool saw_ack_frame = false;
@@ -2050,6 +2328,13 @@ static int handle_crypto_level_packet(struct quic_endpoint *ep,
 		level == QUIC_SECRET_LEVEL_HANDSHAKE ? "Handshake" :
 		level == QUIC_SECRET_LEVEL_EARLY ? "0-RTT" : "Application",
 		payload_len);
+
+	if (level == QUIC_SECRET_LEVEL_APPLICATION) {
+		/* Retirements deferred by earlier payloads go out under this
+		 * budget; they need the 1-RTT keys this level guarantees.
+		 */
+		quic_cid_retire_flush(ep, &budget);
+	}
 
 	while (pos < payload_len) {
 		uint8_t frame_type = payload[pos];
@@ -2166,7 +2451,8 @@ static int handle_crypto_level_packet(struct quic_endpoint *ep,
 			switch (frame_type) {
 			case QUIC_FRAME_TYPE_NEW_CONNECTION_ID:
 				ret = handle_new_connection_id_frame(ep, &payload[pos],
-								     payload_len - pos);
+								     payload_len - pos,
+								     &budget);
 				if (ret < 0) {
 					ret = quic_handle_frame_error(ep, frame_type, ret);
 					return ret;
@@ -2188,7 +2474,8 @@ static int handle_crypto_level_packet(struct quic_endpoint *ep,
 
 			case QUIC_FRAME_TYPE_PATH_CHALLENGE:
 				ret = handle_path_challenge_frame(ep, &payload[pos],
-								  payload_len - pos);
+								  payload_len - pos,
+								  &budget);
 				if (ret < 0) {
 					ret = quic_handle_frame_error(ep, frame_type, ret);
 					return ret;
@@ -2217,12 +2504,17 @@ static int handle_crypto_level_packet(struct quic_endpoint *ep,
 				saw_other_frame = true;
 				if (!ep->is_server) {
 					ep->crypto.tls.state = QUIC_TLS_STATE_CONNECTED;
+					ep->handshake_confirmed = true;
 
 					/* Discard Initial and Handshake spaces */
 					quic_recovery_discard_pn_space(ep,
 						level_to_pn_space(QUIC_SECRET_LEVEL_INITIAL));
 					quic_recovery_discard_pn_space(ep,
 						level_to_pn_space(QUIC_SECRET_LEVEL_HANDSHAKE));
+
+					/* RFC 9001 ch. 4.9.2 */
+					quic_endpoint_discard_keys(
+						ep, QUIC_SECRET_LEVEL_HANDSHAKE);
 				}
 				continue;
 
@@ -2273,7 +2565,8 @@ static int handle_crypto_level_packet(struct quic_endpoint *ep,
 
 			case QUIC_FRAME_TYPE_DATA_BLOCKED:
 				ret = handle_data_blocked_frame(ep, &payload[pos],
-								payload_len - pos);
+								payload_len - pos,
+								&budget);
 				if (ret < 0) {
 					ret = quic_handle_frame_error(ep, frame_type, ret);
 					return ret;
@@ -2284,7 +2577,8 @@ static int handle_crypto_level_packet(struct quic_endpoint *ep,
 
 			case QUIC_FRAME_TYPE_STREAM_DATA_BLOCKED:
 				ret = handle_stream_data_blocked_frame(ep, &payload[pos],
-								       payload_len - pos);
+								       payload_len - pos,
+								       &budget);
 				if (ret < 0) {
 					ret = quic_handle_frame_error(ep, frame_type, ret);
 					return ret;
@@ -2296,7 +2590,8 @@ static int handle_crypto_level_packet(struct quic_endpoint *ep,
 			case QUIC_FRAME_TYPE_STREAMS_BLOCKED_BIDI:
 			case QUIC_FRAME_TYPE_STREAMS_BLOCKED_UNI:
 				ret = handle_streams_blocked_frame(ep, &payload[pos],
-								   payload_len - pos);
+								   payload_len - pos,
+								   &budget);
 				if (ret < 0) {
 					ret = quic_handle_frame_error(ep, frame_type, ret);
 					return ret;
@@ -2318,7 +2613,8 @@ static int handle_crypto_level_packet(struct quic_endpoint *ep,
 
 			case QUIC_FRAME_TYPE_STOP_SENDING:
 				ret = handle_stop_sending_frame(ep, &payload[pos],
-								payload_len - pos);
+								payload_len - pos,
+								&budget);
 				if (ret < 0) {
 					ret = quic_handle_frame_error(ep, frame_type, ret);
 					return ret;

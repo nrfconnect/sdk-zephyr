@@ -59,6 +59,25 @@ static inline bool z_is_inactive_timeout(const struct _timeout *to)
 	return !sys_dnode_is_linked(&to->node);
 }
 
+#elif defined(CONFIG_TIMEOUT_BACKEND_SKIPLIST)
+
+static inline void z_init_timeout(struct _timeout *to)
+{
+	uint8_t i;
+
+	to->height = 0;
+	to->abs_ticks = 0;
+
+	for (i = 0; i < CONFIG_TIMEOUT_SKIPLIST_MAX_LEVEL; i++) {
+		to->forward[i] = NULL;
+	}
+}
+
+static inline bool z_is_inactive_timeout(const struct _timeout *to)
+{
+	return to->height == 0;
+}
+
 #else /* CONFIG_TIMEOUT_BACKEND_DLIST or _BUCKET */
 
 static inline void z_init_timeout(struct _timeout *to)
@@ -92,18 +111,20 @@ k_ticks_t z_add_timeout(struct _timeout *to, _timeout_func_t fn, k_timeout_t tim
  *             CPU; in that case the in-flight slot is marked superseded
  *             so handlers that need to bail may check via
  *             z_timeout_inflight_superseded()).
- *   -EAGAIN — the handler is currently in flight on another CPU. The caller
- *             must drop any lock that the handler may need and retry. A short
- *             arch_spin_relax() has already been done before this return.
+ *   -EAGAIN — the handler is currently in flight on another CPU. A copy it
+ *             re-queued, if any, has been removed. A short arch_spin_relax()
+ *             has already been done before this return.
  *
- * On -EAGAIN, the only correct response is to drop outer locks and call again.
- * After a non-EAGAIN return, the handler is guaranteed not to be in flight.
+ * Callers that must not proceed while the handler runs (e.g. before freeing
+ * the timeout) drop any lock the handler may need and call again on -EAGAIN;
+ * after any other return the handler is not in flight on another CPU.
+ * Callers that only need the timeout cancelled may ignore -EAGAIN.
  */
 int z_try_abort_timeout(struct _timeout *to);
 
 /* True if @to is the currently in-flight timeout and a same-CPU aborter
  * has marked the slot as superseded. Handlers with non-idempotent side
- * effects (e.g. k_timer's expiry_fn) should call this at entry, after
+ * effects (e.g. z_thread_timeout()) should call this at entry, after
  * taking their own lock, and bail if it returns true.
  */
 bool z_timeout_inflight_superseded(const struct _timeout *to);
@@ -125,7 +146,7 @@ static inline int z_try_abort_thread_timeout(struct k_thread *thread)
 	return z_try_abort_timeout(&thread->base.timeout);
 }
 
-int32_t z_get_next_timeout_expiry(void);
+uint32_t z_get_next_timeout_expiry(void);
 
 k_ticks_t z_timeout_remaining(const struct _timeout *timeout);
 
@@ -135,7 +156,7 @@ k_ticks_t z_timeout_remaining(const struct _timeout *timeout);
 #define z_init_thread_timeout(thread_base) do {} while (false)
 #define z_try_abort_thread_timeout(to) 0
 #define z_is_inactive_timeout(to) 1
-#define z_get_next_timeout_expiry() ((int32_t) K_TICKS_FOREVER)
+#define z_get_next_timeout_expiry() ((uint32_t) K_TICKS_FOREVER)
 #define z_set_timeout_expiry(ticks, is_idle) do {} while (false)
 
 static inline k_ticks_t z_add_thread_timeout(struct k_thread *thread, k_timeout_t ticks)

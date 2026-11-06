@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#ifndef ZEPHYR_INCLUDE_DT_BINDINGS_CLOCK_MCUX_LPC_SYSCON_H_
-#define ZEPHYR_INCLUDE_DT_BINDINGS_CLOCK_MCUX_LPC_SYSCON_H_
+#ifndef ZEPHYR_INCLUDE_DT_BINDINGS_CLOCK_MCUX_LPC_SYSCON_CLOCK_H_
+#define ZEPHYR_INCLUDE_DT_BINDINGS_CLOCK_MCUX_LPC_SYSCON_CLOCK_H_
 
 /* Note- clock identifiers in this file must be unique,
  * as the driver uses them in a switch case
@@ -59,6 +59,8 @@
 #define MCUX_USDHC2_CLK     MCUX_LPC_CLK_ID(0x02, 0x01)
 
 #define MCUX_MCAN_CLK MCUX_LPC_CLK_ID(0x03, 0x00)
+/** M_CAN1 peripheral clock identifier. */
+#define MCUX_MCAN1_CLK MCUX_LPC_CLK_ID(0x03, 0x01)
 
 #define MCUX_BUS_CLK MCUX_LPC_CLK_ID(0x04, 0x00)
 
@@ -238,4 +240,34 @@
 /** EQDC1 peripheral clock identifier. */
 #define MCUX_EQDC1_CLK MCUX_LPC_CLK_ID(0x38, 0x01)
 
-#endif /* ZEPHYR_INCLUDE_DT_BINDINGS_CLOCK_MCUX_LPC_SYSCON_H_ */
+/** PowerQuad DSP coprocessor clock identifier. */
+#define MCUX_POWERQUAD_CLK MCUX_LPC_CLK_ID(0x39, 0x00)
+
+/** AON LPADC peripheral clock identifier. */
+#define MCUX_AON_LPADC_CLK MCUX_LPC_CLK_ID(0x3A, 0x00)
+
+/** LPACMP (Low-Power Analog Comparator) peripheral clock identifier. */
+#define MCUX_LPACMP_CLK MCUX_LPC_CLK_ID(0x3B, 0x00)
+
+/** FRO high-frequency clock (FRO_HF) rate identifier. */
+#define MCUX_FRO_HF_CLK MCUX_LPC_CLK_ID(0x40, 0x00)
+
+/** FRO_HF divided output (FRO_HF_DIV) rate identifier. */
+#define MCUX_FRO_HF_DIV_CLK MCUX_LPC_CLK_ID(0x41, 0x00)
+
+/** FRO 12 MHz clock (FRO_12M) rate identifier. */
+#define MCUX_FRO_12M_CLK MCUX_LPC_CLK_ID(0x42, 0x00)
+
+/** FREQME peripheral gate clock identifier. */
+#define MCUX_FREQME_CLK MCUX_LPC_CLK_ID(0x43, 0x00)
+
+/** CPU / AHB (core system) clock rate identifier. */
+#define MCUX_CPU_AHB_CLK MCUX_LPC_CLK_ID(0x44, 0x00)
+
+/** External (system oscillator / CLK_IN) clock rate identifier. */
+#define MCUX_EXT_CLK MCUX_LPC_CLK_ID(0x45, 0x00)
+
+/** eSPI peripheral clock identifier. */
+#define MCUX_ESPI0_CLK MCUX_LPC_CLK_ID(0x46, 0x00)
+
+#endif /* ZEPHYR_INCLUDE_DT_BINDINGS_CLOCK_MCUX_LPC_SYSCON_CLOCK_H_ */

@@ -11,6 +11,17 @@ zephyr_library_sources(
 zephyr_library_sources_ifdef(CONFIG_OPENTHREAD_SHELL shell.c)
 zephyr_include_directories(include)
 
+# Zephyr logging options
+if(CONFIG_LOG_BACKEND_SPINEL)
+  add_definitions(-DOPENTHREAD_CONFIG_LOG_OUTPUT=OPENTHREAD_CONFIG_LOG_OUTPUT_APP)
+endif()
+
+# Other options
+add_definitions(
+  -DOPENTHREAD_CONFIG_LOG_LEVEL=${CONFIG_OPENTHREAD_LOG_LEVEL}
+  -DOPENTHREAD_PROJECT_CORE_CONFIG_FILE="openthread-core-zephyr-config.h"
+)
+
 add_subdirectory(platform)
 
 if(NOT CONFIG_OPENTHREAD_SOURCES)
@@ -152,8 +163,8 @@ kconfig_to_ot_option(CONFIG_OPENTHREAD_TX_QUEUE_STATISTICS OT_TX_QUEUE_STATS "En
 kconfig_to_ot_option(CONFIG_OPENTHREAD_UDP_FORWARD OT_UDP_FORWARD "Enable UDP forward feature")
 kconfig_to_ot_option(CONFIG_OPENTHREAD_UPTIME OT_UPTIME "Enable support for tracking OpenThread instance's uptime")
 kconfig_to_ot_option(CONFIG_OPENTHREAD_VERHOEFF_CHECKSUM OT_VERHOEFF_CHECKSUM "Verhoeff checksum")
-kconfig_to_ot_option(CONFIG_OPENTHREAD_WAKEUP_COORDINATOR OT_WAKEUP_COORDINATOR "Enable Wake-up Coordinator role")
-kconfig_to_ot_option(CONFIG_OPENTHREAD_WAKEUP_END_DEVICE OT_WAKEUP_END_DEVICE "Enable Wake-up End Device role")
+kconfig_to_ot_option(CONFIG_OPENTHREAD_WAKEUP_COORDINATOR OT_WAKE_INITIATOR "Enable Wake-up Coordinator role")
+kconfig_to_ot_option(CONFIG_OPENTHREAD_WAKEUP_END_DEVICE OT_WAKE_LISTENER "Enable Wake-up End Device role")
 kconfig_to_ot_option_value(CONFIG_OPENTHREAD_RCP_RESTORATION_MAX_COUNT OT_RCP_RESTORATION_MAX_COUNT "Set the maximum number of RCP restoration attempts")
 kconfig_to_ot_option_value(CONFIG_OPENTHREAD_NET_DIAG_VENDOR_NAME OT_VENDOR_NAME "Set vendor name for network diagnostics")
 kconfig_to_ot_option_value(CONFIG_OPENTHREAD_NET_DIAG_VENDOR_MODEL OT_VENDOR_MODEL "Set vendor model for network diagnostics")
@@ -172,18 +183,6 @@ if(CONFIG_OPENTHREAD_CLI_VENDOR_EXTENSION)
 endif()
 
 set(BUILD_TESTING OFF CACHE BOOL "Disable openthread cmake testing targets" FORCE)
-
-# Zephyr logging options
-
-if(CONFIG_LOG_BACKEND_SPINEL)
-  add_definitions(-DOPENTHREAD_CONFIG_LOG_OUTPUT=OPENTHREAD_CONFIG_LOG_OUTPUT_APP)
-endif()
-
-# Other options
-add_definitions(
-  -DOPENTHREAD_CONFIG_LOG_LEVEL=${CONFIG_OPENTHREAD_LOG_LEVEL}
-  -DOPENTHREAD_PROJECT_CORE_CONFIG_FILE="openthread-core-zephyr-config.h"
-)
 
 # Need to specify build directory as well
 add_subdirectory(${ZEPHYR_CURRENT_MODULE_DIR} build)
@@ -262,6 +261,11 @@ if(CONFIG_OPENTHREAD_SHELL)
   list(APPEND ot_libs ${cli_lib})
 endif()
 
+if(CONFIG_OPENTHREAD_SETTINGS_RAM OR CONFIG_OPENTHREAD_RADIO_VENDOR_IMPLEMENTATION OR
+   CONFIG_OPENTHREAD_LINK_METRICS_SUBJECT)
+  list(APPEND ot_libs openthread-platform-utils-static)
+endif()
+
 if(CONFIG_OPENTHREAD_COPROCESSOR_RCP)
   list(APPEND ot_libs openthread-rcp)
 endif()
@@ -293,13 +297,17 @@ if(CONFIG_HDLC_RCP_IF)
   )
 endif()
 
-if(CONFIG_OPENTHREAD_SETTINGS_RAM)
+if(CONFIG_OPENTHREAD_SETTINGS_RAM OR CONFIG_OPENTHREAD_RADIO_VENDOR_IMPLEMENTATION OR
+   CONFIG_OPENTHREAD_LINK_METRICS_SUBJECT)
   target_compile_options(openthread-platform-utils PRIVATE
     $<TARGET_PROPERTY:zephyr_interface,INTERFACE_COMPILE_OPTIONS>
     $<TARGET_PROPERTY:compiler,no_builtin>)
   add_dependencies(openthread-platform-utils syscall_list_h_target)
 
-  list(APPEND ot_libs openthread-platform-utils-static)
+  if(CONFIG_PICOLIBC OR CONFIG_MINIMAL_LIBCPP)
+    target_compile_options(openthread-platform-utils PRIVATE
+      $<$<COMPILE_LANGUAGE:CXX>:-fno-threadsafe-statics>)
+  endif()
 endif()
 
 zephyr_link_libraries(${ot_libs})

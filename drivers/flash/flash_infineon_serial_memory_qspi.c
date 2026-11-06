@@ -1,6 +1,6 @@
 /*
- * SPDX-FileCopyrightText: <text>Copyright (c) 2026 Infineon Technologies AG,
- * or an affiliate of Infineon Technologies AG. All rights reserved.</text>
+ * SPDX-FileCopyrightText: Copyright (c) 2026 Infineon Technologies AG,
+ * SPDX-FileCopyrightText: or an affiliate of Infineon Technologies AG. All rights reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -121,7 +121,7 @@ static int ifx_serial_memory_flash_read(const struct device *dev, off_t offset, 
 
 	rslt = mtb_serial_memory_read(&serial_memory_obj, offset, data_len, data);
 	if (rslt != CY_RSLT_SUCCESS) {
-		LOG_ERR("Error reading @ %lu (Err:0x%x)", offset, rslt);
+		LOG_ERR("Error reading @ %lu (Err:0x%x)", (long)offset, rslt);
 		ret = -EIO;
 	}
 
@@ -148,7 +148,7 @@ static int ifx_serial_memory_flash_write(const struct device *dev, off_t offset,
 
 	rslt = mtb_serial_memory_write(&serial_memory_obj, offset, data_len, data);
 	if (rslt != CY_RSLT_SUCCESS) {
-		LOG_ERR("Error in writing @ %lu (Err:0x%x)", offset, rslt);
+		LOG_ERR("Error in writing @ %lu (Err:0x%x)", (long)offset, rslt);
 		ret = -EIO;
 	}
 
@@ -206,6 +206,13 @@ ifx_serial_memory_flash_get_parameters(const struct device *dev)
 	ARG_UNUSED(dev);
 
 	return &ifx_serial_memory_flash_parameters;
+}
+
+static int ifx_serial_memory_flash_get_size(const struct device *dev, uint64_t *size)
+{
+	ARG_UNUSED(dev);
+	*size = DT_REG_SIZE(SOC_NV_FLASH_NODE);
+	return 0;
 }
 
 #ifdef CONFIG_PM
@@ -359,6 +366,7 @@ static DEVICE_API(flash, ifx_serial_memory_flash_driver_api) = {
 	.write = ifx_serial_memory_flash_write,
 	.erase = ifx_serial_memory_flash_erase,
 	.get_parameters = ifx_serial_memory_flash_get_parameters,
+	.get_size = ifx_serial_memory_flash_get_size,
 #ifdef CONFIG_FLASH_PAGE_LAYOUT
 	.page_layout = ifx_serial_memory_flash_page_layout,
 #endif /* CONFIG_FLASH_PAGE_LAYOUT */

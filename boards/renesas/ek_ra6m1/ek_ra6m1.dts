@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024-2025 Renesas Electronics Corporation
+ * Copyright (c) 2024-2026 Renesas Electronics Corporation
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -13,13 +13,13 @@
 #include "ek_ra6m1-pinctrl.dtsi"
 
 / {
-	model = "Renesas EK-RA6M1";
 	compatible = "renesas,ra6m1", "renesas,ra";
+	model = "Renesas EK-RA6M1";
 
 	chosen {
 		zephyr,sram = &sram0;
-		zephyr,flash-controller = &flash1;
-		zephyr,flash = &flash0;
+		zephyr,flash-controller = &code_flash_ctrl;
+		zephyr,flash = &code_flash;
 		zephyr,console = &uart8;
 		zephyr,shell-uart = &uart8;
 		zephyr,entropy = &trng;
@@ -49,6 +49,7 @@
 		led0 = &led1;
 		sw0 = &button0;
 		watchdog0 = &wdt;
+		i2c-0 = &iic0;
 	};
 };
 
@@ -64,7 +65,6 @@
 };
 
 &iic0 {
-	status = "okay";
 	#address-cells = <1>;
 	#size-cells = <0>;
 	interrupts = <91 1>, <92 1>, <93 1>, <94 1>;
@@ -72,6 +72,7 @@
 	clock-frequency = <I2C_BITRATE_FAST>;
 	pinctrl-0 = <&iic0_default>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &spi0 {
@@ -111,9 +112,9 @@
 };
 
 &adc0 {
-	status = "okay";
 	pinctrl-0 = <&adc0_default>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &dac0 {
@@ -135,15 +136,16 @@
 	status = "okay";
 };
 
-&flash1 {
+&data_flash {
 	partitions {
-		compatible = "fixed-partitions";
+		ranges;
 		#address-cells = <1>;
 		#size-cells = <1>;
 
 		storage_partition: partition@0 {
-			label = "storage";
+			compatible = "zephyr,mapped-partition";
 			reg = <0x0 DT_SIZE_K(8)>;
+			label = "storage";
 		};
 	};
 };

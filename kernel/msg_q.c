@@ -26,7 +26,7 @@
 #include <zephyr/sys/check.h>
 
 #ifdef CONFIG_OBJ_CORE_MSGQ
-static struct k_obj_type obj_type_msgq;
+K_OBJ_TYPE_DEFINE(obj_type_msgq, k_msgq, K_OBJ_TYPE_MSGQ_ID, NULL);
 #endif /* CONFIG_OBJ_CORE_MSGQ */
 
 static inline bool msgq_handle_poll_events(struct k_msgq *msgq)
@@ -107,24 +107,46 @@ int z_vrfy_k_msgq_alloc_init(struct k_msgq *msgq, size_t msg_size,
 #include <zephyr/syscalls/k_msgq_alloc_init_mrsh.c>
 #endif /* CONFIG_USERSPACE */
 
-int k_msgq_cleanup(struct k_msgq *msgq)
+int z_msgq_cleanup(struct k_msgq *msgq, __maybe_unused bool locked)
 {
-	int ret = 0;
 	SYS_PORT_TRACING_OBJ_FUNC_ENTER(k_msgq, cleanup, msgq);
 
-	CHECKIF(z_waitq_head(&msgq->wait_q) != NULL) {
+	int ret = 0;
+	bool freed = false;
+	k_spinlock_key_t key = k_spin_lock(&msgq->lock);
+
+	CHECKIF(locked && (z_waitq_head_locked(&msgq->wait_q) != NULL)) {
 		ret = -EBUSY;
-		goto exit;
+		goto out;
+	}
+
+	CHECKIF(!locked && (z_waitq_head(&msgq->wait_q) != NULL)) {
+		ret = -EBUSY;
+		goto out;
 	}
 
 	if ((msgq->flags & K_MSGQ_FLAG_ALLOC) != 0U) {
 		k_free(msgq->buffer_start);
 		msgq->flags &= ~K_MSGQ_FLAG_ALLOC;
+		freed = true;
 	}
 
-exit:
+out:
+	k_spin_unlock(&msgq->lock, key);
+
+#ifdef CONFIG_OBJ_CORE_MSGQ
+	if (freed) {
+		k_obj_core_unlink(K_OBJ_CORE(msgq));
+	}
+#endif /* CONFIG_OBJ_CORE_MSGQ */
+
 	SYS_PORT_TRACING_OBJ_FUNC_EXIT(k_msgq, cleanup, msgq, ret);
 	return ret;
+}
+
+int k_msgq_cleanup(struct k_msgq *msgq)
+{
+	return z_msgq_cleanup(msgq, false);
 }
 
 static inline int put_msg_in_queue(struct k_msgq *msgq, const void *data,
@@ -148,7 +170,7 @@ static inline int put_msg_in_queue(struct k_msgq *msgq, const void *data,
 	if (msgq->used_msgs < msgq->max_msgs) {
 		/* message queue isn't full. Try to hand the message
 		 * directly to the longest-waiting receiver, atomically
-		 * under _sched_spinlock so a racing in-flight timeout
+		 * under the scheduler's spinlock so a racing in-flight timeout
 		 * handler cannot wake the receiver before the message
 		 * has been copied into its buffer.
 		 */
@@ -164,20 +186,33 @@ static inline int put_msg_in_queue(struct k_msgq *msgq, const void *data,
 			}
 		}
 		if (pending_thread == NULL) {
+			size_t msg_size = msgq->msg_size;
+			char *slot;
+
 			__ASSERT_NO_MSG((msgq->write_ptr >= msgq->buffer_start) &&
 					(msgq->write_ptr <= (msgq->buffer_end - 1)) &&
 					((size_t)(uintptr_t)(msgq->buffer_end - msgq->write_ptr) >=
 						msgq->msg_size));
+			/*
+			 * Pick the slot and update the ring state from
+			 * registers first: the compiler cannot tell that the
+			 * copy leaves the queue fields alone, so copying last
+			 * saves it re-reading them afterwards.
+			 */
 			if (put_at_back) {
 				/*
 				 * to write a message to the back of the queue,
-				 * copy the message and increment write_ptr
+				 * take the slot write_ptr points at and
+				 * advance write_ptr past it
 				 */
-				(void)memcpy(msgq->write_ptr, (char *)data, msgq->msg_size);
-				msgq->write_ptr += msgq->msg_size;
-				if (msgq->write_ptr == msgq->buffer_end) {
-					msgq->write_ptr = msgq->buffer_start;
+				char *next;
+
+				slot = msgq->write_ptr;
+				next = slot + msg_size;
+				if (next == msgq->buffer_end) {
+					next = msgq->buffer_start;
 				}
+				msgq->write_ptr = next;
 			} else {
 				/*
 				 * to write a message to the head of the queue,
@@ -185,13 +220,15 @@ static inline int put_msg_in_queue(struct k_msgq *msgq, const void *data,
 				 * space at the front of the queue) then copy
 				 * the message to the newly created space.
 				 */
-				if (msgq->read_ptr == msgq->buffer_start) {
-					msgq->read_ptr = msgq->buffer_end;
+				slot = msgq->read_ptr;
+				if (slot == msgq->buffer_start) {
+					slot = msgq->buffer_end;
 				}
-				msgq->read_ptr -= msgq->msg_size;
-				(void)memcpy(msgq->read_ptr, (char *)data, msgq->msg_size);
+				slot -= msg_size;
+				msgq->read_ptr = slot;
 			}
 			msgq->used_msgs++;
+			(void)memcpy(slot, data, msg_size);
 			resched = msgq_handle_poll_events(msgq);
 		}
 		result = 0;
@@ -297,14 +334,19 @@ int z_impl_k_msgq_get(struct k_msgq *msgq, void *data, k_timeout_t timeout)
 
 	SYS_PORT_TRACING_OBJ_FUNC_ENTER(k_msgq, get, msgq, timeout);
 
-	if (msgq->used_msgs > 0U) {
-		/* take first available message from queue */
-		(void)memcpy((char *)data, msgq->read_ptr, msgq->msg_size);
-		msgq->read_ptr += msgq->msg_size;
-		if (msgq->read_ptr == msgq->buffer_end) {
-			msgq->read_ptr = msgq->buffer_start;
+	if (likely(msgq->used_msgs > 0U)) {
+		size_t msg_size = msgq->msg_size;
+		char *slot = msgq->read_ptr;
+		char *next = slot + msg_size;
+
+		/* drop the message from the queue, then copy it out */
+		if (next == msgq->buffer_end) {
+			next = msgq->buffer_start;
 		}
+		msgq->read_ptr = next;
 		msgq->used_msgs--;
+
+		(void)memcpy(data, slot, msg_size);
 
 		/* sanity-check write_ptr in case we hand the slot to a sender */
 		__ASSERT_NO_MSG((msgq->write_ptr >= msgq->buffer_start) &&
@@ -312,8 +354,8 @@ int z_impl_k_msgq_get(struct k_msgq *msgq, void *data, k_timeout_t timeout)
 				((size_t)(uintptr_t)(msgq->buffer_end - msgq->write_ptr) >=
 					msgq->msg_size));
 
-		/* handle first thread waiting to write (if any).
-		 * Done atomically under _sched_spinlock so we read the
+		/* handle first thread waiting to write (if any). Done
+		 * atomically under the scheduler's spinlock so we read the
 		 * sender's swap_data and complete the wake before any
 		 * racing in-flight timeout handler can wake the sender.
 		 */
@@ -323,14 +365,15 @@ int z_impl_k_msgq_get(struct k_msgq *msgq, void *data, k_timeout_t timeout)
 				SYS_PORT_TRACING_OBJ_FUNC_BLOCKING(k_msgq, get, msgq, timeout);
 
 				/* add the sender's pending message to the queue */
-				(void)memcpy(msgq->write_ptr,
-					     (char *)pending_thread->base.swap_data,
-					     msgq->msg_size);
-				msgq->write_ptr += msgq->msg_size;
-				if (msgq->write_ptr == msgq->buffer_end) {
-					msgq->write_ptr = msgq->buffer_start;
+				slot = msgq->write_ptr;
+				next = slot + msg_size;
+				if (next == msgq->buffer_end) {
+					next = msgq->buffer_start;
 				}
+				msgq->write_ptr = next;
 				msgq->used_msgs++;
+
+				(void)memcpy(slot, pending_thread->base.swap_data, msg_size);
 
 				arch_thread_return_value_set(pending_thread, 0);
 				z_sched_ready_locked(pending_thread);
@@ -384,7 +427,7 @@ int z_impl_k_msgq_peek(struct k_msgq *msgq, void *data)
 
 	if (msgq->used_msgs > 0U) {
 		/* take first available message from queue */
-		(void)memcpy((char *)data, msgq->read_ptr, msgq->msg_size);
+		(void)memcpy(data, msgq->read_ptr, msgq->msg_size);
 		result = 0;
 	} else {
 		/* don't wait for a message to become available */
@@ -502,7 +545,3 @@ static inline uint32_t z_vrfy_k_msgq_num_used_get(struct k_msgq *msgq)
 #include <zephyr/syscalls/k_msgq_num_used_get_mrsh.c>
 
 #endif /* CONFIG_USERSPACE */
-
-#ifdef CONFIG_OBJ_CORE_MSGQ
-K_OBJ_TYPE_DEFINE(obj_type_msgq, k_msgq, K_OBJ_TYPE_MSGQ_ID, NULL);
-#endif /* CONFIG_OBJ_CORE_MSGQ */

@@ -208,6 +208,8 @@ void pe_set_data_role(const struct device *dev, enum tc_data_role dr)
 
 	/* Notify TCPC of role update */
 	tcpc_set_roles(data->tcpc, pe->power_role, pe->data_role);
+	/* Inform Device Policy Manager of Data Role Change */
+	policy_notify(dev, (dr == TC_ROLE_UFP) ? DATA_ROLE_IS_UFP : DATA_ROLE_IS_DFP);
 }
 
 /**
@@ -381,7 +383,12 @@ void pe_message_received(const struct device *dev)
  */
 void pe_got_hard_reset(const struct device *dev)
 {
-	pe_set_state(dev, PE_SNK_TRANSITION_TO_DEFAULT);
+	if (IS_ENABLED(CONFIG_USBC_CSM_SUPPORTS_SOURCE) &&
+	    pe_get_power_role(dev) == TC_ROLE_SOURCE) {
+		pe_set_state(dev, PE_SRC_HARD_RESET_RECEIVED);
+	} else {
+		pe_set_state(dev, PE_SNK_TRANSITION_TO_DEFAULT);
+	}
 }
 
 /**
@@ -795,9 +802,6 @@ static enum smf_state_result pe_drs_evaluate_swap_run(void *obj)
 			/* Update Data Role */
 			pe_set_data_role(dev, (pe->data_role == TC_ROLE_UFP) ? TC_ROLE_DFP
 									     : TC_ROLE_UFP);
-			/* Inform Device Policy Manager of Data Role Change */
-			policy_notify(dev, (pe->data_role == TC_ROLE_UFP) ? DATA_ROLE_IS_UFP
-									  : DATA_ROLE_IS_DFP);
 		}
 		pe_set_ready_state(dev);
 	} else if (atomic_test_and_clear_bit(pe->flags, PE_FLAGS_MSG_DISCARDED)) {
@@ -856,12 +860,8 @@ static enum smf_state_result pe_drs_send_swap_run(void *obj)
 			}
 		} else if (received_control_message(dev, header, PD_CTRL_ACCEPT)) {
 			/* Update Data Role */
-			pe->data_role = (pe->data_role == TC_ROLE_UFP) ? TC_ROLE_DFP : TC_ROLE_UFP;
-			/* Notify TCPC of role update */
-			tcpc_set_roles(data->tcpc, pe->power_role, pe->data_role);
-			/* Inform Device Policy Manager of Data Role Change */
-			policy_notify(dev, (pe->data_role == TC_ROLE_UFP) ? DATA_ROLE_IS_UFP
-									  : DATA_ROLE_IS_DFP);
+			pe_set_data_role(dev, (pe->data_role == TC_ROLE_UFP) ? TC_ROLE_DFP
+									     : TC_ROLE_UFP);
 		} else {
 			/*
 			 * A Protocol Error during a Data Role Swap when the

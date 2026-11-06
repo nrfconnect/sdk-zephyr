@@ -3,9 +3,6 @@
 
 if SOC_OPENTITAN
 
-config SYS_CLOCK_HW_CYCLES_PER_SEC
-	default 1000000
-
 config RISCV_SOC_INTERRUPT_INIT
 	default y
 
@@ -14,6 +11,9 @@ config 2ND_LVL_ISR_TBL_OFFSET
 
 config 2ND_LVL_INTR_00_OFFSET
 	default 11
+
+config MAX_IRQ_PER_AGGREGATOR
+	default 182
 
 config NUM_IRQS
 	default 256

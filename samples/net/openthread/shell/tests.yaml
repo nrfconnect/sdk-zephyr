@@ -32,6 +32,15 @@ tests:
       - frdm_mcxw72
       - mcxw72_evk
       - frdm_mcxw70
+  sample.net.openthread.shell.mcxw_openthread_host_no_l2:
+    build_only: true
+    extra_args:
+      - EXTRA_CONF_FILE="prj-ot-host.conf;prj-ot-host-no-l2-nxp-mcxw.conf"
+    platform_allow:
+      - frdm_mcxw71
+      - frdm_mcxw72
+      - mcxw72_evk
+      - frdm_mcxw70
   sample.net.openthread.shell.esp:
     build_only: true
     extra_args:
@@ -39,11 +48,26 @@ tests:
     platform_allow:
       - esp32c6_devkitc/esp32c6/hpcore
       - esp32h2_devkitm
-  sample.net.openthread.shell.xg24:
-    skip: true
+  sample.net.openthread.shell.silabs:
     build_only: true
     extra_args:
       - CONFIG_BUILD_ONLY_NO_BLOBS=y
     platform_allow:
       - xg24_rb4186c
       - xg24_rb4187c
+      - sixg301_rb4407a
+  sample.net.openthread.shell.bflb:
+    build_only: true
+    extra_args:
+      - CONFIG_BUILD_ONLY_NO_BLOBS=y
+    platform_allow:
+      - bl618g0
+      - ai_m61_32s_kit
+      - ai_m62_12f_kit
+      - aipi_eyes_s2
+      - maix_m0s_dock
+      - m0sense
+      - dt_xt_zb1_devkit
+      - bl706_iot_dvk
+      - 3r_tnh_sensor_lite
+      - bl704l_dvk

@@ -74,6 +74,8 @@ LOG_MODULE_REGISTER(clock_control_bl70x_l, CONFIG_CLOCK_CONTROL_LOG_LEVEL);
 
 #define BL70X_L_TARGET_BASIC_CLOCK MHZ(32)
 
+#define TARGET_TIMEBASE_FREQ DT_PROP(DT_PATH(cpus), timebase_frequency)
+
 enum bl70x_l_clkid {
 #if defined(CONFIG_SOC_SERIES_BL70XL)
 	bl70x_l_clkid_clk_root = BL70XL_CLKID_CLK_ROOT,
@@ -462,9 +464,9 @@ static __ramfunc uint32_t clock_control_bl70x_l_get_clk(const struct device *dev
 	} else if (tmp == 2) {
 		return MHZ(64) / (hclk_div + 1);
 	} else if (tmp == 1) {
-		return MHZ(42.67) / (hclk_div + 1);
+		return 42666667U / (hclk_div + 1);
 	} else if (tmp == 0) {
-		return MHZ(25.6) / (hclk_div + 1);
+		return 25600000U / (hclk_div + 1);
 	}
 #else
 	if (tmp == 3) {
@@ -474,7 +476,7 @@ static __ramfunc uint32_t clock_control_bl70x_l_get_clk(const struct device *dev
 	} else if (tmp == 1) {
 		return MHZ(96) / (hclk_div + 1);
 	} else if (tmp == 0) {
-		return MHZ(57.6) / (hclk_div + 1);
+		return 57600000U / (hclk_div + 1);
 	}
 #endif
 	return 0;
@@ -496,9 +498,17 @@ static uint32_t clock_control_bl70x_l_mtimer_get_clk_src_div(const struct device
 {
 #if defined(CONFIG_SOC_SERIES_BL70XL)
 	/* BL70XL mtimer source 0 is XCLK, not BCLK */
-	return clock_control_bl70x_l_get_xclk(dev) / 1000 / 1000 - 1;
+	return clock_control_bl70x_l_get_xclk(dev) / TARGET_TIMEBASE_FREQ - 1;
 #else
-	return clock_control_bl70x_l_get_bclk(dev) / 1000 / 1000 - 1;
+	if (clock_control_bl70x_l_get_bclk(dev) < TARGET_TIMEBASE_FREQ) {
+		LOG_ERR("Timebase frequency is too fast for this configuration");
+		return 0;
+	} else if (clock_control_bl70x_l_get_bclk(dev) / BIT(GLB_CPU_RTC_DIV_LEN)
+		   > TARGET_TIMEBASE_FREQ) {
+		LOG_ERR("Timebase frequency is too slow for this configuration");
+		return BIT(GLB_CPU_RTC_DIV_LEN) - 1;
+	}
+	return clock_control_bl70x_l_get_bclk(dev) / TARGET_TIMEBASE_FREQ - 1;
 #endif
 }
 
@@ -576,7 +586,9 @@ static __bflb_critfunc void clock_control_bl70x_l_init_root_as_crystal(const str
 	sys_write32(clock_control_bl70x_l_get_clk(dev), CORECLOCKREGISTER);
 }
 
-static __ramfunc void clock_control_bl70x_l_update_flash_clk(const struct device *dev)
+static __ramfunc void clock_control_bl70x_l_update_flash_clk(const struct device *dev,
+							     const enum bl70x_l_clkid source,
+							     bool final)
 {
 	struct clock_control_bl70x_l_data *data = dev->data;
 	volatile uint32_t tmp;
@@ -592,7 +604,7 @@ static __ramfunc void clock_control_bl70x_l_update_flash_clk(const struct device
 #if !defined(CONFIG_SOC_SERIES_BL70XL)
 	tmp &= GLB_SF_CLK_SEL2_UMSK;
 #endif
-	if (data->flashclk.source == bl70x_l_clkid_clk_dll) {
+	if (source == bl70x_l_clkid_clk_dll) {
 		clk = clock_control_bl70x_l_get_clk(dev);
 #if defined(CONFIG_SOC_SERIES_BL70XL)
 		tmp |= 1U << GLB_SF_CLK_SEL_POS;
@@ -600,7 +612,7 @@ static __ramfunc void clock_control_bl70x_l_update_flash_clk(const struct device
 		tmp |= 0U << GLB_SF_CLK_SEL_POS;
 		tmp |= 0U << GLB_SF_CLK_SEL2_POS;
 #endif
-	} else if (data->flashclk.source == bl70x_l_clkid_clk_crystal) {
+	} else if (source == bl70x_l_clkid_clk_crystal) {
 		clk = clock_control_bl70x_l_get_xclk(dev);
 #if defined(CONFIG_SOC_SERIES_BL70XL)
 		tmp |= 0U << GLB_SF_CLK_SEL_POS;
@@ -617,12 +629,12 @@ static __ramfunc void clock_control_bl70x_l_update_flash_clk(const struct device
 	/* If flash controller will manage flash, set to standard speed
 	 * and let it set the divider.
 	 */
-#if defined(CONFIG_SOC_FLASH_BFLB)
-	clk = DIV_ROUND_CLOSEST(clk, BL70X_L_TARGET_BASIC_CLOCK);
-	tmp |= clamp(clk - 1, 0x0, 0x7) << GLB_SF_CLK_DIV_POS;
-#else
-	tmp |= ((uint32_t)(data->flashclk.divider - 1U)) << GLB_SF_CLK_DIV_POS;
-#endif
+	if (IS_ENABLED(CONFIG_SOC_FLASH_BFLB) || !final) {
+		clk = DIV_ROUND_CLOSEST(clk, BL70X_L_TARGET_BASIC_CLOCK);
+		tmp |= clamp(clk - 1, 0x0, 0x7) << GLB_SF_CLK_DIV_POS;
+	} else {
+		tmp |= ((uint32_t)(data->flashclk.divider - 1U)) << GLB_SF_CLK_DIV_POS;
+	}
 
 	*(volatile uint32_t *)(GLB_BASE + GLB_CLK_CFG2_OFFSET) = tmp;
 
@@ -740,6 +752,8 @@ static __bflb_critfunc int clock_control_bl70x_l_update_clocks(const struct devi
 	clock_control_bl70x_l_set_root_clock_dividers(0, 0);
 	sys_write32(BFLB_RC32M_FREQUENCY, CORECLOCKREGISTER);
 
+	clock_control_bl70x_l_update_flash_clk(dev, bl70x_l_clkid_clk_rc32m, false);
+
 	clock_control_bl70x_l_cache_2T(false);
 
 	ret = clock_control_bl70x_l_update_f32k(dev);
@@ -777,6 +791,8 @@ static __bflb_critfunc int clock_control_bl70x_l_update_clocks(const struct devi
 	} else {
 		/* Root clock already setup as RC32M */
 	}
+
+	clock_control_bl70x_l_update_flash_clk(dev, data->flashclk.source, true);
 
 	ret = clock_control_bl70x_l_clock_trim_32M();
 	if (ret < 0) {
@@ -996,7 +1012,7 @@ static int clock_control_bl70x_l_get_rate(const struct device *dev, clock_contro
 	} else if ((enum bl70x_l_clkid)sys == bl70x_l_clkid_clk_bclk) {
 		*rate = clock_control_bl70x_l_get_bclk(dev);
 	} else if ((enum bl70x_l_clkid)sys == bl70x_l_clkid_clk_crystal) {
-		*rate = DT_PROP(DT_INST_CLOCKS_CTLR_BY_NAME(0, crystal), clock_frequency);
+		*rate = BFLB_RC32M_FREQUENCY;
 	} else if ((enum bl70x_l_clkid)sys == bl70x_l_clkid_clk_rc32m) {
 		*rate = BFLB_RC32M_FREQUENCY;
 	} else {
@@ -1021,8 +1037,6 @@ static int clock_control_bl70x_l_init(const struct device *dev)
 	clock_control_bl70x_l_peripheral_clock_init();
 
 	clock_bflb_settle();
-
-	clock_control_bl70x_l_update_flash_clk(dev);
 
 	irq_unlock(key);
 
@@ -1114,6 +1128,14 @@ BUILD_ASSERT(DT_PROP(DT_INST_CLOCKS_CTLR_BY_NAME(0, rc32m), clock_frequency) ==
 BUILD_ASSERT(DT_PROP(DT_INST_CLOCKS_CTLR_BY_NAME(0, crystal), clock_frequency) ==
 		     BFLB_RC32M_FREQUENCY,
 	     "Crystal must be 32M for BL70x/L");
+
+#if defined(CONFIG_SOC_SERIES_BL70XL)
+BUILD_ASSERT(TARGET_TIMEBASE_FREQ >= MHZ(1) && TARGET_TIMEBASE_FREQ <= BFLB_RC32M_FREQUENCY,
+	     "Timebase frequency should be >= than 1 MHz and <= than 32MHz");
+#else
+BUILD_ASSERT(TARGET_TIMEBASE_FREQ > KHZ(10) && TARGET_TIMEBASE_FREQ <= MHZ(72),
+	     "Timebase frequency should be greater than 10 KHz and <= than 72MHz");
+#endif
 
 DEVICE_DT_INST_DEFINE(0, clock_control_bl70x_l_init, NULL, &clock_control_bl70x_l_data, NULL,
 		      PRE_KERNEL_1, CONFIG_CLOCK_CONTROL_INIT_PRIORITY, &clock_control_bl70x_l_api);

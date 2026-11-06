@@ -10,8 +10,8 @@
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 
 / {
-	model = "Google Twinkie V2";
 	compatible = "google,twinkie-v2";
+	model = "Google Twinkie V2";
 
 	chosen {
 		zephyr,sram = &sram0;
@@ -91,18 +91,21 @@
 	};
 };
 
+&adc1_common {
+	st,adc-prescaler = <4>;
+	st,adc-clock-source = "SYNC";
+	status = "okay";
+};
+
 &adc1 {
 	#address-cells = <1>;
 	#size-cells = <0>;
-
 	pinctrl-0 = <&adc1_in1_pa1	/* CC1_BUF	 */
 		     &adc1_in3_pa3	/* CC2_BUF	 */
 		     &adc1_in15_pb11	/* VBUS_READ_BUF */
 		     &adc1_in17_pc4	/* CSA_VBUS	 */
 		     &adc1_in18_pc5	/* CSA_CC2	 */>;
 	pinctrl-names = "default";
-	st,adc-clock-source = "SYNC";
-	st,adc-prescaler = <4>;
 	status = "okay";
 
 	channel@1 {
@@ -177,10 +180,10 @@
 };
 
 &ucpd1 {
-	status = "okay";
 
 	psc-ucpdclk = <1>;
 	hbitclkdiv = <27>;
 	pinctrl-0 = <&ucpd1_cc1_pa8 &ucpd1_cc2_pb15>;
 	pinctrl-names = "default";
+	status = "okay";
 };

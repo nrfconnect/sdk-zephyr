@@ -5,8 +5,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#ifndef H_MGMT_MGMT_DEFINES_
-#define H_MGMT_MGMT_DEFINES_
+#ifndef ZEPHYR_INCLUDE_MGMT_MCUMGR_MGMT_MGMT_DEFINES_H_
+#define ZEPHYR_INCLUDE_MGMT_MCUMGR_MGMT_MGMT_DEFINES_H_
 
 #include <inttypes.h>
 
@@ -80,6 +80,9 @@ enum mcumgr_group_t {
 	/** Enumeration management group, used for listing supported command groups */
 	MGMT_GROUP_ID_ENUM,
 
+	/** Transport management group (default group ID), used for bridging transports */
+	MGMT_GROUP_ID_TRANSPORT,
+
 	/** User groups defined from 64 onwards */
 	MGMT_GROUP_ID_PERUSER	= 64,
 
@@ -136,6 +139,9 @@ enum mcumgr_err_t {
 	/** Requested SMP MCUmgr protocol version is not supported (too new) */
 	MGMT_ERR_UNSUPPORTED_TOO_NEW,
 
+	/** Bridged connection unavailable */
+	MGMT_ERR_BRIDGED_CONNECTION_UNAVAILABLE,
+
 	/** User errors defined from 256 onwards */
 	MGMT_ERR_EPERUSER	= 256
 };
@@ -150,4 +156,4 @@ enum mcumgr_err_t {
 }
 #endif
 
-#endif /* MGMT_MGMT_DEFINES_H_ */
+#endif /* ZEPHYR_INCLUDE_MGMT_MCUMGR_MGMT_MGMT_DEFINES_H_ */

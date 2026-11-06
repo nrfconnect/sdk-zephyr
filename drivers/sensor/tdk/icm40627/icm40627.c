@@ -54,10 +54,11 @@ static int icm40627_set_accel_fs(const struct device *dev, uint16_t fs)
 
 	sensor_g_to_ms2(round_fs, &accel_fs_value);
 	data->accel_fs = accel_fs_value.val1;
-	data->accel_sensitivity_shift = MIN_ACCEL_SENS_SHIFT;
+	/* BIT_ACCEL_UI_FS_16/8/4/2 are 0..3, so the shift is 11/12/13/14 */
+	data->accel_sensitivity_shift = MIN_ACCEL_SENS_SHIFT + temp;
 
 	return cfg->bus_io->update(&cfg->bus, REG_ACCEL_CONFIG0, (uint8_t)MASK_ACCEL_UI_FS_SEL,
-				   temp);
+				   (uint8_t)FIELD_PREP(MASK_ACCEL_UI_FS_SEL, temp));
 }
 
 static int icm40627_set_gyro_fs(const struct device *dev, uint16_t fs)
@@ -103,7 +104,8 @@ static int icm40627_set_gyro_fs(const struct device *dev, uint16_t fs)
 	data->gyro_fs = gyro_fs_value.val1;
 	data->gyro_sensitivity_x10 = icm40627_gyro_sensitivity_x10[temp];
 
-	return cfg->bus_io->update(&cfg->bus, REG_GYRO_CONFIG0, (uint8_t)MASK_GYRO_UI_FS_SEL, temp);
+	return cfg->bus_io->update(&cfg->bus, REG_GYRO_CONFIG0, (uint8_t)MASK_GYRO_UI_FS_SEL,
+				   (uint8_t)FIELD_PREP(MASK_GYRO_UI_FS_SEL, temp));
 }
 
 static int icm40627_set_accel_odr(const struct device *dev, uint16_t rate)
@@ -636,8 +638,10 @@ static inline int icm40627_bus_check(const struct device *dev)
 
 static int icm40627_init(const struct device *dev)
 {
+	const struct icm40627_config *cfg = dev->config;
+
 	if (icm40627_bus_check(dev) < 0) {
-		LOG_ERR_DEVICE_NOT_READY(config->bus.bus);
+		LOG_ERR_DEVICE_NOT_READY(cfg->bus.i2c.bus);
 		return -ENODEV;
 	}
 

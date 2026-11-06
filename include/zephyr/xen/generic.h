@@ -10,10 +10,10 @@
  * @ingroup xen_internal
  */
 
-#ifndef __XEN_GENERIC_H__
-#define __XEN_GENERIC_H__
+#ifndef ZEPHYR_INCLUDE_XEN_GENERIC_H_
+#define ZEPHYR_INCLUDE_XEN_GENERIC_H_
 
-#include <zephyr/xen/public/xen.h>
+#include <xen/public/xen.h>
 
 /**
  * @defgroup xen_internal Xen internal support
@@ -52,4 +52,4 @@
 
 /** @} */
 
-#endif /* __XEN_GENERIC_H__ */
+#endif /* ZEPHYR_INCLUDE_XEN_GENERIC_H_ */

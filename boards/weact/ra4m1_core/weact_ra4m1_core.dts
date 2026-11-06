@@ -14,13 +14,13 @@
 #include "weact_ra4m1_core-pinctrl.dtsi"
 
 / {
-	model = "WeAct RA4M1-Core";
 	compatible = "renesas,ra4m1", "renesas,ra";
+	model = "WeAct RA4M1-Core";
 
 	chosen {
 		zephyr,sram = &sram0;
-		zephyr,flash-controller = &flash;
-		zephyr,flash = &flash0;
+		zephyr,flash-controller = &code_flash_ctrl;
+		zephyr,flash = &code_flash;
 		zephyr,console = &uart1;
 		zephyr,shell-uart = &uart1;
 		zephyr,entropy = &trng;

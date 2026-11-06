@@ -29,12 +29,12 @@ MODEM_CHAT_SCRIPT_CMDS_DEFINE(
 	MODEM_CHAT_SCRIPT_CMD_RESP("AT+CGEREP=1", ok_match),
 	MODEM_CHAT_SCRIPT_CMD_RESP("AT+CREG?", ok_match),
 	MODEM_CHAT_SCRIPT_CMD_RESP("AT+CEREG?", ok_match),
-	MODEM_CHAT_SCRIPT_CMD_RESP("AT+CGSN", imei_match), MODEM_CHAT_SCRIPT_CMD_RESP("", ok_match),
-	MODEM_CHAT_SCRIPT_CMD_RESP("AT+CGMM", cgmm_match), MODEM_CHAT_SCRIPT_CMD_RESP("", ok_match),
-	MODEM_CHAT_SCRIPT_CMD_RESP("AT+CGMI", cgmi_match), MODEM_CHAT_SCRIPT_CMD_RESP("", ok_match),
-	MODEM_CHAT_SCRIPT_CMD_RESP("AT+CGMR", cgmr_match), MODEM_CHAT_SCRIPT_CMD_RESP("", ok_match),
-	MODEM_CHAT_SCRIPT_CMD_RESP("AT+CIMI", cimi_match), MODEM_CHAT_SCRIPT_CMD_RESP("", ok_match),
-	MODEM_CHAT_SCRIPT_CMD_RESP("AT+CCID", ccid_match), MODEM_CHAT_SCRIPT_CMD_RESP("", ok_match),
+	MODEM_CHAT_SCRIPT_CMD_RESP_MULT("AT+CGSN", imei_match),
+	MODEM_CHAT_SCRIPT_CMD_RESP_MULT("AT+CGMM", cgmm_match),
+	MODEM_CHAT_SCRIPT_CMD_RESP_MULT("AT+CGMI", cgmi_match),
+	MODEM_CHAT_SCRIPT_CMD_RESP_MULT("AT+CGMR", cgmr_match),
+	MODEM_CHAT_SCRIPT_CMD_RESP_MULT("AT+CIMI", cimi_match),
+	MODEM_CHAT_SCRIPT_CMD_RESP_MULT("AT+CCID", ccid_match),
 	MODEM_CHAT_SCRIPT_CMD_RESP("AT+CMUX=0,0,5," STRINGIFY(CONFIG_MODEM_CMUX_MTU), ok_match));
 
 MODEM_CHAT_SCRIPT_DEFINE(trasna_lexi_r10_init_chat_script, trasna_lexi_r10_init_chat_script_cmds,
@@ -42,7 +42,9 @@ MODEM_CHAT_SCRIPT_DEFINE(trasna_lexi_r10_init_chat_script, trasna_lexi_r10_init_
 
 MODEM_CHAT_SCRIPT_CMDS_DEFINE(trasna_lexi_r10_dial_chat_script_cmds,
 			      MODEM_CHAT_SCRIPT_CMD_RESP("AT+CFUN=1", ok_match),
-			      MODEM_CHAT_SCRIPT_CMD_RESP_NONE("ATD*99***1#", 1000));
+			      MODEM_CHAT_SCRIPT_CMD_RESP_NONE(
+				"ATD*99***" STRINGIFY(CONFIG_MODEM_CELLULAR_PDP_CONTEXT_ID) "#",
+				1000));
 
 MODEM_CHAT_SCRIPT_DEFINE(trasna_lexi_r10_dial_chat_script, trasna_lexi_r10_dial_chat_script_cmds,
 			 dial_abort_matches, modem_cellular_chat_callback_handler, 10);
@@ -76,6 +78,8 @@ static const struct modem_cellular_vendor_config trasna_lexi_r10_vendor = {
 		.size = ARRAY_SIZE(trasna_lexi_r10_unsol),
 	},
 	/* clang-format on */
+	.chat_delimiter = "\r",
+	.chat_filter = "\n",
 	.power_pulse_duration_ms = 1500,
 	.reset_pulse_duration_ms = 100,
 	.startup_time_ms = 9000,
@@ -85,14 +89,10 @@ static const struct modem_cellular_vendor_config trasna_lexi_r10_vendor = {
 #define MODEM_CELLULAR_DEVICE_TRASNA_LEXI_R10(inst)                                                \
 	MODEM_DT_INST_PPP_DEFINE(inst, MODEM_CELLULAR_INST_NAME(ppp, inst), NULL, 1500, 64);       \
                                                                                                    \
-	static struct modem_cellular_data MODEM_CELLULAR_INST_NAME(data, inst) = {                 \
-		.chat_delimiter = "\r",                                                            \
-		.chat_filter = "\n",                                                               \
-		.ppp = &MODEM_CELLULAR_INST_NAME(ppp, inst),                                       \
-	};                                                                                         \
+	static struct modem_cellular_data MODEM_CELLULAR_INST_NAME(data, inst);                    \
                                                                                                    \
 	MODEM_CELLULAR_DEFINE_AND_INIT_USER_PIPES(inst, (user_pipe_0, 3))                          \
                                                                                                    \
-	MODEM_CELLULAR_DEFINE_INSTANCE(inst, &trasna_lexi_r10_vendor)
+	MODEM_CELLULAR_DEFINE_INSTANCE(inst, &trasna_lexi_r10_vendor, NULL)
 
 DT_INST_FOREACH_STATUS_OKAY(MODEM_CELLULAR_DEVICE_TRASNA_LEXI_R10)

@@ -199,6 +199,7 @@ unlock_out:
 out:
 	return ret;
 #else  /* CONFIG_ARCH_MEM_DOMAIN_SUPPORTS_DEINIT */
+	ARG_UNUSED(domain);
 	return -ENOTSUP;
 #endif /* CONFIG_ARCH_MEM_DOMAIN_SUPPORTS_DEINIT */
 }
@@ -360,7 +361,7 @@ void z_mem_domain_init_thread(struct k_thread *thread)
 	k_spin_unlock(&z_mem_domain_lock, key);
 }
 
-/* Called when thread aborts during teardown tasks. _sched_spinlock is held */
+/* Called when thread aborts during teardown tasks. The scheduler's spinlock is held */
 void z_mem_domain_exit_thread(struct k_thread *thread)
 {
 	int ret;
@@ -381,10 +382,28 @@ int k_mem_domain_add_thread(struct k_mem_domain *domain, k_tid_t thread)
 
 	key = k_spin_lock(&z_mem_domain_lock);
 	if (thread->mem_domain_info.mem_domain != domain) {
+		struct k_mem_domain *old_domain = thread->mem_domain_info.mem_domain;
+
 		ret = remove_thread_locked(thread);
 
 		if (ret == 0) {
 			ret = add_thread_locked(domain, thread);
+		}
+
+		if (ret != 0) {
+			/*
+			 * The architecture leaves a thread it could not move
+			 * configured for its old domain: keep it a member there.
+			 */
+#ifdef CONFIG_MEM_DOMAIN_HAS_THREAD_LIST
+			sys_dnode_t *node = &thread->mem_domain_info.thread_mem_domain_node;
+
+			if (sys_dnode_is_linked(node)) {
+				sys_dlist_remove(node);
+			}
+			sys_dlist_append(&old_domain->thread_mem_domain_list, node);
+#endif /* CONFIG_MEM_DOMAIN_HAS_THREAD_LIST */
+			thread->mem_domain_info.mem_domain = old_domain;
 		}
 	}
 	k_spin_unlock(&z_mem_domain_lock, key);
