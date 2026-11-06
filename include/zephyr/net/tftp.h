@@ -84,10 +84,7 @@ struct tftp_data_param {
 
 /** @brief Parameters for error event. */
 struct tftp_error_param {
-	char *msg;                 /**< Error message. NUL-terminated within
-				     *   tftp_buf, at most TFTP_BLOCK_SIZE - 1
-				     *   characters.
-				     */
+	char *msg;                 /**< Error message. */
 	int code;                  /**< Error code. */
 };
 
