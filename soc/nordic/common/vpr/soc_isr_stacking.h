@@ -108,23 +108,23 @@
 /*
  * VPR needs aligned(8) SP when doing HW stacking, if this condition is not fulfilled it will move
  * SP by additional 4 bytes when HW stacking is done. This will be indicated by LSB bit in stacked
- * MEPC. This bit needs to be saved and then restored because zephyr is managing MEPC and doesn't
- * know anything about this additional offset.
+ * MEPC.
+ *
+ * The stacked MEPC slot does not hold the return address of the trap: it holds the MEPC value of
+ * the interrupted context, which MRET loads back into MEPC after jumping to the current MEPC.
+ * Zephyr uses the slot as the return address of the frame, so the original slot is kept in
+ * sp_align and written back before MRET. Otherwise an interrupt preempting another one before its
+ * first instruction makes the preempted handler see its own address as return address.
  */
-#define MEPC_SP_ALIGN_BIT_MASK (0x1UL)
-
 #define STORE_SP_ALIGN_BIT_FROM_MEPC				\
 	addi t1, sp, __struct_arch_esf_soc_context_OFFSET;	\
 	lr t0, __struct_arch_esf_mepc_OFFSET(sp);		\
-	andi t0, t0, MEPC_SP_ALIGN_BIT_MASK;			\
 	sr t0, __soc_esf_t_sp_align_OFFSET(t1)
 
 #define RESTORE_SP_ALIGN_BIT_TO_MEPC				\
 	addi t1, sp, __struct_arch_esf_soc_context_OFFSET;	\
 	lr t0, __soc_esf_t_sp_align_OFFSET(t1);			\
-	lr t1, __struct_arch_esf_mepc_OFFSET(sp);		\
-	or t2, t1, t0;						\
-	sr t2, __struct_arch_esf_mepc_OFFSET(sp)
+	sr t0, __struct_arch_esf_mepc_OFFSET(sp)
 
 #define SOC_ISR_SW_STACKING			\
 	csrw mscratch, t0;			\
