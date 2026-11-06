@@ -425,10 +425,14 @@ static inline void tlb_shootdown(void)
 }
 #endif /* CONFIG_SMP */
 
-static inline void assert_addr_aligned(uintptr_t addr __maybe_unused)
+static inline void assert_addr_aligned(uintptr_t addr)
 {
+#if __ASSERT_ON
 	__ASSERT((addr & (CONFIG_MMU_PAGE_SIZE - 1)) == 0U,
 		 "unaligned address 0x%" PRIxPTR, addr);
+#else
+	ARG_UNUSED(addr);
+#endif
 }
 
 static inline bool is_addr_aligned(uintptr_t addr)
@@ -450,10 +454,14 @@ static inline bool is_virt_addr_aligned(void *addr)
 	return is_addr_aligned((uintptr_t)addr);
 }
 
-static inline void assert_size_aligned(size_t size __maybe_unused)
+static inline void assert_size_aligned(size_t size)
 {
+#if __ASSERT_ON
 	__ASSERT((size & (CONFIG_MMU_PAGE_SIZE - 1)) == 0U,
 		 "unaligned size %zu", size);
+#else
+	ARG_UNUSED(size);
+#endif
 }
 
 static inline bool is_size_aligned(size_t size)
@@ -1730,17 +1738,18 @@ int arch_mem_domain_init(struct k_mem_domain *domain)
 	k_spinlock_key_t key  = k_spin_lock(&x86_mmu_lock);
 
 	LOG_DBG("%s(%p)", __func__, domain);
-
+#if __ASSERT_ON
 	sys_snode_t *node;
 
 	/* Assert that we have not already initialized this domain */
 	SYS_SLIST_FOR_EACH_NODE(&x86_domain_list, node) {
-		struct arch_mem_domain *list_domain __maybe_unused =
+		struct arch_mem_domain *list_domain =
 			CONTAINER_OF(node, struct arch_mem_domain, node);
 
 		__ASSERT(list_domain != &domain->arch,
 			 "%s(%p) called multiple times", __func__, domain);
 	}
+#endif /* __ASSERT_ON */
 #ifndef CONFIG_X86_KPTI
 	/* If we're not using KPTI then we can use the build time page tables
 	 * (which are mutable) as the set of page tables for the default

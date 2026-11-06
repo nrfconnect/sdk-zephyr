@@ -11,9 +11,11 @@
 FUNC_NORETURN void __assert_func(const char *file, int line,
 				 const char *function, const char *expression)
 {
+#if __ASSERT_ON
 	__ASSERT(0, "assertion \"%s\" failed: file \"%s\", line %d%s%s\n",
 		 expression, file, line,
 		 function ? ", function: " : "", function ? function : "");
+#endif
 	abort();
 }
 
@@ -21,7 +23,9 @@ FUNC_NORETURN void __assert_func(const char *file, int line,
 
 FUNC_NORETURN void __assert_no_args(void)
 {
+#if __ASSERT_ON
 	__ASSERT_NO_MSG(0);
+#endif
 	abort();
 }
 
