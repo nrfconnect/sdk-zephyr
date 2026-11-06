@@ -31,9 +31,8 @@ zephyr_library_sources_ifdef(CONFIG_SECURE_STORAGE_ITS_STORE_IMPLEMENTATION_SETT
   store/settings.c
 )
 if(CONFIG_SECURE_STORAGE_ITS_STORE_IMPLEMENTATION_NONE)
-  message(FATAL_ERROR "
+  message(ERROR "
     The secure storage ITS module is enabled but has no implementation.
-    This will result in linker errors.
     (CONFIG_SECURE_STORAGE_ITS_STORE_IMPLEMENTATION_NONE)
     ")
 endif()
