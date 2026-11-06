@@ -4,7 +4,6 @@ tests:
   sample.net.promiscuous_mode:
     harness: net
     depends_on: netif
-    min_flash: 194
     tags:
       - net
       - promisc
