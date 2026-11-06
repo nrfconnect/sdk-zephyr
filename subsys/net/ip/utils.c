@@ -801,28 +801,11 @@ int net_calc_chksum(struct net_pkt *pkt, uint8_t proto, uint16_t *out_chksum)
 #if defined(CONFIG_NET_NATIVE_IPV4)
 int net_calc_chksum_ipv4(struct net_pkt *pkt, uint16_t *out_chksum)
 {
-	size_t hdr_len = net_pkt_ip_hdr_len(pkt) + net_pkt_ipv4_opts_len(pkt);
 	uint16_t sum;
 
-	if (pkt->buffer == NULL) {
-		return -EINVAL;
-	}
-
-	if (pkt->buffer->len >= hdr_len) {
-		sum = calc_chksum(0, pkt->buffer->data, hdr_len);
-	} else {
-		struct net_pkt_cursor backup;
-
-		/* The options continue in the next fragments */
-		if (net_pkt_get_len(pkt) < hdr_len) {
-			return -EINVAL;
-		}
-
-		net_pkt_cursor_backup(pkt, &backup);
-		net_pkt_cursor_init(pkt);
-		sum = pkt_calc_chksum(pkt, 0, hdr_len);
-		net_pkt_cursor_restore(pkt, &backup);
-	}
+	sum = calc_chksum(0, pkt->buffer->data,
+			  net_pkt_ip_hdr_len(pkt) +
+			  net_pkt_ipv4_opts_len(pkt));
 
 	sum = (sum == 0U) ? 0xffff : net_htons(sum);
 
