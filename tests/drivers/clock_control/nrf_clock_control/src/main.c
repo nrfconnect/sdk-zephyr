@@ -17,15 +17,8 @@ struct test_clk_context {
 	size_t clk_specs_size;
 };
 
-#if defined(CONFIG_TEST_HSFLL_APP) || defined(CONFIG_TEST_HSFLL_RAD)
-#if DT_NODE_EXISTS(DT_NODELABEL(cpuapp_hsfll))
-#define LOCAL_HSFLL_NODE DT_NODELABEL(cpuapp_hsfll)
-#elif DT_NODE_EXISTS(DT_NODELABEL(cpurad_hsfll))
-#define LOCAL_HSFLL_NODE DT_NODELABEL(cpurad_hsfll)
-#else
-#error "No local HSFLL node defined."
-#endif
-#define LOCAL_HSFLL_BASE_FREQUENCY DT_PROP(LOCAL_HSFLL_NODE, clock_frequency)
+#if defined(CONFIG_CLOCK_CONTROL_NRF_HSFLL_LOCAL) ||                                               \
+	defined(CONFIG_CLOCK_CONTROL_NRF_IRON_HSFLL_LOCAL)
 const struct nrf_clock_spec test_clk_specs_hsfll[] = {
 	{
 		.frequency = MHZ(128),
@@ -33,7 +26,7 @@ const struct nrf_clock_spec test_clk_specs_hsfll[] = {
 		.precision = NRF_CLOCK_CONTROL_PRECISION_DEFAULT,
 	},
 	{
-		.frequency = LOCAL_HSFLL_BASE_FREQUENCY,
+		.frequency = MHZ(320),
 		.accuracy = 0,
 		.precision = NRF_CLOCK_CONTROL_PRECISION_DEFAULT,
 	},
@@ -41,14 +34,6 @@ const struct nrf_clock_spec test_clk_specs_hsfll[] = {
 		.frequency = MHZ(64),
 		.accuracy = 0,
 		.precision = NRF_CLOCK_CONTROL_PRECISION_DEFAULT,
-	},
-};
-
-static const struct test_clk_context local_hsfll_test_clk_contexts[] = {
-	{
-		.clk_dev = DEVICE_DT_GET(LOCAL_HSFLL_NODE),
-		.clk_specs = test_clk_specs_hsfll,
-		.clk_specs_size = ARRAY_SIZE(test_clk_specs_hsfll),
 	},
 };
 #endif
@@ -98,6 +83,26 @@ static const struct test_clk_context invalid_fll16m_test_clk_contexts[] = {
 		.clk_dev = DEVICE_DT_GET(DT_NODELABEL(fll16m)),
 		.clk_specs = invalid_test_clk_specs_fll16m,
 		.clk_specs_size = ARRAY_SIZE(invalid_test_clk_specs_fll16m),
+	},
+};
+#endif
+
+#if defined(CONFIG_TEST_HSFLL_APP)
+static const struct test_clk_context cpuapp_hsfll_test_clk_contexts[] = {
+	{
+		.clk_dev = DEVICE_DT_GET(DT_NODELABEL(cpuapp_hsfll)),
+		.clk_specs = test_clk_specs_hsfll,
+		.clk_specs_size = ARRAY_SIZE(test_clk_specs_hsfll),
+	},
+};
+#endif
+
+#if defined(CONFIG_TEST_HSFLL_RAD)
+static const struct test_clk_context cpurad_hsfll_test_clk_contexts[] = {
+	{
+		.clk_dev = DEVICE_DT_GET(DT_NODELABEL(cpurad_hsfll)),
+		.clk_specs = test_clk_specs_hsfll,
+		.clk_specs_size = ARRAY_SIZE(test_clk_specs_hsfll),
 	},
 };
 #endif
@@ -277,8 +282,8 @@ ZTEST(nrf2_clock_control, test_cpuapp_hsfll_control)
 	Z_TEST_SKIP_IFNDEF(CONFIG_TEST_HSFLL_APP);
 #if defined(CONFIG_TEST_HSFLL_APP)
 	TC_PRINT("APPLICATION DOMAIN HSFLL test\n");
-	test_clock_control_request(local_hsfll_test_clk_contexts,
-				   ARRAY_SIZE(local_hsfll_test_clk_contexts));
+	test_clock_control_request(cpuapp_hsfll_test_clk_contexts,
+				   ARRAY_SIZE(cpuapp_hsfll_test_clk_contexts));
 #endif
 }
 
@@ -337,8 +342,8 @@ ZTEST(nrf2_clock_control, test_cpurad_hsfll_control)
 	Z_TEST_SKIP_IFNDEF(CONFIG_TEST_HSFLL_RAD);
 #if defined(CONFIG_TEST_HSFLL_RAD)
 	TC_PRINT("RADIO DOMAIN HSFLL test\n");
-	test_clock_control_request(local_hsfll_test_clk_contexts,
-				   ARRAY_SIZE(local_hsfll_test_clk_contexts));
+	test_clock_control_request(cpurad_hsfll_test_clk_contexts,
+				   ARRAY_SIZE(cpurad_hsfll_test_clk_contexts));
 #endif
 }
 
