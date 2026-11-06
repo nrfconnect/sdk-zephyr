@@ -102,14 +102,6 @@
 	status = "okay";
 };
 
-&xo {
-	status = "okay";
-};
-
-&lfclk {
-	status = "okay";
-};
-
 &gpregret1 {
 	status = "okay";
 
