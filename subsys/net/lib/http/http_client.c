@@ -169,11 +169,9 @@ static void print_header_field(size_t len, const char *str)
 			len = sizeof(output) - 1;
 		}
 
-		/* str is not NUL terminated */
-		memcpy(output, str, len);
-		output[len] = '\0';
+		snprintk(output, len + 1, "%s", str);
 
-		NET_DBG("[%zu] %s", len, output);
+		NET_DBG("[%zd] %s", len, output);
 	}
 }
 
