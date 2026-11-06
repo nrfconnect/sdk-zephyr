@@ -377,6 +377,15 @@
   - "drivers/wifi/**/*"
   - "subsys/net/l2/wifi/**/*"
   - "subsys/net/l2/ethernet/**/*"
+  - "modules/hostap/**/*"
+
+"CI-wifi-7120dk":
+  - "subsys/net/l2/wifi/**/*"
+  - "subsys/net/l2/ethernet/**/*"
+  - "boards/nordic/nrf7120dk/**/*"
+  - "soc/nordic/nrf71/**/*"
+  - "dts/vendor/nordic/nrf7120*"
+  - "modules/hostap/**/*"
 
 "CI-audio-test":
   - "boards/nordic/nrf5340_audio_dk/**/*"
