@@ -30,11 +30,32 @@ BUILD_ASSERT(DT_NODE_HAS_COMPAT(TIMER_NODE, arm_cmsdk_timer),
 		    (uint64_t)CONFIG_SYS_CLOCK_TICKS_PER_SEC))
 #define MAX_CYC UINT32_MAX
 
+/* Minimum reload the driver will program: the closest-in timeout it can
+ * schedule. It must exceed the longest the timer interrupt can stay masked, or
+ * the counter wraps more than once between elapsed_cyc()'s reads and a period
+ * is lost. That is a wall-clock property, so derive it from a fixed time
+ * (converted to cycles at the counter rate, at init) rather than a fixed cycle
+ * count, which is a different wall-clock time on every clock. The
+ * CMSDK_APB_TIMER_MIN_DELAY_OVERRIDE Kconfig still takes precedence, and a
+ * two-cycle hardware floor keeps the reload from being degenerate on a slow
+ * clock where the time budget rounds below it.
+ */
+#define CMSDK_MIN_DELAY_US 10U
+
+static inline uint32_t cmsdk_min_delay(void)
+{
 #ifdef CONFIG_CMSDK_APB_TIMER_MIN_DELAY_OVERRIDE
-#define MIN_DELAY_CYCLES CONFIG_CMSDK_APB_TIMER_MIN_DELAY_CYCLES
+	uint32_t cyc = CONFIG_CMSDK_APB_TIMER_MIN_DELAY_CYCLES;
 #else
-#define MIN_DELAY_CYCLES MAX(1024U, ((uint32_t)(CYC_PER_TICK / 16U)))
+	uint32_t cyc = k_us_to_cyc_ceil32(CMSDK_MIN_DELAY_US);
 #endif
+	return MAX(2U, cyc);
+}
+
+/* Minimum reload, derived from the cycle rate in sys_clock_driver_init(). See
+ * cmsdk_min_delay().
+ */
+static uint32_t min_delay;
 
 typedef uint32_t cycle_t;
 
@@ -68,6 +89,36 @@ static uint32_t elapsed(uint32_t *val_out)
 	}
 
 	return data->load - value;
+}
+
+/* Elapsed cycles since the last reload, including a wrap that fired but has not
+ * yet been accounted by the ISR.
+ *
+ * elapsed() above returns only the in-period offset (load - value). Between a
+ * wrap (the counter reloads) and the ISR crediting that period to cycle_count,
+ * that offset drops back near zero, so cycle_count + elapsed() briefly goes
+ * backwards. It is a race under real time but is hit deterministically under
+ * QEMU icount, and a non-monotonic hardware cycle counter breaks k_busy_wait()
+ * and the tick accounting.
+ *
+ * Detect the pending wrap the way the SysTick driver does: sample the value
+ * either side of the interrupt-status flag and add a full period if the flag is
+ * set or the counter was seen reloading (v1 < v2). This is added to the
+ * returned value only; the ISR commits the period into cycle_count and clears
+ * the flag, so it is never counted twice. Kept separate from elapsed() so
+ * sys_clock_set_timeout()'s reprogramming still works on the raw offset.
+ */
+static uint32_t elapsed_monotonic(void)
+{
+	const struct tmr_cmsdk_apb_cfg *const cfg = &cfg_inst0;
+	struct tmr_cmsdk_apb_dev_data *data = &data_inst0;
+
+	uint32_t v1 = cfg->timer->value;
+	uint32_t wrapped = cfg->timer->intstatus & TIMER_CTRL_INT_CLEAR;
+	uint32_t v2 = cfg->timer->value;
+	uint32_t pending = (wrapped || (v1 < v2)) ? data->load : 0;
+
+	return (data->load - v2) + pending;
 }
 
 void sys_clock_unused(void)
@@ -119,12 +170,12 @@ void sys_clock_set_timeout(uint32_t ticks, bool idle)
 	unannounced_cycles = data->cycle_count - data->announced_cycles;
 
 	if ((int32_t)unannounced_cycles < 0) {
-		load_to_be_set = MIN_DELAY_CYCLES;
+		load_to_be_set = min_delay;
 	} else {
 		int64_t want = ((uint64_t)data->last_elapsed + ticks) * CYC_PER_TICK;
 		int64_t delta_cycles = want - unannounced_cycles;
 
-		load_to_be_set = CLAMP(delta_cycles, (int64_t)MIN_DELAY_CYCLES, (int64_t)MAX_CYC);
+		load_to_be_set = CLAMP(delta_cycles, (int64_t)min_delay, (int64_t)MAX_CYC);
 	}
 
 	data->load = load_to_be_set;
@@ -152,7 +203,7 @@ uint32_t sys_clock_elapsed(void)
 
 	struct tmr_cmsdk_apb_dev_data *data = &data_inst0;
 	uint32_t unannounced = data->cycle_count - data->announced_cycles;
-	uint32_t cycles = elapsed(NULL) + unannounced;
+	uint32_t cycles = elapsed_monotonic() + unannounced;
 	uint32_t ret = cycles / CYC_PER_TICK;
 
 	data->last_elapsed = ret;
@@ -163,7 +214,7 @@ uint32_t sys_clock_cycle_get_32(void)
 {
 	struct tmr_cmsdk_apb_dev_data *data = &data_inst0;
 	k_spinlock_key_t key = sys_clock_lock();
-	uint32_t cycles = data->cycle_count + elapsed(NULL);
+	uint32_t cycles = data->cycle_count + elapsed_monotonic();
 
 	sys_clock_unlock(key);
 
@@ -198,6 +249,7 @@ static int sys_clock_driver_init(void)
 	struct tmr_cmsdk_apb_dev_data *data = &data_inst0;
 	const struct tmr_cmsdk_apb_cfg *cfg = &cfg_inst0;
 
+	min_delay = cmsdk_min_delay();
 	data->last_elapsed = 0;
 	data->load = CYC_PER_TICK;
 	cfg->timer->reload = CYC_PER_TICK;
