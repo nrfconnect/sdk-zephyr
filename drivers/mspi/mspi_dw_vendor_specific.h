@@ -47,15 +47,6 @@ static inline void vendor_specific_resume(const struct device *dev)
 	} while (rxftlr != rxftlr_mod);
 }
 
-static inline void vendor_specific_dev_config(const struct device *dev,
-					      const enum mspi_dev_cfg_mask param_mask,
-					      const struct mspi_dev_cfg *cfg)
-{
-	ARG_UNUSED(dev);
-	ARG_UNUSED(param_mask);
-	ARG_UNUSED(cfg);
-}
-
 static inline void vendor_specific_irq_clear(const struct device *dev)
 {
 	ARG_UNUSED(dev);
@@ -119,15 +110,6 @@ static inline void vendor_specific_init(const struct device *dev)
 
 	preg->INTENSET = BIT(MSPI_INTENSET_CORE_Pos)
 		       | BIT(MSPI_INTENSET_DMADONE_Pos);
-}
-
-static inline void vendor_specific_dev_config(const struct device *dev,
-					      const enum mspi_dev_cfg_mask param_mask,
-					      const struct mspi_dev_cfg *cfg)
-{
-	ARG_UNUSED(dev);
-	ARG_UNUSED(param_mask);
-	ARG_UNUSED(cfg);
 }
 
 static inline void vendor_specific_suspend(const struct device *dev)
@@ -353,14 +335,6 @@ static inline void vendor_specific_suspend(const struct device *dev)
 static inline void vendor_specific_resume(const struct device *dev)
 {
 	ARG_UNUSED(dev);
-}
-static inline void vendor_specific_dev_config(const struct device *dev,
-					      const enum mspi_dev_cfg_mask param_mask,
-					      const struct mspi_dev_cfg *cfg)
-{
-	ARG_UNUSED(dev);
-	ARG_UNUSED(param_mask);
-	ARG_UNUSED(cfg);
 }
 static inline void vendor_specific_irq_clear(const struct device *dev)
 {
