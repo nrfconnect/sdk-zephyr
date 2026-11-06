@@ -10,12 +10,16 @@ LOG_MODULE_REGISTER(conn_mgr, CONFIG_NET_CONNECTION_MANAGER_LOG_LEVEL);
 #include <zephyr/init.h>
 #include <zephyr/kernel.h>
 #include <errno.h>
+#include <string.h>
 #include <zephyr/net/net_core.h>
 #include <zephyr/net/net_if.h>
 #include <zephyr/net/net_log.h>
 #include <zephyr/net/net_mgmt.h>
+#include <zephyr/net/socket_offload.h>
 #include <zephyr/sys/iterable_sections.h>
 #include <zephyr/net/conn_mgr_connectivity.h>
+#include <zephyr/net/conn_mgr_monitor.h>
+#include <zephyr/net/dns_resolve.h>
 #include "conn_mgr_private.h"
 
 #if defined(CONFIG_NET_TC_THREAD_COOPERATIVE)
@@ -45,11 +49,28 @@ static struct net_if *last_blame;
 static struct net_if *last_blame_ipv4;
 static struct net_if *last_blame_ipv6;
 
+/* Last reported DNS readiness */
+static bool last_dns_ready;
+
+/* Per-flag counters of readiness rises, packed as returned by conn_mgr_get_readiness() */
+#define CONN_MGR_MON_GEN_COUNTERS 3U
+#define CONN_MGR_MON_GEN_BITS 10U
+#define CONN_MGR_MON_GEN_MASK BIT_MASK(CONN_MGR_MON_GEN_BITS)
+BUILD_ASSERT(CONN_MGR_MON_GEN_COUNTERS * CONN_MGR_MON_GEN_BITS <= 32U);
+static uint32_t ready_gen;
+
+/* Address families of the configured unicast DNS servers: unbound and per interface */
+static uint32_t dns_unbound_families;
+static uint32_t dns_bound_families[CONN_MGR_IFACE_MAX];
+
 /* Used to signal when modifications have been made that need to be responded to */
 K_SEM_DEFINE(conn_mgr_mon_updated, 1, 1);
 
 /* Used to protect conn_mgr_monitor state */
 K_MUTEX_DEFINE(conn_mgr_mon_lock);
+
+/* Signaled when a readiness counter is bumped */
+static K_CONDVAR_DEFINE(conn_mgr_mon_ready_changed);
 
 uint16_t *conn_mgr_if_state_internal(void)
 {
@@ -106,6 +127,94 @@ static void conn_mgr_mon_set_ready(int idx, bool ready, bool ready_ipv4, bool re
 	}
 }
 
+/**
+ * @brief Refresh dns_unbound_families and dns_bound_families from the default resolver context.
+ */
+static void conn_mgr_mon_dns_snapshot(void)
+{
+	struct dns_resolve_context *ctx;
+
+	if (!IS_ENABLED(CONFIG_DNS_RESOLVER)) {
+		return;
+	}
+
+	ctx = dns_resolve_get_default();
+	dns_unbound_families = dns_resolve_get_server_families(ctx, 0);
+
+	ARRAY_FOR_EACH(dns_bound_families, i) {
+		dns_bound_families[i] = dns_resolve_get_server_families(ctx, i + 1);
+	}
+}
+
+/**
+ * @brief Check whether an interface provides name resolution.
+ *
+ * @param idx - index (in iface_states) of the iface to check.
+ * @retval true if a DNS server can be reached through the iface.
+ */
+static bool conn_mgr_mon_iface_has_dns(int idx)
+{
+	uint32_t families;
+
+	if ((iface_states[idx] & CONN_MGR_IF_READY) && socket_offload_dns_is_enabled()) {
+		/* Name resolution is offloaded and its servers are not visible to us */
+		return true;
+	}
+
+	if (!IS_ENABLED(CONFIG_DNS_RESOLVER)) {
+		return false;
+	}
+
+	families = dns_unbound_families | dns_bound_families[idx];
+
+	return ((iface_states[idx] & CONN_MGR_IF_READY_IPV4) && (families & BIT(NET_AF_INET))) ||
+	       ((iface_states[idx] & CONN_MGR_IF_READY_IPV6) && (families & BIT(NET_AF_INET6)));
+}
+
+/* Bumps one of the counters. Must be called with conn_mgr_mon_lock held */
+static void conn_mgr_mon_gen_bump(uint32_t flag)
+{
+	uint32_t shift = (find_lsb_set(flag) - 1U) * CONN_MGR_MON_GEN_BITS;
+	uint32_t count = ((ready_gen >> shift) + 1U) & CONN_MGR_MON_GEN_MASK;
+
+	ready_gen = (ready_gen & ~(CONN_MGR_MON_GEN_MASK << shift)) | (count << shift);
+}
+
+/* Flags whose counter differs between two packed generations */
+static uint32_t conn_mgr_mon_gen_changed(uint32_t a, uint32_t b)
+{
+	uint32_t diff = a ^ b;
+	uint32_t changed = 0U;
+
+	for (uint32_t i = 0U; i < CONN_MGR_MON_GEN_COUNTERS; i++) {
+		if (((diff >> (i * CONN_MGR_MON_GEN_BITS)) & CONN_MGR_MON_GEN_MASK) != 0U) {
+			changed |= BIT(i);
+		}
+	}
+
+	return changed;
+}
+
+/* Must be called with conn_mgr_mon_lock held */
+static uint32_t conn_mgr_mon_ready_flags(void)
+{
+	uint32_t flags = 0U;
+
+	if (last_ready_count_ipv4 > 0U) {
+		flags |= CONN_MGR_READY_IPV4;
+	}
+
+	if (last_ready_count_ipv6 > 0U) {
+		flags |= CONN_MGR_READY_IPV6;
+	}
+
+	if (last_dns_ready) {
+		flags |= CONN_MGR_READY_DNS;
+	}
+
+	return flags;
+}
+
 static void conn_mgr_mon_handle_update(void)
 {
 	int idx;
@@ -120,14 +229,21 @@ static void conn_mgr_mon_handle_update(void)
 	bool was_ipv6_ready;
 	bool was_ipv4_ready;
 	bool is_ignored;
+	uint64_t mgmt_event;
 	int ready_count = 0;
 	int ready_count_ipv4 = 0;
 	int ready_count_ipv6 = 0;
 	struct net_if *blame = NULL;
 	struct net_if *blame_ipv4 = NULL;
 	struct net_if *blame_ipv6 = NULL;
+	bool dns_ready = false;
+	uint32_t prev_ready_gen;
+
+	conn_mgr_mon_dns_snapshot();
 
 	k_mutex_lock(&conn_mgr_mon_lock, K_FOREVER);
+
+	prev_ready_gen = ready_gen;
 
 	for (idx = 0; idx < ARRAY_SIZE(iface_states); idx++) {
 		if (iface_states[idx] == 0) {
@@ -166,6 +282,11 @@ static void conn_mgr_mon_handle_update(void)
 		/* If any states changed, track blame for possibly triggered events */
 		if (was_l4_ready != is_l4_ready) {
 			blame = conn_mgr_mon_get_if_by_index(idx);
+
+			/* Per-interface L4 events */
+			mgmt_event = is_l4_ready ? NET_EVENT_L4_IF_CONNECTED
+						 : NET_EVENT_L4_IF_DISCONNECTED;
+			net_mgmt_event_notify(mgmt_event, blame);
 		}
 		if (was_ipv6_ready != is_ipv6_ready) {
 			blame_ipv6 = conn_mgr_mon_get_if_by_index(idx);
@@ -174,8 +295,20 @@ static void conn_mgr_mon_handle_update(void)
 			blame_ipv4 = conn_mgr_mon_get_if_by_index(idx);
 		}
 
+		/* Count every iface becoming ready, also when the family already was */
+		if (is_ipv4_ready && !was_ipv4_ready) {
+			conn_mgr_mon_gen_bump(CONN_MGR_READY_IPV4);
+		}
+		if (is_ipv6_ready && !was_ipv6_ready) {
+			conn_mgr_mon_gen_bump(CONN_MGR_READY_IPV6);
+		}
+
 		/* Update readiness state flags with the (possibly) new values */
 		conn_mgr_mon_set_ready(idx, is_l4_ready, is_ipv4_ready, is_ipv6_ready);
+
+		if (conn_mgr_mon_iface_has_dns(idx)) {
+			dns_ready = true;
+		}
 	}
 
 	/* If the total number of ready ifaces changed, possibly send an event */
@@ -217,48 +350,22 @@ static void conn_mgr_mon_handle_update(void)
 		last_blame_ipv6 = blame_ipv6;
 	}
 
-	k_mutex_unlock(&conn_mgr_mon_lock);
-}
-
-/**
- * @brief Initialize the internal state flags for the given iface using its current status
- *
- * @param iface - iface to initialize from.
- */
-static void conn_mgr_mon_initial_state(struct net_if *iface)
-{
-	int idx = conn_mgr_get_index_for_if(iface);
-
-	k_mutex_lock(&conn_mgr_mon_lock, K_FOREVER);
-
-	if (net_if_is_up(iface)) {
-		NET_DBG("Iface %p UP", iface);
-		iface_states[idx] |= CONN_MGR_IF_UP;
+	/* Notify DNS availability */
+	if (dns_ready != last_dns_ready) {
+		last_dns_ready = dns_ready;
+		if (dns_ready) {
+			conn_mgr_mon_gen_bump(CONN_MGR_READY_DNS);
+		}
+		net_mgmt_event_notify(dns_ready ? NET_EVENT_L4_DNS_READY : NET_EVENT_L4_DNS_LOST,
+				      NULL);
 	}
 
-	if (IS_ENABLED(CONFIG_NET_NATIVE_IPV6)) {
-		if (net_if_ipv6_get_global_addr(NET_ADDR_PREFERRED, &iface)) {
-			NET_DBG("IPv6 addr set");
-			iface_states[idx] |= CONN_MGR_IF_IPV6_SET;
-		}
-	}
-
-	if (IS_ENABLED(CONFIG_NET_NATIVE_IPV4)) {
-		if (net_if_ipv4_get_global_addr(iface, NET_ADDR_PREFERRED)) {
-			NET_DBG("IPv4 addr set");
-			iface_states[idx] |= CONN_MGR_IF_IPV4_SET;
-		}
-
+	/* Every rise bumps a counter, and only rises can satisfy a waiter */
+	if (ready_gen != prev_ready_gen) {
+		k_condvar_broadcast(&conn_mgr_mon_ready_changed);
 	}
 
 	k_mutex_unlock(&conn_mgr_mon_lock);
-}
-
-static void conn_mgr_mon_init_cb(struct net_if *iface, void *user_data)
-{
-	ARG_UNUSED(user_data);
-
-	conn_mgr_mon_initial_state(iface);
 }
 
 static void conn_mgr_mon_thread_fn(void *p1, void *p2, void *p3)
@@ -270,10 +377,6 @@ static void conn_mgr_mon_thread_fn(void *p1, void *p2, void *p3)
 	k_mutex_lock(&conn_mgr_mon_lock, K_FOREVER);
 
 	conn_mgr_conn_init();
-
-	conn_mgr_init_events_handler();
-
-	net_if_foreach(conn_mgr_mon_init_cb, NULL);
 
 	k_mutex_unlock(&conn_mgr_mon_lock);
 
@@ -310,7 +413,119 @@ void conn_mgr_mon_resend_status(void)
 		net_mgmt_event_notify(NET_EVENT_L4_IPV4_CONNECTED, last_blame_ipv4);
 	}
 
+	net_mgmt_event_notify(last_dns_ready ? NET_EVENT_L4_DNS_READY : NET_EVENT_L4_DNS_LOST,
+			      NULL);
+
 	k_mutex_unlock(&conn_mgr_mon_lock);
+}
+
+bool conn_mgr_dns_is_ready(void)
+{
+	bool ret;
+
+	k_mutex_lock(&conn_mgr_mon_lock, K_FOREVER);
+	/* Return the last reported value */
+	ret = last_dns_ready;
+	k_mutex_unlock(&conn_mgr_mon_lock);
+
+	return ret;
+}
+
+uint32_t conn_mgr_get_readiness(uint32_t *gen)
+{
+	uint32_t flags;
+
+	k_mutex_lock(&conn_mgr_mon_lock, K_FOREVER);
+	flags = conn_mgr_mon_ready_flags();
+	if (gen != NULL) {
+		*gen = ready_gen;
+	}
+	k_mutex_unlock(&conn_mgr_mon_lock);
+
+	return flags;
+}
+
+net_sa_family_t conn_mgr_get_ready_addr_family(void)
+{
+	uint32_t ip = conn_mgr_get_readiness(NULL) & (CONN_MGR_READY_IPV4 | CONN_MGR_READY_IPV6);
+
+	if (ip == CONN_MGR_READY_IPV4) {
+		return NET_AF_INET;
+	}
+
+	if (ip == CONN_MGR_READY_IPV6) {
+		return NET_AF_INET6;
+	}
+
+	return NET_AF_UNSPEC;
+}
+
+/* Must be called with conn_mgr_mon_lock held */
+static bool conn_mgr_mon_is_ready(uint32_t mask, const uint32_t *gen)
+{
+	const uint32_t ip_mask = CONN_MGR_READY_IPV4 | CONN_MGR_READY_IPV6;
+	uint32_t flags = conn_mgr_mon_ready_flags();
+
+	/* No desired IP family ready */
+	if ((flags & mask & ip_mask) == 0U) {
+		return false;
+	}
+
+	/* DNS requested but not ready */
+	if (((mask & CONN_MGR_READY_DNS) != 0U) && ((flags & CONN_MGR_READY_DNS) == 0U)) {
+		return false;
+	}
+
+	return (gen == NULL) || ((conn_mgr_mon_gen_changed(*gen, ready_gen) & mask) != 0U);
+}
+
+static int conn_mgr_mon_wait(uint32_t mask, const uint32_t *gen, k_timeout_t timeout)
+{
+	k_timepoint_t end = sys_timepoint_calc(timeout);
+	bool waited = false;
+	int ret = 0;
+
+	if ((mask & (CONN_MGR_READY_IPV4 | CONN_MGR_READY_IPV6)) == 0U) {
+		/* No IP family requested */
+		return -EINVAL;
+	}
+
+	k_mutex_lock(&conn_mgr_mon_lock, K_FOREVER);
+
+	/* Recheck after every wake-up, including the one at timeout */
+	while (!conn_mgr_mon_is_ready(mask, gen)) {
+		if (sys_timepoint_expired(end)) {
+			ret = -EAGAIN;
+			break;
+		}
+
+		/* Log only when blocking, not for polls or when already ready */
+		if (!waited) {
+			LOG_DBG("Waiting for network...");
+			waited = true;
+		}
+
+		(void)k_condvar_wait(&conn_mgr_mon_ready_changed, &conn_mgr_mon_lock,
+				     sys_timepoint_timeout(end));
+	}
+
+	k_mutex_unlock(&conn_mgr_mon_lock);
+
+	if (waited && (ret == 0)) {
+		LOG_DBG("Network ready");
+	}
+
+	return ret;
+}
+
+int conn_mgr_wait_ready(uint32_t mask, k_timeout_t timeout)
+{
+	return conn_mgr_mon_wait(mask, NULL, timeout);
+}
+
+int conn_mgr_wait_ready_change(uint32_t mask, uint32_t gen, k_timeout_t timeout)
+{
+	return conn_mgr_mon_wait(mask, &gen, timeout);
 }
 
 void conn_mgr_ignore_iface(struct net_if *iface)
