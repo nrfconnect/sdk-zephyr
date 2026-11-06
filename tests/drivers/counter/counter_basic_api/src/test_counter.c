@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2018, Nordic Semiconductor ASA
- * Copyright 2024, 2025 NXP
+ * Copyright 2024-2026 NXP
  * Copyright (c) 2025 Microchip Technology Inc.
  *
  * SPDX-License-Identifier: Apache-2.0
@@ -10,6 +10,8 @@
 #include <zephyr/ztest.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/pm/device_runtime.h>
+#include <zephyr/pm/policy.h>
 LOG_MODULE_REGISTER(test);
 
 static struct k_sem top_cnt_sem;
@@ -26,7 +28,6 @@ struct counter_alarm_cfg cntr_alarm_cfg2;
 
 /* clang-format off */
 
-#define DEVICE_DT_GET_AND_COMMA(node_id) DEVICE_DT_GET(node_id),
 #define DEVICE_DT_GET_AND_COMMA_IF_NOT_SYSTEM_TIMER(node_id) \
 	COND_CODE_1(DT_HAS_CHOSEN(zephyr_system_timer), \
 		(COND_CODE_1(DT_SAME_NODE(node_id, DT_CHOSEN(zephyr_system_timer)), \
@@ -34,7 +35,7 @@ struct counter_alarm_cfg cntr_alarm_cfg2;
 		(DEVICE_DT_GET(node_id),))
 /* Generate a list of devices for all instances of the "compat" */
 #define DEVS_FOR_DT_COMPAT(compat) \
-	DT_FOREACH_STATUS_OKAY(compat, DEVICE_DT_GET_AND_COMMA)
+	DT_FOREACH_STATUS_OKAY(compat, DEVICE_DT_GET_COMMA)
 
 static const struct device *const devices[] = {
 #ifdef CONFIG_COUNTER_NRF_TIMER
@@ -189,7 +190,9 @@ static const struct device *const devices[] = {
 #ifdef CONFIG_COUNTER_RA_AGT
 	DEVS_FOR_DT_COMPAT(renesas_ra_agt_counter)
 #endif
-
+#ifdef CONFIG_COUNTER_RENESAS_RA_ULPT
+	DEVS_FOR_DT_COMPAT(renesas_ra_ulpt_counter)
+#endif
 #ifdef CONFIG_COUNTER_RENESAS_RZ_CMTW
 	DEVS_FOR_DT_COMPAT(renesas_rz_cmtw_counter)
 #endif
@@ -219,6 +222,18 @@ static const struct device *const devices[] = {
 #endif
 #ifdef CONFIG_COUNTER_WUT_MAX32
 	DEVS_FOR_DT_COMPAT(adi_max32_wut)
+#endif
+#ifdef CONFIG_COUNTER_XLNX_TTC
+	DEVS_FOR_DT_COMPAT(xlnx_ttc_counter)
+#endif
+#ifdef CONFIG_COUNTER_MSPM0_TIMER
+	DEVS_FOR_DT_COMPAT(ti_mspm0_timer_counter)
+#endif
+#ifdef CONFIG_COUNTER_CRSAS_MA2
+	DEVS_FOR_DT_COMPAT(arm_crsas_ma2_counter)
+#endif
+#ifdef CONFIG_COUNTER_CRSAS_MA2_TIMER
+	DEVS_FOR_DT_COMPAT(arm_crsas_ma2_timer)
 #endif
 };
 
@@ -268,6 +283,8 @@ static void counter_setup_instance(const struct device *dev)
 	if (!k_is_user_context()) {
 		compiler_barrier();
 		alarm_cnt = 0;
+		pm_policy_state_lock_get(PM_STATE_SUSPEND_TO_RAM, PM_ALL_SUBSTATES);
+		zassert_ok(pm_device_runtime_get(dev));
 	}
 }
 
@@ -295,6 +312,10 @@ static void counter_tear_down_instance(const struct device *dev)
 	zassert_true((err == 0) || (err == -ENOTSUP),
 			"%s: Counter failed to stop (err: %d)", dev->name, err);
 
+	if (!k_is_user_context()) {
+		zassert_ok(pm_device_runtime_put(dev));
+		pm_policy_state_lock_put(PM_STATE_SUSPEND_TO_RAM, PM_ALL_SUBSTATES);
+	}
 }
 
 static void test_all_instances(counter_test_func_t func,
@@ -549,6 +570,56 @@ static bool alarm_capable(const struct device *dev)
 	if (err != 0) {
 		goto out_stop;
 	}
+
+out_stop:
+	(void)counter_stop(dev);
+
+	return err == 0;
+}
+
+/* The cancel test below configures absolute alarms. Some counters (for example
+ * the NXP wake timer) only support relative alarms and return -ENOTSUP for
+ * COUNTER_ALARM_CFG_ABSOLUTE. Probe whether a device accepts an absolute alarm
+ * so such devices can be skipped instead of hard-failing the test.
+ */
+static bool absolute_alarm_capable(const struct device *dev)
+{
+	struct counter_alarm_cfg cfg = {
+		.flags = COUNTER_ALARM_CFG_ABSOLUTE,
+		.callback = alarm_capable_handler,
+		.user_data = NULL,
+	};
+	uint32_t ticks;
+	int err;
+
+	if (counter_get_num_of_channels(dev) < 1U) {
+		return false;
+	}
+
+	err = counter_start(dev);
+	if (err != 0) {
+		return false;
+	}
+
+	err = counter_get_value(dev, &ticks);
+	if (err != 0) {
+		goto out_stop;
+	}
+
+	/* Aim ahead of the current value so the alarm is not seen as late. */
+	cfg.ticks = counter_us_to_ticks(dev, 1000U);
+	if (cfg.ticks == 0U) {
+		cfg.ticks = 1U;
+	}
+	cfg.ticks += ticks;
+	cfg.ticks %= counter_get_top_value(dev);
+
+	err = counter_set_channel_alarm(dev, 0, &cfg);
+	if (err != 0) {
+		goto out_stop;
+	}
+
+	err = counter_cancel_channel_alarm(dev, 0);
 
 out_stop:
 	(void)counter_stop(dev);
@@ -918,8 +989,14 @@ static bool ms_period_capable(const struct device *dev)
 	uint32_t freq_khz;
 	uint32_t max_time_ms;
 
+	freq_khz = counter_get_frequency(dev);
+
+	if (freq_khz == 0) {
+		return false;
+	}
+
 	/* Assume 2 ms counter period can be set for frequency below 1 kHz*/
-	if (counter_get_frequency(dev) < 1000) {
+	if (freq_khz < 1000) {
 		return true;
 	}
 
@@ -1089,7 +1166,14 @@ static void test_short_relative_alarm_instance(const struct device *dev)
 
 	alarm_cfg.ticks = 1;
 
-	for (int i = 0; i < 100; ++i) {
+	/* Slow counters busy-wait several ticks per iteration (~3 s on a 1 Hz
+	 * RTC), so cap their iteration count; fast counters keep the full
+	 * count to preserve coverage.
+	 */
+	int iterations = (counter_get_frequency(dev) < 1000) ?
+		CONFIG_TEST_COUNTER_SHORT_RELATIVE_ALARM_ITERATIONS : 100;
+
+	for (int i = 0; i < iterations; ++i) {
 		err = counter_set_channel_alarm(dev, 0, &alarm_cfg);
 		zassert_equal(0, err,
 				"%s: Failed to set an alarm (err: %d)",
@@ -1228,6 +1312,13 @@ static void test_cancelled_alarm_does_not_expire_instance(const struct device *d
 
 static bool reliable_cancel_capable(const struct device *dev)
 {
+	/* This test configures absolute alarms; skip devices whose driver does
+	 * not support them (returns -ENOTSUP) instead of reporting a failure.
+	 */
+	if (!absolute_alarm_capable(dev)) {
+		return false;
+	}
+
 	/* Test performed only for NRF_RTC instances. Other probably will fail.
 	 */
 #if defined(CONFIG_COUNTER_NRF_RTC) || defined(CONFIG_COUNTER_NRF_TIMER)
@@ -1288,6 +1379,14 @@ static bool reliable_cancel_capable(const struct device *dev)
 		return true;
 	}
 #endif
+#ifdef CONFIG_COUNTER_XLNX_TTC
+	return true;
+#endif
+#ifdef CONFIG_COUNTER_MSPM0_TIMER
+	if (single_channel_alarm_capable(dev)) {
+		return true;
+	}
+#endif
 	return false;
 }
 
@@ -1296,6 +1395,81 @@ ZTEST(counter_basic, test_cancelled_alarm_does_not_expire)
 	test_all_instances(test_cancelled_alarm_does_not_expire_instance,
 			reliable_cancel_capable);
 }
+
+#ifdef CONFIG_COUNTER_CALIBRATION
+#define COUNTER_TEST_CAL_RANGE_LIMIT (200000)
+#define COUNTER_TEST_CAL_RANGE_STEP  (10000)
+
+static int set_get_calibration(const struct device *dev, int32_t calibrate_set)
+{
+	int32_t calibrate_get;
+	int ret;
+
+	ret = counter_set_calibration(dev, calibrate_set);
+
+	/* Check if calibration is within limits of hardware */
+	if (ret == -EINVAL) {
+		/* skip */
+		return -EINVAL;
+	}
+
+	zassert_ok(ret, "%s: Failed to set calibration", dev->name);
+
+	ret = counter_get_calibration(dev, &calibrate_get);
+	zassert_ok(ret, "%s: Failed to get calibration", dev->name);
+
+	TC_PRINT("%s: Calibrate (set,get): %i, %i\n", dev->name, calibrate_set, calibrate_get);
+
+	return 0;
+}
+
+static void test_set_get_calibration_instance(const struct device *dev)
+{
+	int32_t calibrate_get;
+	int ret;
+
+	ret = counter_set_calibration(dev, 0);
+	if (ret == -ENOSYS || ret == -ENOTSUP) {
+		TC_PRINT("%s: Calibration not supported\n", dev->name);
+		return;
+	}
+
+	zassert_ok(ret, "%s: Failed to set calibration", dev->name);
+
+	ret = counter_get_calibration(dev, &calibrate_get);
+	zassert_ok(ret, "%s: Failed to get calibration", dev->name);
+
+	/* Validate edge values (0 already tested) */
+	set_get_calibration(dev, 1);
+	set_get_calibration(dev, -1);
+
+	/* Validate over negative range */
+	for (int32_t set = COUNTER_TEST_CAL_RANGE_STEP; set <= COUNTER_TEST_CAL_RANGE_LIMIT;
+	     set += COUNTER_TEST_CAL_RANGE_STEP) {
+		if (set_get_calibration(dev, -set) < 0) {
+			/* Limit of hardware capabilities reached */
+			break;
+		}
+	}
+
+	/* Validate over positive range */
+	for (int32_t set = COUNTER_TEST_CAL_RANGE_STEP; set <= COUNTER_TEST_CAL_RANGE_LIMIT;
+	     set += COUNTER_TEST_CAL_RANGE_STEP) {
+		if (set_get_calibration(dev, set) < 0) {
+			/* Limit of hardware capabilities reached */
+			break;
+		}
+	}
+
+	/* Leave the counter uncalibrated */
+	zassert_ok(counter_set_calibration(dev, 0), "%s: Failed to reset calibration", dev->name);
+}
+
+ZTEST(counter_basic, test_set_get_calibration)
+{
+	test_all_instances(test_set_get_calibration_instance, NULL);
+}
+#endif /* CONFIG_COUNTER_CALIBRATION */
 
 static void *counter_setup(void)
 {

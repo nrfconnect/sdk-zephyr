@@ -75,9 +75,6 @@ config TEST_LOGGING_DEFAULTS
 	default n
 	depends on TEST
 
-config SYS_CLOCK_HW_CYCLES_PER_SEC
-	default 198000000
-
 config XTENSA_CCOUNT_HZ
 	default SYS_CLOCK_HW_CYCLES_PER_SEC
 
@@ -90,10 +87,10 @@ config DYNAMIC_INTERRUPTS
 config CACHE
 	default n
 
-config DCACHE
+configdefault DCACHE
 	default n
 
-config CACHE_MANAGEMENT
+configdefault CACHE_MANAGEMENT
 	default n
 
 config LOG

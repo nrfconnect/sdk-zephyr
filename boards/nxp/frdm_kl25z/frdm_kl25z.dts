@@ -6,14 +6,14 @@
 
 /dts-v1/;
 
-#include <nxp/kinetis/nxp_kl25z.dtsi>
+#include <nxp/kinetis/kl2x/nxp_kl25z.dtsi>
 #include "frdm_kl25z-pinctrl.dtsi"
 #include <zephyr/dt-bindings/gpio/arduino-header-r3.h>
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 
 / {
-	model = "NXP Freedom KL25Z board";
 	compatible = "nxp,frdm-kl25z", "nxp,kl25z", "nxp,mkl25z4";
+	model = "NXP Freedom KL25Z board";
 
 	aliases {
 		led0 = &green_led;
@@ -101,20 +101,24 @@
 	er32k-select = <KINETIS_SIM_ER32KSEL_LPO1KHZ>;
 };
 
+&{/cpus} {
+	timebase-frequency = <DT_FREQ_M(48)>;
+};
+
 &cpu0 {
 	clock-frequency = <DT_FREQ_M(48)>;
 };
 
 &adc0 {
-	status = "okay";
 	pinctrl-0 = <&adc0_default>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &i2c0 {
-	status = "okay";
 	pinctrl-0 = <&i2c0_default>;
 	pinctrl-names = "default";
+	status = "okay";
 
 	mma8451q: mma8451q@1d {
 		compatible = "nxp,fxos8700", "nxp,mma8451q";
@@ -125,10 +129,42 @@
 };
 
 &uart0 {
-	status = "okay";
 	current-speed = <115200>;
 	pinctrl-0 = <&uart0_default>;
 	pinctrl-names = "default";
+	status = "okay";
+};
+
+&spi0 {
+	pinctrl-0 = <&spi0_default>;
+	pinctrl-names = "default";
+	cs-gpios = <&gpioc 4 GPIO_ACTIVE_LOW>;
+	status = "okay";
+};
+
+&spi1 {
+	pinctrl-0 = <&spi1_default>;
+	pinctrl-names = "default";
+	cs-gpios = <&gpioe 5 GPIO_ACTIVE_LOW>;
+	status = "okay";
+};
+
+&tpm0 {
+	pinctrl-0 = <&tpm0_default>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
+&tpm1 {
+	pinctrl-0 = <&tpm1_default>;
+	pinctrl-names = "default";
+	status = "disabled";
+};
+
+&tpm2 {
+	pinctrl-0 = <&tpm2_default>;
+	pinctrl-names = "default";
+	status = "disabled";
 };
 
 &gpioa {
@@ -139,12 +175,20 @@
 	status = "okay";
 };
 
+&gpioc {
+	status = "okay";
+};
+
 &gpiod {
+	status = "okay";
+};
+
+&gpioe {
 	status = "okay";
 };
 
 zephyr_udc0: &usbotg {
 	compatible = "nxp,kinetis-usbd";
-	status = "okay";
 	num-bidir-endpoints = <8>;
+	status = "okay";
 };

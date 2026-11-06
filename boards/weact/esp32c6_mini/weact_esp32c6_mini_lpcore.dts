@@ -5,12 +5,12 @@
  */
 /dts-v1/;
 
-#include <espressif/esp32c6/esp32c6_lpcore_wroom_n4.dtsi>
+#include <espressif/esp32c6/esp32c6_lpcore.dtsi>
 #include <espressif/partitions_0x0_default.dtsi>
 
 / {
-	model = "WeAct Studio ESP32-C6-Mini LP Core";
 	compatible = "weact,esp32c6-mini";
+	model = "WeAct Studio ESP32-C6-Mini LP Core";
 
 	chosen {
 		zephyr,flash = &flash0;
@@ -21,7 +21,12 @@
 	};
 };
 
+&flash0 {
+	reg = <0x0 DT_SIZE_M(4)>;
+	ranges = <0x0 0x0 DT_SIZE_M(4)>;
+};
+
 &lp_uart {
-	status = "okay";
 	current-speed = <115200>;
+	status = "okay";
 };

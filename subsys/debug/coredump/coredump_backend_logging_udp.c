@@ -155,11 +155,10 @@ static int coredump_udp_parse_peer(void)
 static int coredump_udp_bind_ephemeral(int sock)
 {
 	int ret;
-	struct net_sockaddr_storage bind_storage;
+	struct net_sockaddr_storage bind_storage = {0};
 	struct net_sockaddr *bind_sa = net_sad(&bind_storage);
 	size_t addr_len;
 
-	memset(&bind_storage, 0, sizeof(bind_storage));
 	bind_sa->sa_family = udp_sock_af;
 
 	if (IS_ENABLED(CONFIG_NET_IPV4) && udp_sock_af == NET_AF_INET) {
@@ -202,18 +201,13 @@ static int coredump_udp_open_bind_socket(void)
 }
 
 #if defined(CONFIG_NET_CONNECTION_MANAGER)
-
-static struct net_mgmt_event_callback coredump_udp_l4_cb;
-
-static void coredump_udp_l4_handler(struct net_mgmt_event_callback *cb, uint64_t evt,
-				    struct net_if *iface)
+static void coredump_udp_l4_handler(uint64_t mgmt_event, struct net_if *iface __unused,
+				    void *info __unused, size_t info_length __unused,
+				    void *user_data __unused)
 {
 	int r;
 
-	ARG_UNUSED(cb);
-	ARG_UNUSED(iface);
-
-	if (evt != NET_EVENT_L4_CONNECTED) {
+	if (mgmt_event != NET_EVENT_L4_CONNECTED) {
 		return;
 	}
 
@@ -232,17 +226,8 @@ static void coredump_udp_l4_handler(struct net_mgmt_event_callback *cb, uint64_t
 	LOG_DBG("coredump UDP presocket fd=%d", udp_presock_fd);
 }
 
-static int coredump_udp_hook_net_l4(void)
-{
-	net_mgmt_init_event_callback(&coredump_udp_l4_cb, coredump_udp_l4_handler,
-				     NET_EVENT_L4_CONNECTED);
-	net_mgmt_add_event_callback(&coredump_udp_l4_cb);
-	conn_mgr_mon_resend_status();
-	return 0;
-}
-
-SYS_INIT(coredump_udp_hook_net_l4, APPLICATION, 80);
-
+NET_MGMT_REGISTER_EVENT_HANDLER(coredump_udp_l4_events, NET_EVENT_L4_CONNECTED,
+				coredump_udp_l4_handler, NULL);
 #else
 
 /* Fallback when conn_mgr is off: run after net_config SYS_INIT (prio 95). */

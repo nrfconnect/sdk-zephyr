@@ -12,7 +12,8 @@ testing:
     - kernel
     - userspace
     - llext
+    - integration
   ignore_tags:
     - benchmark
-ram: 256
+ram: 384
 vendor: qemu

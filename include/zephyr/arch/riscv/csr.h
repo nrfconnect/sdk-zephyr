@@ -114,6 +114,14 @@
 #define SIP_SSIP	MIP_SSIP
 #define SIP_STIP	MIP_STIP
 
+/*
+ * Counter-enable bits. mcounteren, scounteren and hcounteren share this
+ * layout. Each one controls access from the privilege mode below it.
+ */
+#define COUNTEREN_CY	(1 << 0)	/* cycle counter */
+#define COUNTEREN_TM	(1 << 1)	/* time counter */
+#define COUNTEREN_IR	(1 << 2)	/* instret counter */
+
 #define PRV_U	0
 #define PRV_S	1
 #define PRV_H	2
@@ -132,6 +140,10 @@
 #define SATP_MODE_SV48	9
 #define SATP_MODE_SV57	10
 #define SATP_MODE_SV64	11
+
+#define MSECCFG_MLPE	0x400
+#define MENVCFG_LPE	0x4
+#define SENVCFG_LPE	0x4
 
 /**
  * PMPCFG CSR base address
@@ -176,6 +188,13 @@
 #define MNSTATUS_NMIE 0x00000008 /* NMI Enable (bit 3) */
 #endif                           /* CONFIG_RISCV_SMRNMI_ENABLE_NMI_DELIVERY */
 
+/* Zkr CSR addresses */
+#define CSR_SEED    0x015
+#define CSR_MSECCFG 0x747
+
+/* MSECCFG bit fields */
+#define MSECCFG_SSEED 0x00000200 /* S-mode access to the seed CSR (bit 9) */
+
 #define DEFAULT_RSTVEC	0x00001000
 #define CLINT_BASE	0x02000000
 #define CLINT_SIZE	0x000c0000
@@ -213,6 +232,17 @@
 #define MIREG6   0x357
 
 #endif /* CONFIG_RISCV_ISA_EXT_SMCSRIND */
+
+/* Privilege-level abstraction for status and cause CSRs */
+#ifdef CONFIG_RISCV_S_MODE
+#define RV_STATUS_CSR sstatus
+#define RV_STATUS_IE  SSTATUS_SIE
+#define RV_STATUS_PIE SSTATUS_SPIE
+#else
+#define RV_STATUS_CSR mstatus
+#define RV_STATUS_IE  MSTATUS_IEN
+#define RV_STATUS_PIE MSTATUS_MPIE_EN
+#endif
 
 #ifndef _ASMLANGUAGE
 

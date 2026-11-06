@@ -189,7 +189,7 @@ static void setup_server(net_sa_family_t af)
 	family = af;
 
 	if (family == NET_AF_INET6) {
-		struct net_sockaddr_in6 *a6 = (struct net_sockaddr_in6 *)&client.server;
+		struct net_sockaddr_in6 *a6 = (struct net_sockaddr_in6 *)&client.server_addr;
 
 		server_addr_str = V6_SERVER;
 		iface_add_addr(server_addr_str);
@@ -198,7 +198,7 @@ static void setup_server(net_sa_family_t af)
 		a6->sin6_port = net_htons(SERVER_PORT);
 		parse_addr(server_addr_str, &a6->sin6_addr);
 	} else {
-		struct net_sockaddr_in *a4 = (struct net_sockaddr_in *)&client.server;
+		struct net_sockaddr_in *a4 = (struct net_sockaddr_in *)&client.server_addr;
 
 		server_addr_str = V4_SERVER;
 
@@ -262,11 +262,11 @@ static void server_fn(void *a, void *b, void *c)
 	if (zero_server_addr_on_request) {
 		if (family == NET_AF_INET6) {
 			struct net_sockaddr_in6 *a6 =
-				(struct net_sockaddr_in6 *)&client.server;
+				(struct net_sockaddr_in6 *)&client.server_addr;
 
 			memset(&a6->sin6_addr, 0, sizeof(a6->sin6_addr));
 		} else {
-			struct net_sockaddr_in *a4 = (struct net_sockaddr_in *)&client.server;
+			struct net_sockaddr_in *a4 = (struct net_sockaddr_in *)&client.server_addr;
 
 			a4->sin_addr.s_addr = 0;
 		}

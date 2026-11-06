@@ -11,7 +11,7 @@
 #include <zephyr/fs/fs.h>
 #include <ff.h>
 
-#ifdef CONFIG_DISK_DRIVER_RAM
+#if defined(CONFIG_DISK_DRIVER_RAM) || defined(CONFIG_DISK_DRIVER_MEMC_RAM)
 #define DISK_NAME "RAM"
 #elif defined(CONFIG_DISK_DRIVER_FLASH)
 #define DISK_NAME DT_PROP(DT_NODELABEL(test_disk), disk_name)
@@ -19,6 +19,8 @@
 #define DISK_NAME "SD"
 #elif defined(CONFIG_DISK_DRIVER_MMC)
 #define DISK_NAME "SD2"
+#elif defined(CONFIG_DISK_DRIVER_VIRTIO_BLK)
+#define DISK_NAME DT_PROP(DT_NODELABEL(virtio_blk), disk_name)
 #else
 #error "Failed to select DISK access type"
 #endif
@@ -47,6 +49,7 @@ void test_fat_file(void);
 void test_fat_dir(void);
 void test_fat_fs(void);
 void test_fat_rename(void);
+void test_fat_cve(void);
 #ifdef CONFIG_FS_FATFS_REENTRANT
 void test_fat_file_reentrant(void);
 #endif /* CONFIG_FS_FATFS_REENTRANT */

@@ -8,19 +8,20 @@
 /dts-v1/;
 
 #include <broadcom/bcm2711.dtsi>
-#include <broadcom/bcm2711-pinctrl.dtsi>
-#include <zephyr/dt-bindings/mbox/brcm-bcm2711-mbox.h>
+#include "rpi_4b-pinctrl.dtsi"
+
 #include <zephyr/dt-bindings/gpio/gpio.h>
 #include <zephyr/dt-bindings/i2c/i2c.h>
 
 / {
-	model = "Raspberry Pi 4 Model B";
 	compatible = "raspberrypi,4-model-b", "brcm,bcm2711";
+	model = "Raspberry Pi 4 Model B";
 
 	aliases {
 		led0 = &led_act;
 		led1 = &led_pwr;
 		i2c-1 = &i2c1;
+		die-temp0 = &vc_thermal;
 	};
 
 	chosen {
@@ -29,6 +30,7 @@
 		zephyr,sram = &dram0;
 		zephyr,entropy = &rng;
 		zephyr,display = &fb0;
+		zephyr,pcie-controller = &pcie0;
 	};
 
 	leds {
@@ -45,20 +47,10 @@
 		};
 	};
 
-	/*
-	 * The first 2 MiB of LPDDR4 is reserved for VideoCore GPU, which boots
-	 * BCM2711 SoC before control is handed to the ARM core.
-	 */
-	dram0: memory@200000 {
-		device_type = "memory";
-		compatible = "mmio-sram";
-		reg = <0x200000 DT_SIZE_M(8)>;
-	};
-
 	reserved-memory {
+		ranges;
 		#address-cells = <1>;
 		#size-cells = <1>;
-		ranges;
 
 		/* VideoCore shared memory region is mapped downward from 0x40000000. */
 		vc_mem: memory@3f800000 {
@@ -68,24 +60,14 @@
 		};
 	};
 
-	firmware {
-		compatible = "raspberrypi,bcm283x-firmware";
-		mboxes = <&mbox0 BCM2711_MBOX0_CH_ARM_TO_VC>;
-		mbox-names = "vc";
-		shared-memory = <&vc_mem>;
-
-		fb0: framebuffer {
-			compatible = "raspberrypi,bcm2711-framebuffer";
-			width = <640>;
-			height = <480>;
-		};
-
-		exp_gpio: gpio {
-			compatible = "raspberrypi,bcm283x-gpio";
-			gpio-controller;
-			#gpio-cells = <2>;
-			ngpios = <8>;
-		};
+	/*
+	 * The first 2 MiB of LPDDR4 is reserved for VideoCore GPU, which boots
+	 * BCM2711 SoC before control is handed to the ARM core.
+	 */
+	dram0: memory@200000 {
+		compatible = "mmio-sram";
+		reg = <0x200000 DT_SIZE_M(8)>;
+		device_type = "memory";
 	};
 };
 
@@ -93,7 +75,15 @@
 	clock-frequency = <DT_FREQ_M(1500)>;
 };
 
+&rng {
+	status = "okay";
+};
+
 &mbox0 {
+	status = "okay";
+};
+
+&exp_gpio {
 	status = "okay";
 };
 
@@ -112,5 +102,25 @@
 	pinctrl-0 = <&i2c1_gpio2>;
 	pinctrl-names = "default";
 	clock-frequency = <I2C_BITRATE_FAST>;
+	status = "okay";
+};
+
+&eth0 {
+	phy-handle = <&phy1>;
+	zephyr,random-mac-address;
+	status = "okay";
+};
+
+&mdio0 {
+	status = "okay";
+
+	phy1: ethernet-phy@1 {
+		compatible = "ethernet-phy";
+		reg = <1>;
+	};
+};
+
+zephyr_uhc0: &usb0 {
+	power-domains = <&usb_hcd>;
 	status = "okay";
 };

@@ -9,12 +9,19 @@ family:
     - name: mimxrt1024
     - name: mimxrt1041
     - name: mimxrt1042
+    - name: mimxrt1051
     - name: mimxrt1052
     - name: mimxrt1062
     - name: mimxrt1064
   - name: imxrt11xx
     socs:
+    - name: mimxrt1151
+    - name: mimxrt1152
     - name: mimxrt1166
+      cpuclusters:
+      - name: cm7
+      - name: cm4
+    - name: mimxrt1175
       cpuclusters:
       - name: cm7
       - name: cm4
@@ -32,6 +39,34 @@ family:
       cpuclusters:
       - name: cm33
       - name: cm7
+    - name: mimxrt1185
+      cpuclusters:
+      - name: cm33
+      - name: cm7
+    - name: mimxrt118c
+      cpuclusters:
+      - name: cm33
+      - name: cm7
+    - name: mimxrt1187
+      cpuclusters:
+      - name: cm33
+      - name: cm7
+    - name: mimxrt1182
+    - name: mimxrt1181
+  - name: imxrt266x
+    socs:
+    - name: mimxrt2663
+      cpuclusters:
+      - name: cm85
+    - name: mimxrt2662
+      cpuclusters:
+      - name: cm85
+    - name: mimxrt2661
+      cpuclusters:
+      - name: cm85
+    - name: mimxrt2660
+      cpuclusters:
+      - name: cm85
   - name: imxrt5xx
     socs:
     - name: mimxrt595s
@@ -52,6 +87,16 @@ family:
       - name: cm33_cpu1
       - name: hifi4
       - name: hifi1
+    - name: mimxrt758s
+      cpuclusters:
+      - name: cm33_cpu0
+      - name: cm33_cpu1
+      - name: hifi1
+    - name: mimxrt735s
+      cpuclusters:
+      - name: cm33_cpu0
+      - name: cm33_cpu1
+      - name: hifi1
 runners:
   run_once:
     '--erase':
@@ -66,8 +111,13 @@ runners:
       - qualifiers:
         - mimxrt1062/(qspi|hyperflash)
       - qualifiers:
+        - mimxrt115([12])
+      - qualifiers:
         - mimxrt1166/cm7
         - mimxrt1166/cm4
+      - qualifiers:
+        - mimxrt1175/cm7
+        - mimxrt1175/cm4
       - qualifiers:
         - mimxrt1176/cm7
         - mimxrt1176/cm4
@@ -75,13 +125,35 @@ runners:
         - mimxrt1186/cm33
         - mimxrt1186/cm7
       - qualifiers:
+        - mimxrt1185/cm33
+        - mimxrt1185/cm7
+      - qualifiers:
+        - mimxrt118c/cm33
+        - mimxrt118c/cm7
+      - qualifiers:
+        - mimxrt1187/cm33
+        - mimxrt1187/cm7
+      - qualifiers:
+        - mimxrt1182
+      - qualifiers:
+        - mimxrt1181
+      - qualifiers:
         - mimxrt1189/cm33
         - mimxrt1189/cm7
+      - qualifiers:
+        - mimxrt2663
+      - qualifiers:
+        - mimxrt2662
+      - qualifiers:
+        - mimxrt2661
       - qualifiers:
         - mimxrt595s/cm33
         - mimxrt595s/f1
       - qualifiers:
         - mimxrt685s/cm33
+      - qualifiers:
+        - mimxrt798s/cm33_cpu0
+        - mimxrt798s/cm33_cpu1
     '--reset':
     - run: last
       runners:
@@ -94,8 +166,13 @@ runners:
       - qualifiers:
         - mimxrt1062/(qspi|hyperflash)
       - qualifiers:
+        - mimxrt115([12])
+      - qualifiers:
         - mimxrt1166/cm7
         - mimxrt1166/cm4
+      - qualifiers:
+        - mimxrt1175/cm7
+        - mimxrt1175/cm4
       - qualifiers:
         - mimxrt1176/cm7
         - mimxrt1176/cm4
@@ -103,10 +180,32 @@ runners:
         - mimxrt1186/cm33
         - mimxrt1186/cm7
       - qualifiers:
+        - mimxrt1185/cm33
+        - mimxrt1185/cm7
+      - qualifiers:
+        - mimxrt118c/cm33
+        - mimxrt118c/cm7
+      - qualifiers:
+        - mimxrt1187/cm33
+        - mimxrt1187/cm7
+      - qualifiers:
+        - mimxrt1182
+      - qualifiers:
+        - mimxrt1181
+      - qualifiers:
         - mimxrt1189/cm33
         - mimxrt1189/cm7
+      - qualifiers:
+        - mimxrt2663
+      - qualifiers:
+        - mimxrt2662
+      - qualifiers:
+        - mimxrt2661
       - qualifiers:
         - mimxrt595s/cm33
         - mimxrt595s/f1
       - qualifiers:
         - mimxrt685s/cm33
+      - qualifiers:
+        - mimxrt798s/cm33_cpu0
+        - mimxrt798s/cm33_cpu1

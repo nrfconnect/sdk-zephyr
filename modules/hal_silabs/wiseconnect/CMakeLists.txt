@@ -30,6 +30,7 @@ zephyr_compile_definitions(
   SL_SI91X_ENABLE_LITTLE_ENDIAN
   SL_SI91X_SI917_RAM_MEM_CONFIG=${RAM_MEM_CONFIG}
   SLI_CODE_CLASSIFICATION_DISABLE
+  SL_SI91X_REQUIRES_INTF_PLL
   SLI_SI91X_MCU_COMMON_FLASH_MODE
   SLI_SI91X_MCU_CONFIG_RADIO_BOARD_VER2
   SLI_SI91X_MCU_CONFIG_RADIO_BOARD_BASE_VER
@@ -39,9 +40,11 @@ zephyr_compile_definitions(
   SLI_SI91X_ENABLE_OS
   SLI_SI917
   SLI_SI917B0
+  SLI_POWER_MANAGER_USE_CRITICAL_IRQ_FOR_PS_API=1
 )
 
 zephyr_include_directories(
+  inc
   ${SISDK}/platform/common/config
   ${SISDK}/platform/common/inc
   ${SISDK}/platform/emlib/inc
@@ -63,7 +66,6 @@ zephyr_include_directories(
   ${WISECONNECT}/components/device/silabs/si91x/mcu/drivers/cmsis_driver/config
   ${WISECONNECT}/components/device/silabs/si91x/mcu/drivers/peripheral_drivers/inc
   ${WISECONNECT}/components/device/silabs/si91x/mcu/drivers/rom_driver/inc
-  ${WISECONNECT}/components/device/silabs/si91x/mcu/drivers/service/clock_manager/inc
   ${WISECONNECT}/components/device/silabs/si91x/mcu/drivers/service/power_manager/config
   ${WISECONNECT}/components/device/silabs/si91x/mcu/drivers/service/power_manager/inc
   ${WISECONNECT}/components/device/silabs/si91x/mcu/drivers/service/sl_log/inc
@@ -81,10 +83,16 @@ zephyr_include_directories(
   ${WISECONNECT}/components/device/silabs/si91x/wireless/inc
   ${WISECONNECT}/components/device/silabs/si91x/wireless/sl_net/inc
   ${WISECONNECT}/components/device/silabs/si91x/wireless/socket/inc
+  ${WISECONNECT}/components/device/silabs/si91x/wireless/sli_hal_si91x/inc
+  ${WISECONNECT}/components/device/silabs/si91x/wireless/sli_si91x_wifi_command_engine/inc
+  ${WISECONNECT}/components/device/silabs/si91x/wireless/sli_si91x_wifi_event_handler/inc
   ${WISECONNECT}/components/protocol/wifi/inc
   ${WISECONNECT}/components/service/network_manager/inc
   ${WISECONNECT}/components/sli_buffer_manager/inc
-  ${WISECONNECT}/components/sli_wifi_command_engine/inc
+  ${WISECONNECT}/components/sli_command_engine/inc
+  ${WISECONNECT}/components/sli_event_engine/inc
+  ${WISECONNECT}/components/sli_queue_manager/inc
+  ${WISECONNECT}/components/sli_routing_utility/inc
   ${WISECONNECT}/components/sli_wifi/inc
   ${WISECONNECT}/resources/defaults
 )
@@ -120,7 +128,6 @@ zephyr_library_sources_ifdef(CONFIG_BT_SILABS_SIWX91X
   ${WISECONNECT}/components/device/silabs/si91x/wireless/ble/src/sl_si91x_ble.c
 )
 
-# FIXME: Replace sli_si91x_clock_manager.c by native Zephyr access to the clocks
 if(CONFIG_CLOCK_CONTROL_SILABS_SIWX91X OR CONFIG_PM)
   zephyr_compile_definitions(
     ULPSS_CLOCK_ROMDRIVER_PRESENT # replace rsi_ulpss_clk.c
@@ -131,7 +138,6 @@ if(CONFIG_CLOCK_CONTROL_SILABS_SIWX91X OR CONFIG_PM)
     ${WISECONNECT}/components/device/silabs/si91x/mcu/drivers/systemlevel/src/rsi_ulpss_clk.c
     # Some functions are not provided by CLOCK_ROMDRIVER_PRESENT
     ${WISECONNECT}/components/device/silabs/si91x/mcu/drivers/systemlevel/src/rsi_pll.c
-    ${WISECONNECT}/components/device/silabs/si91x/mcu/drivers/service/clock_manager/src/sl_si91x_clock_manager.c
   )
 endif()
 
@@ -177,6 +183,7 @@ zephyr_compile_definitions_ifdef(CONFIG_MEMC_SILABS_SIWX91X_QSPI
   QSPI_ROMDRIVER_PRESENT # replace rsi_qspi.c
 )
 zephyr_library_sources_ifdef(CONFIG_MEMC_SILABS_SIWX91X_QSPI
+  ${WISECONNECT}/components/device/silabs/si91x/mcu/drivers/unified_api/src/rsi_d_cache.c
   ${WISECONNECT}/components/device/silabs/si91x/mcu/drivers/unified_api/src/sl_si91x_psram.c
 )
 
@@ -206,7 +213,8 @@ if(CONFIG_WIFI_SILABS_SIWX91X)
     ${WISECONNECT}/components/device/silabs/si91x/wireless/sl_net/src/sli_net_si91x_utility.c
     ${WISECONNECT}/components/protocol/wifi/src/sl_wifi_basic_credentials.c
     ${WISECONNECT}/components/service/network_manager/src/sl_net_basic_profiles.c
-    ${WISECONNECT}/components/service/network_manager/src/sl_net_credentials.c
+    ${WISECONNECT}/components/service/network_manager/src/sli_net_credentials.c
+    ${WISECONNECT}/components/service/network_manager/src/si91x/sl_net_credentials.c
   )
   zephyr_compile_definitions(
     SLI_SI91X_CONFIG_WIFI6_PARAMS
@@ -253,18 +261,25 @@ if(CONFIG_SILABS_SIWX91X_NWP)
     ${WISECONNECT}/components/device/silabs/si91x/wireless/ahb_interface/src/sl_si91x_bus.c
     ${WISECONNECT}/components/device/silabs/si91x/wireless/host_mcu/si91x/siwx917_soc_ncp_host.c
     ${WISECONNECT}/components/device/silabs/si91x/wireless/memory/mem_pool_buffer_quota.c
-    ${WISECONNECT}/components/device/silabs/si91x/wireless/src/sli_wifi_memory_manager.c
-    ${WISECONNECT}/components/device/silabs/si91x/wireless/src/sli_wifi_power_profile.c
+    ${WISECONNECT}/components/device/silabs/si91x/wireless/sli_hal_si91x/src/sli_hal_si91x.c
+    ${WISECONNECT}/components/device/silabs/si91x/wireless/sli_si91x_wifi_event_handler/src/sli_si91x_wifi_event_handler.c
+    ${WISECONNECT}/components/device/silabs/si91x/wireless/sli_si91x_wifi_command_engine/src/sli_si91x_wifi_command_engine.c
+    ${WISECONNECT}/components/device/silabs/si91x/wireless/sli_si91x_wifi_command_engine/src/sli_si91x_wifi_command_engine_config.c
     ${WISECONNECT}/components/device/silabs/si91x/wireless/src/sl_rsi_utility.c
     ${WISECONNECT}/components/device/silabs/si91x/wireless/src/sl_si91x_driver.c
-    ${WISECONNECT}/components/protocol/wifi/si91x/sl_wifi.c
+    ${WISECONNECT}/components/device/silabs/si91x/wireless/src/sli_si91x_driver.c
+    ${WISECONNECT}/components/protocol/wifi/src/si91x/sl_wifi.c
     ${WISECONNECT}/components/protocol/wifi/src/sli_wifi_callback_framework.c
     ${WISECONNECT}/components/protocol/wifi/src/sl_wifi_callback_framework.c
     ${WISECONNECT}/components/service/network_manager/src/sli_net_common_utility.c
-    ${WISECONNECT}/components/sli_si91x_wifi_event_handler/src/sli_si91x_wifi_event_handler.c
+    ${WISECONNECT}/components/sli_buffer_manager/src/sli_buffer_manager.c
+    ${WISECONNECT}/components/sli_command_engine/src/sli_command_engine.c
+    ${WISECONNECT}/components/sli_event_engine/src/sli_event_engine.c
+    ${WISECONNECT}/components/sli_queue_manager/src/sli_queue_manager.c
+    ${WISECONNECT}/components/sli_routing_utility/src/sli_routing_utility.c
     ${WISECONNECT}/components/sli_wifi/src/sli_wifi.c
+    ${WISECONNECT}/components/sli_wifi/src/sli_wifi_power_profile.c
     ${WISECONNECT}/components/sli_wifi/src/sli_wifi_utility.c
-    ${WISECONNECT}/components/sli_wifi_command_engine/src/sli_wifi_command_engine.c
   )
   zephyr_library_sources_ifdef(CONFIG_SIWX91X_FIRMWARE_UPGRADE
     ${WISECONNECT}/components/device/silabs/si91x/wireless/firmware_upgrade/firmware_upgradation.c
@@ -302,7 +317,6 @@ if(CONFIG_PM)
     ${WISECONNECT}/components/device/silabs/si91x/mcu/drivers/peripheral_drivers/src/sl_si91x_m4_ps.c
     ${WISECONNECT}/components/device/silabs/si91x/mcu/drivers/service/power_manager/src/sl_si91x_power_manager.c
     ${WISECONNECT}/components/device/silabs/si91x/mcu/drivers/service/power_manager/src/sli_si91x_power_manager.c
-    ${WISECONNECT}/components/device/silabs/si91x/mcu/drivers/service/clock_manager/src/sli_si91x_clock_manager.c
     ${WISECONNECT}/components/device/silabs/si91x/mcu/drivers/systemlevel/src/rsi_temp_sensor.c
     ${SISDK}/platform/common/src/sl_slist.c
   )
@@ -312,6 +326,8 @@ if(CONFIG_PM)
     SLI_WIRELESS_COMPONENT_PRESENT
   )
   zephyr_code_relocate(FILES
+    # if CLOCK_ROMDRIVER_PRESENT is not defined, rsi_pll.c needs to be in RAM for QSPI clock reconfiguration
+    ${WISECONNECT}/components/device/silabs/si91x/mcu/drivers/systemlevel/src/rsi_pll.c
     ${WISECONNECT}/components/device/silabs/si91x/mcu/core/chip/src/rsi_deepsleep_soc.c
     ${WISECONNECT}/components/device/silabs/si91x/mcu/drivers/service/power_manager/src/sl_si91x_power_manager.c
     ${WISECONNECT}/components/device/silabs/si91x/mcu/drivers/service/power_manager/src/sli_si91x_power_manager.c
@@ -320,5 +336,6 @@ if(CONFIG_PM)
     ${ZEPHYR_BASE}/drivers/gpio/gpio_silabs_siwx91x.c
     ${ZEPHYR_BASE}/drivers/gpio/gpio_silabs_siwx91x_uulp.c
     LOCATION RAM
+    NOKEEP
   )
 endif() # CONFIG_PM

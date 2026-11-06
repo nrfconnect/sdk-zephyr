@@ -51,8 +51,8 @@
 };
 
 &clk_msi {
-	status = "okay";
 	msi-range = <6>;
+	status = "okay";
 };
 
 &pll {
@@ -74,16 +74,20 @@
 };
 
 &dac1 {
-	status = "okay";
 	pinctrl-0 = <&dac1_out1_pa4>;
 	pinctrl-names = "default";
+	status = "okay";
+};
+
+&adc12_common {
+	st,adc-prescaler = <4>;
+	st,adc-clock-source = "SYNC";
+	status = "okay";
 };
 
 &adc1 {
 	pinctrl-0 = <&adc1_in1_pc0>;
 	pinctrl-names = "default";
-	st,adc-clock-source = "SYNC";
-	st,adc-prescaler = <4>;
 	status = "okay";
 };
 

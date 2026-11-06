@@ -13,14 +13,15 @@
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 
 / {
-	model = "STMicroelectronics STM32L073RZ-NUCLEO board";
 	compatible = "st,stm32l073rz-nucleo";
+	model = "STMicroelectronics STM32L073RZ-NUCLEO board";
 
 	chosen {
 		zephyr,console = &usart2;
 		zephyr,shell-uart = &usart2;
 		zephyr,sram = &sram0;
 		zephyr,flash = &flash0;
+		zephyr,system-timer = &lptim1;
 	};
 
 	leds: leds {
@@ -93,7 +94,7 @@
 	apb2-prescaler = <1>;
 };
 
-stm32_lp_tick_source: &lptim1 {
+&lptim1 {
 	/*
 	 * LSI freq is 37KHz but stm32_lptim driver is using 32000Hz
 	 * resulting in time running 1.13 faster than reality
@@ -121,8 +122,8 @@ stm32_lp_tick_source: &lptim1 {
 	pinctrl-names = "default";
 	scl-gpios = <&gpiob 8 GPIO_ACTIVE_HIGH>;
 	sda-gpios = <&gpiob 9 GPIO_ACTIVE_HIGH>;
-	status = "okay";
 	clock-frequency = <I2C_BITRATE_FAST>;
+	status = "okay";
 };
 
 &i2c2 {
@@ -130,8 +131,8 @@ stm32_lp_tick_source: &lptim1 {
 	pinctrl-names = "default";
 	scl-gpios = <&gpiob 10 GPIO_ACTIVE_HIGH>;
 	sda-gpios = <&gpiob 11 GPIO_ACTIVE_HIGH>;
-	status = "okay";
 	clock-frequency = <I2C_BITRATE_FAST>;
+	status = "okay";
 };
 
 &spi1 {
@@ -144,11 +145,15 @@ stm32_lp_tick_source: &lptim1 {
 	status = "okay";
 };
 
+&adc1_common {
+	st,adc-clock-source = "SYNC";
+	st,adc-prescaler = <4>;
+	status = "okay";
+};
+
 &adc1 {
 	pinctrl-0 = <&adc_in0_pa0>;
 	pinctrl-names = "default";
-	st,adc-clock-source = "SYNC";
-	st,adc-prescaler = <4>;
 	status = "okay";
 };
 
@@ -157,9 +162,9 @@ stm32_lp_tick_source: &lptim1 {
 };
 
 &dac1 {
-	status = "okay";
 	pinctrl-0 = <&dac_out1_pa4>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &timers2 {

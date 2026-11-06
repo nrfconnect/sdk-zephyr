@@ -66,7 +66,8 @@ static void modem_backend_uart_async_event_handler(const struct device *dev,
 
 	case UART_TX_ABORTED:
 		if (modem_backend_uart_async_is_open(backend)) {
-			LOG_WRN("Transmit aborted (%zu sent)", evt->data.tx.len);
+			LOG_WRN("%s: Transmit aborted (%zu sent)", backend->uart->name,
+				evt->data.tx.len);
 		}
 		atomic_clear_bit(&backend->async.common.state,
 				 MODEM_BACKEND_UART_ASYNC_STATE_TRANSMITTING_BIT);
@@ -91,7 +92,7 @@ static void modem_backend_uart_async_event_handler(const struct device *dev,
 			break;
 		}
 
-		LOG_WRN("No receive buffer available");
+		LOG_WRN("%s: No receive buffer available", backend->uart->name);
 		break;
 
 	case UART_RX_BUF_RELEASED:
@@ -109,7 +110,7 @@ static void modem_backend_uart_async_event_handler(const struct device *dev,
 			break;
 		}
 
-		LOG_WRN("Unknown receive buffer released");
+		LOG_WRN("%s: Unknown receive buffer released", backend->uart->name);
 		break;
 
 	case UART_RX_RDY:
@@ -124,7 +125,7 @@ static void modem_backend_uart_async_event_handler(const struct device *dev,
 			ring_buf_reset(&backend->async.receive_rb);
 			k_spin_unlock(&backend->async.receive_rb_lock, key);
 
-			LOG_WRN("Receive buffer overrun (dropped %u + %u)",
+			LOG_WRN("%s: Receive buffer overrun (dropped %u + %u)", backend->uart->name,
 				buf_size - received, (unsigned int)evt->data.rx.len);
 			break;
 		}
@@ -139,7 +140,8 @@ static void modem_backend_uart_async_event_handler(const struct device *dev,
 		break;
 
 	case UART_RX_STOPPED:
-		LOG_WRN("Receive stopped for reasons: %u", (uint8_t)evt->data.rx_stop.reason);
+		LOG_WRN("%s: Receive stopped for reasons: %u", backend->uart->name,
+			(uint8_t)evt->data.rx_stop.reason);
 		break;
 
 	default:
@@ -161,7 +163,7 @@ static int modem_backend_uart_async_open(void *data)
 
 	ret = pm_device_runtime_get(backend->uart);
 	if (ret < 0) {
-		LOG_ERR("Failed to power on UART: %d", ret);
+		LOG_ERR_PM_DEVICE_RUNTIME_GET(backend->uart, ret);
 		return ret;
 	}
 	if (backend->dtr_gpio) {
@@ -213,11 +215,15 @@ static uint32_t get_transmit_buf_size(struct modem_backend_uart *backend)
 	return backend->async.common.transmit_buf_size;
 }
 
-static int modem_backend_uart_async_transmit(void *data, const uint8_t *buf, size_t size)
+static int modem_backend_uart_async_transmit_chain(void *data,
+						   const struct modem_pipe_data_fragment *frags,
+						   size_t num_frags)
 {
 	struct modem_backend_uart *backend = (struct modem_backend_uart *)data;
+	uint32_t remaining = get_transmit_buf_size(backend);
+	uint32_t offset = 0;
+	uint32_t to_copy;
 	bool transmitting;
-	uint32_t bytes_to_transmit;
 	int ret;
 
 	transmitting = atomic_test_and_set_bit(&backend->async.common.state,
@@ -226,26 +232,32 @@ static int modem_backend_uart_async_transmit(void *data, const uint8_t *buf, siz
 		return 0;
 	}
 
-	/* Determine amount of bytes to transmit */
-	bytes_to_transmit = MIN(size, get_transmit_buf_size(backend));
+	/* Linearize data from fragments into internal buffer */
+	for (int i = 0; i < num_frags; i++) {
+		to_copy = MIN(remaining, frags[i].size);
+		memcpy(backend->async.common.transmit_buf + offset, frags[i].data, to_copy);
+		offset += to_copy;
+		remaining -= to_copy;
+		if (remaining == 0) {
+			/* Early exit if no space remaining */
+			break;
+		}
+	}
 
-	/* Copy buf to transmit buffer which is passed to UART */
-	memcpy(backend->async.common.transmit_buf, buf, bytes_to_transmit);
-
-	ret = uart_tx(backend->uart, backend->async.common.transmit_buf, bytes_to_transmit,
+	ret = uart_tx(backend->uart, backend->async.common.transmit_buf, offset,
 		      CONFIG_MODEM_BACKEND_UART_ASYNC_TRANSMIT_TIMEOUT_MS * 1000L);
 
 #if CONFIG_MODEM_STATS
-	advertise_transmit_buf_stats(backend, bytes_to_transmit);
+	advertise_transmit_buf_stats(backend, offset);
 #endif
 
 	if (ret != 0) {
-		LOG_ERR("Failed to %s %u bytes. (%d)",
-			"start async transmit for", bytes_to_transmit, ret);
+		LOG_ERR("%s: Failed to %s %u bytes. (%d)", backend->uart->name,
+			"start async transmit for", offset, ret);
 		return ret;
 	}
 
-	return (int)bytes_to_transmit;
+	return (int)offset;
 }
 
 static int modem_backend_uart_async_receive(void *data, uint8_t *buf, size_t size)
@@ -288,7 +300,7 @@ static int modem_backend_uart_async_close(void *data)
 	}
 	ret = pm_device_runtime_put_async(backend->uart, K_NO_WAIT);
 	if (ret < 0) {
-		LOG_ERR("Failed to power off UART: %d", ret);
+		LOG_ERR_PM_DEVICE_RUNTIME_PUT(backend->uart, ret);
 		return ret;
 	}
 	return 0;
@@ -296,7 +308,7 @@ static int modem_backend_uart_async_close(void *data)
 
 static const struct modem_pipe_api modem_backend_uart_async_api = {
 	.open = modem_backend_uart_async_open,
-	.transmit = modem_backend_uart_async_transmit,
+	.transmit_chain = modem_backend_uart_async_transmit_chain,
 	.receive = modem_backend_uart_async_receive,
 	.close = modem_backend_uart_async_close,
 };

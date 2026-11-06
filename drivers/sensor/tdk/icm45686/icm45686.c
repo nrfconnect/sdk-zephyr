@@ -203,6 +203,7 @@ static int icm45686_channel_get(const struct device *dev, enum sensor_channel ch
 		} else if ((cfg->apex == TDK_APEX_TILT) || (cfg->apex == TDK_APEX_SMD)) {
 			val[0].val1 = data->apex_status;
 		}
+		break;
 #endif
 
 	default:
@@ -323,6 +324,54 @@ static DEVICE_API(sensor, icm45686_driver_api) = {
 #endif /* CONFIG_SENSOR_ASYNC_API */
 };
 
+/*
+ * The FIR anti-alias filters are off at power-up. They are enabled without the interpolator,
+ * which only re-times the data to an external clock or in I3C synchronous mode.
+ */
+static int icm45686_enable_aaf(inv_imu_device_t *s, const struct icm45686_config *cfg)
+{
+	int err;
+
+	if (cfg->settings.gyro.aaf) {
+		ipreg_sys1_reg_166_t ipreg_sys1_reg_166;
+
+		/* Wait for the previous indirect register write to take effect */
+		k_sleep(K_MSEC(1));
+
+		err = icm456xx_read_reg(s, IPREG_SYS1_REG_166, 1, (uint8_t *)&ipreg_sys1_reg_166);
+		if (err < 0) {
+			return err;
+		}
+
+		ipreg_sys1_reg_166.gyro_src_ctrl =
+			IPREG_SYS1_REG_166_GYRO_SRC_CTRL_INTERPOLATOR_OFF_FIR_ON;
+		err = icm456xx_write_reg(s, IPREG_SYS1_REG_166, 1, (uint8_t *)&ipreg_sys1_reg_166);
+		if (err < 0) {
+			return err;
+		}
+	}
+
+	if (cfg->settings.accel.aaf) {
+		ipreg_sys2_reg_123_t ipreg_sys2_reg_123;
+
+		k_sleep(K_MSEC(1));
+
+		err = icm456xx_read_reg(s, IPREG_SYS2_REG_123, 1, (uint8_t *)&ipreg_sys2_reg_123);
+		if (err < 0) {
+			return err;
+		}
+
+		ipreg_sys2_reg_123.accel_src_ctrl =
+			IPREG_SYS2_REG_123_ACCEL_SRC_CTRL_INTERPOLATOR_OFF_FIR_ON;
+		err = icm456xx_write_reg(s, IPREG_SYS2_REG_123, 1, (uint8_t *)&ipreg_sys2_reg_123);
+		if (err < 0) {
+			return err;
+		}
+	}
+
+	return 0;
+}
+
 static int icm45686_init(const struct device *dev)
 {
 	struct icm45686_data *data = dev->data;
@@ -377,6 +426,11 @@ static int icm45686_init(const struct device *dev)
 		return err;
 	}
 
+	if (read_val != cfg->whoami) {
+		LOG_ERR("Unexpected WHO_AM_I: 0x%02X (expected 0x%02X)", read_val, cfg->whoami);
+		return -ENODEV;
+	}
+
 	/* Sensor Configuration */
 	err = icm456xx_set_accel_mode(&data->driver, cfg->settings.accel.pwr_mode);
 	if (err < 0) {
@@ -426,9 +480,15 @@ static int icm45686_init(const struct device *dev)
 	 */
 	k_sleep(K_MSEC(1));
 
-	icm456xx_set_accel_ln_bw(&data->driver, cfg->settings.accel.lpf);
+	err = icm456xx_set_accel_ln_bw(&data->driver, cfg->settings.accel.lpf);
 	if (err < 0) {
 		LOG_ERR("Failed to set Accel BW settings: %d", err);
+		return err;
+	}
+
+	err = icm45686_enable_aaf(&data->driver, cfg);
+	if (err < 0) {
+		LOG_ERR("Failed to enable the anti-alias filters: %d", err);
 		return err;
 	}
 
@@ -483,7 +543,7 @@ static int icm45686_init(const struct device *dev)
 	 (pwr_mode == ICM45686_DT_GYRO_LN && odr <= ICM45686_DT_GYRO_ODR_12_5) || \
 	 (pwr_mode == ICM45686_DT_GYRO_OFF))
 
-#define ICM45686_INIT(inst) \
+#define ICM45686_INIT(inst, whoami_val) \
  \
 	RTIO_DEFINE(icm45686_rtio_ctx_##inst, 32, 32); \
  \
@@ -497,7 +557,7 @@ static int icm45686_init(const struct device *dev)
 	COND_CODE_1(DT_INST_ON_BUS(inst, spi), \
 			(SPI_DT_IODEV_DEFINE(icm45686_bus_##inst, \
 				DT_DRV_INST(inst), \
-				SPI_OP_MODE_MASTER | SPI_WORD_SET(8) | SPI_TRANSFER_MSB)), \
+				SPI_OP_MODE_CONTROLLER | SPI_WORD_SET(8) | SPI_TRANSFER_MSB)), \
 		    ()); \
  \
 	static const struct icm45686_config icm45686_cfg_##inst = { \
@@ -507,18 +567,21 @@ static int icm45686_init(const struct device *dev)
 				.fs = DT_INST_PROP(inst, accel_fs), \
 				.odr = DT_INST_PROP(inst, accel_odr), \
 				.lpf = DT_INST_PROP_OR(inst, accel_lpf, 0), \
+				.aaf = DT_INST_PROP(inst, accel_aaf), \
 			}, \
 			.gyro = { \
 				.pwr_mode = DT_INST_PROP(inst, gyro_pwr_mode), \
 				.fs = DT_INST_PROP(inst, gyro_fs), \
 				.odr = DT_INST_PROP(inst, gyro_odr), \
 				.lpf = DT_INST_PROP_OR(inst, gyro_lpf, 0), \
+				.aaf = DT_INST_PROP(inst, gyro_aaf), \
 			}, \
 			.fifo_watermark = DT_INST_PROP_OR(inst, fifo_watermark, 0), \
 			.fifo_watermark_equals = DT_INST_PROP(inst, fifo_watermark_equals), \
 		}, \
 		.int_gpio = GPIO_DT_SPEC_INST_GET_OR(inst, int_gpios, {0}), \
 		.apex = DT_INST_ENUM_IDX(inst, apex), \
+		.whoami = whoami_val, \
 	}; \
 	static struct icm45686_data icm45686_data_##inst = { \
 		.edata.header = { \
@@ -556,20 +619,20 @@ static int icm45686_init(const struct device *dev)
 
 #undef DT_DRV_COMPAT
 #define DT_DRV_COMPAT invensense_icm45605
-DT_INST_FOREACH_STATUS_OKAY(ICM45686_INIT)
+DT_INST_FOREACH_STATUS_OKAY_VARGS(ICM45686_INIT, WHO_AM_I_ICM45605)
 
 #undef DT_DRV_COMPAT
 #define DT_DRV_COMPAT invensense_icm45605s
-DT_INST_FOREACH_STATUS_OKAY(ICM45686_INIT)
+DT_INST_FOREACH_STATUS_OKAY_VARGS(ICM45686_INIT, WHO_AM_I_ICM45605S)
 
 #undef DT_DRV_COMPAT
 #define DT_DRV_COMPAT invensense_icm45686
-DT_INST_FOREACH_STATUS_OKAY(ICM45686_INIT)
+DT_INST_FOREACH_STATUS_OKAY_VARGS(ICM45686_INIT, WHO_AM_I_ICM45686)
 
 #undef DT_DRV_COMPAT
 #define DT_DRV_COMPAT invensense_icm45686s
-DT_INST_FOREACH_STATUS_OKAY(ICM45686_INIT)
+DT_INST_FOREACH_STATUS_OKAY_VARGS(ICM45686_INIT, WHO_AM_I_ICM45686S)
 
 #undef DT_DRV_COMPAT
 #define DT_DRV_COMPAT invensense_icm45688p
-DT_INST_FOREACH_STATUS_OKAY(ICM45686_INIT)
+DT_INST_FOREACH_STATUS_OKAY_VARGS(ICM45686_INIT, WHO_AM_I_ICM45688P)

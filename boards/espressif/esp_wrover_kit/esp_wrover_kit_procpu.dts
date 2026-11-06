@@ -5,13 +5,13 @@
  */
 /dts-v1/;
 
-#include <espressif/esp32/esp32_wrover_e_n4r8.dtsi>
+#include <espressif/esp32/esp32.dtsi>
 #include "esp_wrover_kit-pinctrl.dtsi"
 #include <espressif/partitions_0x1000_amp.dtsi>
 
 / {
-	model = "Espressif ESP32-Wrover-Kit PROCPU";
 	compatible = "espressif,esp32";
+	model = "Espressif ESP32-Wrover-Kit PROCPU";
 
 	aliases {
 		led0 = &blue_led;
@@ -36,7 +36,6 @@
 		zephyr,flash = &flash0;
 		zephyr,code-partition = &slot0_partition;
 		zephyr,display = &ili9341;
-		zephyr,sdhc = &sdhc1;
 		zephyr,bt-hci = &esp32_bt_hci;
 	};
 
@@ -89,8 +88,8 @@
 
 		ili9341: ili9341@0 {
 			compatible = "ilitek,ili9341";
-			mipi-max-frequency = <25000000>;
 			reg = <0>;
+			mipi-max-frequency = <25000000>;
 			pixel-format = <0>;
 			rotation = <0>;
 			width = <240>;
@@ -99,21 +98,31 @@
 	};
 };
 
+&flash0 {
+	reg = <0x0 DT_SIZE_M(4)>;
+	ranges = <0x0 0x0 DT_SIZE_M(4)>;
+};
+
+&psram0 {
+	size = <DT_SIZE_M(8)>;
+};
+
 &uart0 {
-	status = "okay";
 	current-speed = <115200>;
 	pinctrl-0 = <&uart0_default>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &uart1 {
-	status = "disabled";
 	current-speed = <115200>;
 	pinctrl-0 = <&uart1_default>;
 	pinctrl-names = "default";
+	status = "disabled";
 };
 
 &gpio0 {
+	gpio-reserved-ranges = <6 6>, <16 2>, <20 1>, <24 1>, <28 4>;
 	status = "okay";
 
 	/* FIXME: should be part of the display node */
@@ -125,40 +134,41 @@
 };
 
 &gpio1 {
+	gpio-reserved-ranges = <5 2>;
 	status = "okay";
 };
 
 &i2c0 {
-	status = "okay";
 	clock-frequency = <I2C_BITRATE_STANDARD>;
 	sda-gpios = <&gpio0 21 GPIO_OPEN_DRAIN>;
 	scl-gpios = <&gpio0 22 GPIO_OPEN_DRAIN>;
 	pinctrl-0 = <&i2c0_default>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &spi2 {
 	#address-cells = <1>;
 	#size-cells = <0>;
-	status = "okay";
 	pinctrl-0 = <&spim2_default>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &spi3 {
 	#address-cells = <1>;
 	#size-cells = <0>;
-	status = "okay";
 	pinctrl-0 = <&spim3_default>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &ledc0 {
 	pinctrl-0 = <&ledc0_default>;
 	pinctrl-names = "default";
-	status = "okay";
 	#address-cells = <1>;
 	#size-cells = <0>;
+	status = "okay";
 
 	channel0@0 {
 		reg = <0x0>;
@@ -198,7 +208,6 @@
 
 &sdhc {
 	sdhc1: sdhc@1 {
-		status = "okay";
 
 		pinctrl-0 = <&sdhc0_default>;
 		pinctrl-names = "default";
@@ -212,6 +221,7 @@
 		d1-pin = <4>;
 		d2-pin = <12>;
 		d3-pin = <13>;
+		status = "okay";
 
 		mmc {
 			compatible = "zephyr,sdmmc-disk";

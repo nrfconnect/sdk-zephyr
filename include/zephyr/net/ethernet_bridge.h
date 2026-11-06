@@ -146,12 +146,17 @@ static inline bool net_eth_iface_is_bridged(struct ethernet_context *ctx)
 {
 #if defined(CONFIG_NET_ETHERNET_BRIDGE)
 	struct eth_bridge_iface_context *br_ctx;
+	const struct device *br_dev;
+
+	NET_ASSERT(ctx != NULL);
 
 	if (ctx->bridge == NULL) {
 		return false;
 	}
 
-	br_ctx = net_if_get_device(ctx->bridge)->data;
+	br_dev = net_if_get_device(ctx->bridge);
+
+	br_ctx = (struct eth_bridge_iface_context *)br_dev->data;
 	if (br_ctx->is_setup) {
 		return true;
 	}
@@ -169,6 +174,8 @@ static inline bool net_eth_iface_is_bridged(struct ethernet_context *ctx)
 static inline struct net_if *net_eth_get_bridge(struct ethernet_context *ctx)
 {
 #if defined(CONFIG_NET_ETHERNET_BRIDGE)
+	NET_ASSERT(ctx != NULL);
+
 	return ctx->bridge;
 #else
 	return NULL;

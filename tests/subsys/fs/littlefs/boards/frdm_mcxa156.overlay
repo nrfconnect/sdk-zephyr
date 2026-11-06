@@ -9,8 +9,9 @@
 &flash {
 	partitions {
 		small_partition: partition@e0000 {
-			label = "small";
+			compatible = "zephyr,mapped-partition";
 			reg = <0x000e0000 DT_SIZE_K(128)>;
+			label = "small";
 		};
 	};
 };

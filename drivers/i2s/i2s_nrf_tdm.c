@@ -565,8 +565,8 @@ static int tdm_nrf_configure(const struct device *dev, enum i2s_dir dir,
 		return -EINVAL;
 	}
 
-	if ((tdm_cfg->format & I2S_FMT_DATA_ORDER_LSB) || (tdm_cfg->format & I2S_FMT_BIT_CLK_INV) ||
-	    (tdm_cfg->format & I2S_FMT_FRAME_CLK_INV)) {
+	if (tdm_cfg->format &
+	    (I2S_FMT_DATA_ORDER_LSB | I2S_FMT_BIT_CLK_INV | I2S_FMT_FRAME_CLK_INV)) {
 		LOG_ERR("Unsupported stream format: 0x%02x", tdm_cfg->format);
 		return -EINVAL;
 	}
@@ -622,7 +622,7 @@ static int tdm_nrf_configure(const struct device *dev, enum i2s_dir dir,
 	 */
 	drv_data->request_clock = (drv_cfg->sck_src != PCLK) || (drv_cfg->mck_src != PCLK);
 
-	if ((tdm_cfg->options & I2S_OPT_LOOPBACK) || (tdm_cfg->options & I2S_OPT_PINGPONG)) {
+	if (tdm_cfg->options & (I2S_OPT_LOOPBACK | I2S_OPT_PINGPONG)) {
 		LOG_ERR("Unsupported options: 0x%02x", tdm_cfg->options);
 		return -EINVAL;
 	}
@@ -716,6 +716,10 @@ static int tdm_nrf_write(const struct device *dev, void *mem_block, size_t size)
 
 	ret = dmm_buffer_out_prepare(drv_cfg->mem_reg, buf.mem_block, buf.size,
 				     (void **)&buf.dmm_buf);
+	if (ret < 0) {
+		LOG_ERR("Failed to prepare buffer: %d", ret);
+		return ret;
+	}
 	ret = k_msgq_put(&drv_data->tx_queue, &buf, SYS_TIMEOUT_MS(drv_data->tx.cfg.timeout));
 	if (ret < 0) {
 		return ret;

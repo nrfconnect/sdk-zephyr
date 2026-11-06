@@ -19,19 +19,19 @@ tests:
         - "Position = (.*) degrees"
 
   sample.sensor.eqdc_trigger:
-    platform_allow:
-      - frdm_mcxa153
-      - frdm_mcxa156
-      - frdm_mcxa266
-      - frdm_mcxa344
-      - frdm_mcxa346
-      - frdm_mcxa366
+    filter: >
+      dt_alias_exists("qdec0") and dt_alias_exists("qenca")
+      and dt_alias_exists("qencb") and CONFIG_EQDC_MCUX
     integration_platforms:
       - frdm_mcxa153
+    extra_configs:
+      - CONFIG_EQDC_MCUX_TRIGGER=y
     depends_on: gpio
     harness_config:
       type: multi_line
       ordered: true
+      fixture:
+        - qdec_gpio
       regex:
         - "Quadrature decoder sensor test"
         - "Quadrature encoder emulator enabled with (.*) ms period"
@@ -52,6 +52,19 @@ tests:
         - "Quadrature decoder sensor test"
         - "Position = (.*) degrees"
 
+  sample.sensor.nxp_mcux_qdec_sensor:
+    platform_allow:
+      - mimxrt1050_evk/mimxrt1052/hyperflash
+      - mimxrt1170_evk@A/mimxrt1176/cm7
+    integration_platforms:
+      - mimxrt1050_evk/mimxrt1052/hyperflash
+    harness_config:
+      type: multi_line
+      ordered: true
+      regex:
+        - "Quadrature decoder sensor test"
+        - "Position = (.*) degrees"
+
   sample.sensor.nrf_qdec_sensor:
     platform_allow:
       - nrf52840dk/nrf52840
@@ -61,6 +74,7 @@ tests:
       - nrf54lm20dk/nrf54lm20a/cpuapp
       - nrf54lm20dk/nrf54lm20b/cpuapp
       - nrf7120dk/nrf7120/cpuapp
+      - nrf7120dk/nrf7120e/cpuapp
       - ophelia4ev/nrf54l15/cpuapp
     integration_platforms:
       - nrf52840dk/nrf52840
@@ -69,6 +83,7 @@ tests:
       - nrf54l15dk/nrf54l15/cpuapp
       - nrf54lm20dk/nrf54lm20a/cpuapp
       - nrf7120dk/nrf7120/cpuapp
+      - nrf7120dk/nrf7120e/cpuapp
       - ophelia4ev/nrf54l15/cpuapp
     harness_config:
       fixture: gpio_loopback

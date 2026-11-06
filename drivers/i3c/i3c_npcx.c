@@ -468,19 +468,22 @@ static inline int npcx_i3c_request_auto_ibi(struct i3c_reg *inst)
 /*
  * brief:  Controller emit start and send address
  *
- * param[in] inst     Pointer to I3C register.
- * param[in] addr     Dynamic address for xfer or 0x7E for CCC command.
- * param[in] op_type  Request type.
- * param[in] is_read  Read(true) or write(false) operation.
- * param[in] read_sz  Read size in bytes.
- *                    If op_tye is HDR-DDR, the read_sz must be the number of words.
+ * param[in] inst            Pointer to I3C register.
+ * param[in] addr            Dynamic address for xfer or 0x7E for CCC command.
+ * param[in] op_type         Request type.
+ * param[in] is_read         Read(true) or write(false) operation.
+ * param[in] read_sz         Read size in bytes.
+ *                           If op_tye is HDR-DDR, the read_sz must be the number of words.
+ * param[in] noack_expected  True if a NACK from the target is expected for this
+ *                           transfer, false otherwise.
  *
  * return  0, success
+ *         -ENODATA  If noack_expected is true and the target NACKs the address.
  *         else, error
  */
 static int npcx_i3c_request_emit_start(struct i3c_reg *inst, uint8_t addr,
 				       enum npcx_i3c_mctrl_type op_type, bool is_read,
-				       size_t read_sz)
+				       size_t read_sz, bool noack_expected)
 {
 	uint32_t mctrl = 0;
 	int ret;
@@ -513,6 +516,11 @@ static int npcx_i3c_request_emit_start(struct i3c_reg *inst, uint8_t addr,
 
 	/* Check NACK after MCTRLDONE is get */
 	if (IS_BIT_SET(inst->MERRWARN, NPCX_I3C_MERRWARN_NACK)) {
+		if (noack_expected) {
+			LOG_DBG("Address nacked (expected)");
+			return -ENODATA;
+		}
+
 		LOG_DBG("Address nacked");
 		return -ENODEV;
 	}
@@ -607,6 +615,9 @@ static inline int npcx_i3c_xfer_stop(struct i3c_reg *inst)
 	LOG_DBG("Current working state=%d", state);
 
 	switch (state) {
+	case MSTATUS_STATE_IDLE:
+		ret = 0;
+		break;
 	case MSTATUS_STATE_NORMACT: /* SDR */
 		ret = npcx_i3c_request_emit_stop(inst);
 		break;
@@ -1041,14 +1052,18 @@ out_xfer_rd_fifo_dma:
  * param[in] buf         Buffer for data to be sent or received.
  * param[in] buf_sz      Buffer size in bytes.
  * param[in] is_read     True if this is a read transaction, false if write.
- * param[in] emit_start  True if START is needed before read/write.
- * param[in] emit_stop   True if STOP is needed after read/write.
+ * param[in] emit_start      True if START is needed before read/write.
+ * param[in] emit_stop       True if STOP is needed after read/write.
+ * param[in] noack_expected  True if a NACK from the target is expected for
+ *                           this transfer, false otherwise.
  *
  * return  Number of bytes read/written, or negative if error.
+ *         -ENODATA  If noack_expected is true and the target NACKs the transfer.
  */
 static int npcx_i3c_do_one_xfer_dma(const struct device *dev, uint8_t addr,
 				    enum npcx_i3c_mctrl_type op_type, uint8_t *buf, size_t buf_sz,
-				    bool is_read, bool emit_start, bool emit_stop, uint8_t hdr_cmd)
+				    bool is_read, bool emit_start, bool emit_stop, uint8_t hdr_cmd,
+				    bool noack_expected)
 {
 	const struct npcx_i3c_config *config = dev->config;
 	struct i3c_reg *inst = config->base;
@@ -1086,9 +1101,12 @@ static int npcx_i3c_do_one_xfer_dma(const struct device *dev, uint8_t addr,
 			inst->MWDATAB = hdr_cmd;
 		}
 
-		ret = npcx_i3c_request_emit_start(inst, addr, op_type, is_read, rd_len);
+		ret = npcx_i3c_request_emit_start(inst, addr, op_type, is_read, rd_len,
+						  noack_expected);
 		if (ret != 0) {
-			LOG_ERR("%s: emit start fail", __func__);
+			if (ret != -ENODATA) {
+				LOG_ERR("%s: emit start fail", __func__);
+			}
 			goto out_do_one_xfer_dma;
 		}
 	}
@@ -1136,15 +1154,19 @@ out_do_one_xfer_dma:
  * param[in] buf         Buffer for data to be sent or received.
  * param[in] buf_sz      Buffer size in bytes.
  * param[in] is_read     True if this is a read transaction, false if write.
- * param[in] emit_start  True if START is needed before read/write.
- * param[in] emit_stop   True if STOP is needed after read/write.
- * param[in] no_ending   True if not to signal end of write message.
+ * param[in] emit_start      True if START is needed before read/write.
+ * param[in] emit_stop       True if STOP is needed after read/write.
+ * param[in] no_ending       True if not to signal end of write message.
+ * param[in] noack_expected  True if a NACK from the target is expected for
+ *                           this transfer, false otherwise.
  *
  * return  Number of bytes read/written, or negative if error.
+ *         -ENODATA  If noack_expected is true and the target NACKs the transfer.
  */
 static int npcx_i3c_do_one_xfer(struct i3c_reg *inst, uint8_t addr,
 				enum npcx_i3c_mctrl_type op_type, uint8_t *buf, size_t buf_sz,
-				bool is_read, bool emit_start, bool emit_stop, bool no_ending)
+				bool is_read, bool emit_start, bool emit_stop, bool no_ending,
+				bool noack_expected)
 {
 	int ret = 0;
 
@@ -1153,9 +1175,12 @@ static int npcx_i3c_do_one_xfer(struct i3c_reg *inst, uint8_t addr,
 
 	/* Emit START if needed */
 	if (emit_start) {
-		ret = npcx_i3c_request_emit_start(inst, addr, op_type, is_read, buf_sz);
+		ret = npcx_i3c_request_emit_start(inst, addr, op_type, is_read, buf_sz,
+						  noack_expected);
 		if (ret != 0) {
-			LOG_ERR("%s: emit start fail", __func__);
+			if (ret != -ENODATA) {
+				LOG_ERR("%s: emit start fail", __func__);
+			}
 			goto out_do_one_xfer;
 		}
 	}
@@ -1275,6 +1300,8 @@ static int npcx_i3c_transfer(const struct device *dev, struct i3c_device_desc *t
 #ifdef CONFIG_I3C_NPCX_DMA
 		bool emit_start =
 			(i == 0) || ((msgs[i].flags & I3C_MSG_RESTART) == I3C_MSG_RESTART);
+		bool noack_expected =
+			(msgs[i].flags & I3C_MSG_NOACK_EXPECTED) == I3C_MSG_NOACK_EXPECTED;
 #endif
 
 		bool emit_stop = (msgs[i].flags & I3C_MSG_STOP) == I3C_MSG_STOP;
@@ -1327,7 +1354,7 @@ static int npcx_i3c_transfer(const struct device *dev, struct i3c_device_desc *t
 			if (!(msgs[i].flags & I3C_MSG_NBCH) && send_broadcast) {
 				ret = npcx_i3c_request_emit_start(inst, I3C_BROADCAST_ADDR,
 								  NPCX_I3C_MCTRL_TYPE_I3C, false,
-								  0);
+								  0, false);
 				if (ret < 0) {
 					LOG_ERR("%s: emit start of broadcast addr failed, error "
 						"(%d)",
@@ -1362,11 +1389,14 @@ static int npcx_i3c_transfer(const struct device *dev, struct i3c_device_desc *t
 		/* Do transfer with target device */
 		xfered_len = npcx_i3c_do_one_xfer_dma(dev, target->dynamic_addr, op_type,
 						      msgs[i].buf, msgs[i].len, is_read, emit_start,
-						      emit_stop, msgs[i].hdr_cmd_code);
+						      emit_stop, msgs[i].hdr_cmd_code,
+						      noack_expected);
 #endif
 
 		if (xfered_len < 0) {
-			LOG_ERR("%s: do xfer fail", __func__);
+			if (xfered_len != -ENODATA) {
+				LOG_ERR("%s: do xfer fail", __func__);
+			}
 			ret = xfered_len; /* Set error code to ret */
 			break;
 		}
@@ -1496,9 +1526,8 @@ static int npcx_i3c_do_daa(const struct device *dev)
 			LOG_DBG("DAA: Rcvd PID 0x%04x%08x", vendor_id, part_no);
 
 			/* Find a usable address during ENTDAA */
-			ret = i3c_dev_list_daa_addr_helper(&data->common.attached_dev.addr_slots,
-							   &config->common.dev_list, pid, false,
-							   false, &target, &dyn_addr);
+			ret = i3c_dev_list_daa_addr_helper(dev, pid, false, false, &target,
+							   &dyn_addr);
 			if (ret != 0) {
 				LOG_ERR("%s: Assign new DA error", __func__);
 				break;
@@ -1513,6 +1542,12 @@ static int npcx_i3c_do_daa(const struct device *dev)
 				target->dynamic_addr = dyn_addr;
 				target->bcr = rx_buf[6];
 				target->dcr = rx_buf[7];
+
+				int aret = i3c_attach_i3c_device(target);
+
+				if (aret != 0 && aret != -EALREADY) {
+					LOG_ERR("Failed to attach target");
+				}
 			}
 
 			/* Mark the address as I3C device */
@@ -1527,7 +1562,7 @@ static int npcx_i3c_do_daa(const struct device *dev)
 			if ((target != NULL) && (target->static_addr != 0U) &&
 			    (dyn_addr != target->static_addr)) {
 				i3c_addr_slots_mark_free(&data->common.attached_dev.addr_slots,
-							 dyn_addr);
+							 target->static_addr);
 			}
 
 			/* Emit process DAA again to send the address to the device */
@@ -1620,7 +1655,7 @@ static int npcx_i3c_do_ccc(const struct device *dev, struct i3c_ccc_payload *pay
 
 	/* Write emit START and broadcast address (0x7E) */
 	ret = npcx_i3c_request_emit_start(inst, I3C_BROADCAST_ADDR, NPCX_I3C_MCTRL_TYPE_I3C, false,
-					  0);
+					  0, false);
 	if (ret < 0) {
 		LOG_ERR("CCC[0x%02x] %s START error (%d)", payload->ccc.id,
 			i3c_ccc_is_payload_broadcast(payload) ? "broadcast" : "direct", ret);
@@ -1683,7 +1718,7 @@ static int npcx_i3c_do_ccc(const struct device *dev, struct i3c_ccc_payload *pay
 
 			xfered_len = npcx_i3c_do_one_xfer(
 				inst, tgt_payload->addr, NPCX_I3C_MCTRL_TYPE_I3C, tgt_payload->data,
-				tgt_payload->data_len, is_read, true, false, false);
+				tgt_payload->data_len, is_read, true, false, false, false);
 			if (xfered_len < 0) {
 				ret = xfered_len;
 				LOG_ERR("CCC[0x%02x] target payload error (%d)", payload->ccc.id,
@@ -2048,6 +2083,7 @@ out_ibi_disable:
 }
 #endif /* CONFIG_I3C_USE_IBI */
 
+#ifdef CONFIG_I3C_USE_IBI
 static int npcx_i3c_target_ibi_raise(const struct device *dev, struct i3c_ibi *request)
 {
 	const struct npcx_i3c_config *config = dev->config;
@@ -2140,6 +2176,7 @@ static int npcx_i3c_target_ibi_raise(const struct device *dev, struct i3c_ibi *r
 
 	return 0;
 }
+#endif /* CONFIG_I3C_USE_IBI */
 
 #ifdef CONFIG_I3C_NPCX_DMA
 static uint16_t npcx_i3c_target_get_mdmafb_count(const struct device *dev)
@@ -2759,6 +2796,22 @@ static int npcx_i3c_config_get(const struct device *dev, enum i3c_config_type ty
 	return 0;
 }
 
+static void npcx_i3c_target_log_errwarn(const struct device *dev, uint32_t errwarn)
+{
+	uint32_t faults = errwarn & ~BIT(NPCX_I3C_ERRWARN_URUNNACK);
+
+	/* Let's not be verbose about this - the controller may be simply
+	 * polling us.
+	 */
+	if (IS_BIT_SET(errwarn, NPCX_I3C_ERRWARN_URUNNACK)) {
+		LOG_DBG("%s: no TX data pending, read request NACKed", dev->name);
+	}
+
+	if (faults != 0U) {
+		LOG_ERR("%s: Error %#x", dev->name, faults);
+	}
+}
+
 static void npcx_i3c_target_isr(const struct device *dev)
 {
 	struct npcx_i3c_data *data = dev->data;
@@ -2849,8 +2902,10 @@ static void npcx_i3c_target_isr(const struct device *dev)
 
 		/* Check error or warning has occurred */
 		if (IS_BIT_SET(inst->INTMASKED, NPCX_I3C_INTMASKED_ERRWARN)) {
-			LOG_ERR("%s: Error %#x", __func__, inst->ERRWARN);
-			inst->ERRWARN = inst->ERRWARN;
+			uint32_t errwarn = inst->ERRWARN;
+
+			npcx_i3c_target_log_errwarn(dev, errwarn);
+			inst->ERRWARN = errwarn;
 		}
 
 		/* Check incoming header matched target dynamic address */

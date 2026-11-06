@@ -9,8 +9,8 @@
 #include "holyiot_25008_common.dtsi"
 
 / {
-	model = "HOLYIOT 25008";
 	compatible = "holyiot,holyiot_25008-nrf54l15-cpuapp";
+	model = "HOLYIOT 25008";
 
 	chosen {
 		zephyr,console = &uart20;
@@ -21,7 +21,7 @@
 		zephyr,flash-controller = &rram_controller;
 		zephyr,flash = &cpuapp_rram;
 		zephyr,code-partition = &slot0_partition;
-		zephyr,sram = &cpuapp_sram;
+		zephyr,sram = &cpuapp_sram_app;
 		zephyr,ieee802154 = &ieee802154;
 	};
 };

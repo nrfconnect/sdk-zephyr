@@ -5,12 +5,12 @@
  */
 /dts-v1/;
 
-#include <espressif/esp32s3/esp32s3_r8.dtsi>
+#include <espressif/esp32s3/esp32s3.dtsi>
 #include <espressif/partitions_0x0_amp_16M.dtsi>
 
 / {
-	model = "T-Watch S3 APPCPU";
 	compatible = "espressif,esp32s3";
+	model = "T-Watch S3 APPCPU";
 
 	chosen {
 		zephyr,sram = &sram0;
@@ -24,6 +24,10 @@
 &flash0 {
 	reg = <0x0 DT_SIZE_M(16)>;
 	ranges = <0x0 0x0 DT_SIZE_M(16)>;
+};
+
+&psram0 {
+	size = <DT_SIZE_M(8)>;
 };
 
 &trng0 {

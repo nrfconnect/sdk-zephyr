@@ -34,7 +34,7 @@ static void fill(char *dst, size_t len, char c)
 /* Bind a socket where api_client sends its requests, so a test can see them. */
 static int bind_server(void)
 {
-	struct net_sockaddr_in *addr = (struct net_sockaddr_in *)&api_client.server;
+	struct net_sockaddr_in *addr = (struct net_sockaddr_in *)&api_client.server_addr;
 	int fd;
 
 	addr->sin_family = NET_AF_INET;

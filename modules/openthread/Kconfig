@@ -45,6 +45,30 @@ config OPENTHREAD_SOURCES
 
 endchoice
 
+config OPENTHREAD_RADIO_VENDOR_IMPLEMENTATION
+	bool "Select vendor radio implementation"
+	depends on !NET_L2_OPENTHREAD
+	help
+	  Use a vendor-specific radio platform abstraction layer instead of the
+	  default Zephyr radio.c implementation. When enabled, the build system
+	  will compile the source file specified by
+	  OPENTHREAD_RADIO_VENDOR_IMPLEMENTATION_FILE in place of the standard
+	  OpenThread radio driver, allowing vendors to provide custom PHY-layer
+	  integration.
+
+config OPENTHREAD_RADIO_VENDOR_IMPLEMENTATION_FILE
+	string "Source file containing vendor-specific radio.c implementation"
+	default ""
+	depends on OPENTHREAD_RADIO_VENDOR_IMPLEMENTATION
+	help
+	  Name of the source file providing the vendor-specific OpenThread radio
+	  platform abstraction. This file must be placed in the
+	  modules/openthread/platform/vendor/ directory and implement the
+	  OpenThread radio API (otPlatRadio* plus platformRadioInit and
+	  platformRadioProcess functions).
+	  It will be compiled instead of the default radio.c driver
+	  during the build.
+
 config OPENTHREAD_MANUAL_START
 	bool "Start OpenThread stack manually"
 	help
@@ -171,18 +195,61 @@ config OPENTHREAD_CRYPTO_PSA
 	bool "PSA Crypto API"
 	default y
 	select PSA_CRYPTO
-	select OPENTHREAD_PLATFORM_KEY_REF if !OPENTHREAD_COPROCESSOR_RCP
+	select OPENTHREAD_PLATFORM_KEY_REF
 	imply OPENTHREAD_PLATFORM_KEYS_EXPORTABLE_ENABLE
 	help
 	  Use PSA Crypto API as backend for cryptographic operations instead
 	  of legacy Mbed TLS.
+
+menuconfig OPENTHREAD_CRYPTO_PLATFORM_ALLOCS_CONTEXT
+	bool "Platform-allocated OpenThread crypto contexts"
+	depends on OPENTHREAD_CRYPTO_PSA
+	help
+	  Allocate crypto operation contexts in the platform layer instead of
+	  the OpenThread core (OPENTHREAD_CONFIG_CRYPTO_PLATFORM_ALLOCS_CONTEXT).
+	  Each operation type has its own memory slab. Exhausting a slab is
+	  fatal.
+
+if OPENTHREAD_CRYPTO_PLATFORM_ALLOCS_CONTEXT
+
+config OPENTHREAD_CRYPTO_PLATFORM_ALLOCS_CONTEXT_SHA256_COUNT
+	int "SHA-256 context count"
+	range 1 32
+	default 4
+	help
+	  Maximum number of simultaneous SHA-256 operation contexts.
+
+config OPENTHREAD_CRYPTO_PLATFORM_ALLOCS_CONTEXT_HMAC_SHA256_COUNT
+	int "HMAC-SHA-256 context count"
+	range 1 32
+	default 4
+	help
+	  Maximum number of simultaneous HMAC-SHA-256 operation contexts.
+
+config OPENTHREAD_CRYPTO_PLATFORM_ALLOCS_CONTEXT_HKDF_COUNT
+	int "HKDF context count"
+	range 1 32
+	default 4
+	help
+	  Maximum number of simultaneous HKDF-SHA-256 operation contexts.
+
+config OPENTHREAD_CRYPTO_PLATFORM_ALLOCS_CONTEXT_AES_COUNT
+	int "AES context count"
+	range 1 32
+	default 4
+	help
+	  Maximum number of simultaneous AES operation contexts. Secured
+	  frames each take one.
+
+endif # OPENTHREAD_CRYPTO_PLATFORM_ALLOCS_CONTEXT
 
 if OPENTHREAD_SECURITY_DEFAULT_CONFIG
 
 config OPENTHREAD_CRYPTO_PSA_CONFIG
 	bool
 	default y
-	imply SECURE_STORAGE if !BUILD_WITH_TFM
+	imply SECURE_STORAGE if !OPENTHREAD_COPROCESSOR_RCP && \
+				!BUILD_WITH_TFM
 	select PSA_WANT_KEY_TYPE_AES
 	select PSA_WANT_ALG_ECB_NO_PADDING
 	select PSA_WANT_KEY_TYPE_HMAC
@@ -214,7 +281,6 @@ config OPENTHREAD_MBEDTLS_TLS_CONFIG
 	bool
 	default y
 	select MBEDTLS
-	select MBEDTLS_ENABLE_HEAP
 	select MBEDTLS_MD_C
 	select MBEDTLS_ASN1_PARSE_C
 	select MBEDTLS_SSL_PROTO_TLS1_2 if OPENTHREAD_COMMISSIONER_JOINER
@@ -225,6 +291,7 @@ config OPENTHREAD_MBEDTLS_TLS_CONFIG
 	select MBEDTLS_PK_WRITE_C if OPENTHREAD_ECDSA
 	select MBEDTLS_ECP_NIST_OPTIM if OPENTHREAD_COMMISSIONER_JOINER || \
 					 OPENTHREAD_ECDSA
+	imply MBEDTLS_ENABLE_HEAP
 	help
 	  TLS configuration of Mbed TLS.
 
@@ -240,7 +307,6 @@ config OPENTHREAD_MBEDTLS_LIB_NAME
 config OPENTHREAD_COPROCESSOR
 	bool "OpenThread Co-Processor"
 	select OPENTHREAD_MANUAL_START
-	select RING_BUFFER
 	select UART_INTERRUPT_DRIVEN if !OPENTHREAD_COPROCESSOR_UART_ASYNC
 	help
 	  Enable Co-Processor in OpenThread stack.
@@ -409,6 +475,8 @@ config OPENTHREAD_PLATFORM_CARRIER_FUNCTIONS
 config OPENTHREAD_PLATFORM_USEC_TIMER
 	bool
 	default y if (OPENTHREAD_CSL_RECEIVER && !OPENTHREAD_THREAD_VERSION_1_1) || OPENTHREAD_WAKEUP_END_DEVICE
+	default y if (OPENTHREAD_COPROCESSOR_RCP || OPENTHREAD_RAW) && \
+		!OPENTHREAD_THREAD_VERSION_1_1
 	help
 	  Enable microsecond backoff timer implemented in platform.
 

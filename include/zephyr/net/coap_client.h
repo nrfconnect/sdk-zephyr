@@ -101,7 +101,7 @@ typedef void (*coap_client_response_cb_t)(const struct coap_client_response_data
  * payload pointer, payload size and information whether more data blocks are expected.
  * Setting the @p last_block parameter to false on the initial callback call triggers
  * a block transfer upload. The library will keep calling the callback until the
- * @p last_block parameter is set to false.
+ * @p last_block parameter is set to true.
  *
  * @note If block transfer is used, the application is expected to provide full blocks of
  * payload. Only the final block (i.e. when @p last_block is set to true) can be shorter
@@ -165,7 +165,7 @@ struct coap_client_request {
 	 * request that accepts multiple responses within the timeout period. After the
 	 * timeout, a final callback with source=NULL signals completion, after which
 	 * no further callbacks will be issued. Multicast requests are always
-	 * non-confirmable (RFC 7252).
+	 * non-confirmable (@rfc{7252}).
 	 *
 	 * @kconfig_dep{CONFIG_COAP_CLIENT_MULTICAST}
 	 */
@@ -186,6 +186,8 @@ struct coap_client_internal_request {
 	atomic_t in_callback;
 	int unreported_error;
 	struct coap_block_context recv_blk_ctx;
+	uint8_t recv_etag[COAP_ETAG_MAX_LEN];
+	uint8_t recv_etag_len;
 	struct coap_block_context send_blk_ctx;
 	struct coap_pending pending;
 	struct coap_client_request coap_request;
@@ -193,9 +195,20 @@ struct coap_client_internal_request {
 	uint8_t request_tag[COAP_TOKEN_MAX_LEN];
 	uint8_t send_buf[MAX_COAP_MSG_LEN];
 
+	/* A block-wise receive is in progress, so recv_blk_ctx is valid and
+	 * further requests of this exchange are continuation retrievals.
+	 */
+	bool recv_blockwise;
+
 	/* For GETs with observe option set */
 	bool is_observe;
+	/* Observe option value of the freshest accepted notification, < 0 if none */
+	int last_observe_seq;
+	/* Uptime at which the freshest notification was accepted */
+	int64_t last_observe_at;
 	int last_response_id;
+	uint8_t observe_token[COAP_TOKEN_MAX_LEN]; /* registration token snapshot */
+	uint8_t observe_tkl;
 #if defined(CONFIG_COAP_CLIENT_MULTICAST)
 	bool is_mcast;
 	k_timepoint_t mcast_timeout;
@@ -241,12 +254,22 @@ int coap_client_init(struct coap_client *client, const char *info);
  * remain valid throughout the transaction (i.e. until the last block or an error is reported).
  * The library will need to access the payload pointer when sending consecutive payload blocks.
  *
+ * @note The application must not register more than one observation for the same target
+ * resource (@rfc{7641,section-3.1}). Use coap_client_reregister_observe() to refresh an
+ * ongoing observation.
+ *
  * @param client Client instance.
  * @param sock Open socket file descriptor.
  * @param addr the destination address of the request, NULL if socket is already connected.
  * @param req CoAP request structure
  * @param params Pointer to transmission parameters structure or NULL to use default values.
- * @return zero when operation started successfully or negative error code otherwise.
+ *
+ * @retval 0 Request started.
+ * @retval -EINVAL Invalid argument or request.
+ * @retval -EAGAIN No free request slot.
+ * @retval -EALREADY A request is ongoing on another socket.
+ * @retval -ENOTSUP Unsupported address family.
+ * @retval <0 Other negative error code on failure to build or send the request.
  */
 
 int coap_client_req(struct coap_client *client, int sock, const struct net_sockaddr *addr,
@@ -283,7 +306,7 @@ void coap_client_cancel_request(struct coap_client *client, struct coap_client_r
  * @brief Deregister matching CoAP observe subscriptions.
  *
  * Sends a GET with Observe option set to 1 (deregister) using the same token as the original
- * observe request, per RFC 7641 Section 3.6. The CON/NON type mirrors the original request.
+ * observe request, per @rfc{7641,section-3.6}. The CON/NON type mirrors the original request.
  *
  * For Confirmable requests the operation is asynchronous: retransmissions are handled by the
  * library and the response callback is invoked with the server's final response once the
@@ -302,10 +325,45 @@ void coap_client_cancel_request(struct coap_client *client, struct coap_client_r
 int coap_client_deregister_observe(struct coap_client *client, struct coap_client_request *req);
 
 /**
+ * @brief Refresh (re-register) an ongoing CoAP observation.
+ *
+ * Re-sends the observation's GET with the Observe Option set to 0 (register),
+ * the same token and the same options as the original request (RFC 7641
+ * re-registration). This refreshes the server's observation entry - e.g.
+ * before a Max-Age or a server-side idle timeout expires - without creating a
+ * second observation. The server answers with the current resource state,
+ * delivered on the existing observe callback. The observation continues,
+ * unless the answer is not a 2.xx response with an Observe Option, which ends
+ * it (RFC 7641, sections 3.2 and 4.1).
+ *
+ * A failure to build or send the refresh leaves the observation intact (a
+ * later refresh may still succeed), the error is returned and the callback is
+ * not invoked. A confirmable refresh that the server does not acknowledge is
+ * retransmitted like any other confirmable request and, once the retries are
+ * exhausted, ends the observation with -ETIMEDOUT reported to the callback.
+ *
+ * @param client Pointer to the client instance.
+ * @param req Pointer identifying the observation, matched on the same fields
+ *            (method, path, cb, user_data) as the registering coap_client_req().
+ *
+ * @retval 0 Success.
+ * @retval -ENOENT No ongoing observation matches @p req, for instance because
+ *                 it already ended with a timeout, a Reset from the server or
+ *                 a server response that ended it.
+ * @retval -EBUSY A request is still awaiting its response on the observation,
+ *                such as the registration itself, an earlier confirmable
+ *                refresh or a blockwise notification being retrieved, or the
+ *                function was called from the observation's response callback.
+ *                Retry later.
+ * @retval <0 Other negative error code on failure to build or send the request.
+ */
+int coap_client_reregister_observe(struct coap_client *client, struct coap_client_request *req);
+
+/**
  * @brief Initialise a Block2 option to be added to a request
  *
  * If the application expects a request to require a blockwise transfer, it may preemptively
- * suggest a maximum block size to the server - see RFC7959 Figure 3: Block-Wise GET with Early
+ * suggest a maximum block size to the server - see @rfc{7959} Figure 3: Block-Wise GET with Early
  * Negotiation.
  *
  * This helper function returns a Block2 option to send with the initial request.

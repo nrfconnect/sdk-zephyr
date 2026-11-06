@@ -5,10 +5,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#ifndef ZEPHYR_INCLUDE_MGMT_SMP_H_
-#define ZEPHYR_INCLUDE_MGMT_SMP_H_
+#ifndef ZEPHYR_INCLUDE_MGMT_MCUMGR_TRANSPORT_SMP_H_
+#define ZEPHYR_INCLUDE_MGMT_MCUMGR_TRANSPORT_SMP_H_
 
 #include <zephyr/kernel.h>
+#include <zcbor_common.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -24,9 +25,17 @@ extern "C" {
 struct smp_transport;
 struct zephyr_smp_transport;
 struct net_buf;
+struct smp_transport_bridge;
+struct smp_client_transport_entry;
 
 /** @typedef smp_transport_out_fn
  * @brief SMP transmit callback for transport
+ *
+ * The supplied net_buf holds one complete SMP packet of up to
+ * @kconfig{CONFIG_MCUMGR_TRANSPORT_NETBUF_SIZE} bytes. If the packet does not fit in a
+ * single frame of the underlying link, the transport is responsible for fragmenting it.
+ * Likewise, on reception the transport must pass only complete SMP packets to the SMP
+ * layer, see @kconfig{CONFIG_MCUMGR_TRANSPORT_REASSEMBLY} for a common reassembly helper.
  *
  * The supplied net_buf is always consumed, regardless of return code.
  *
@@ -39,6 +48,9 @@ typedef int (*smp_transport_out_fn)(struct net_buf *nb);
 /** @typedef smp_transport_get_mtu_fn
  * @brief SMP MTU query callback for transport
  *
+ * @deprecated The SMP layer does not call this function. Transports fragment outgoing
+ *             packets in their #smp_transport_out_fn.
+ *
  * The supplied net_buf should contain a request received from the peer whose
  * MTU is being queried.  This function takes a net_buf parameter because some
  * transports store connection-specific information in the net_buf user header
@@ -49,7 +61,7 @@ typedef int (*smp_transport_out_fn)(struct net_buf *nb);
  * @return                      The transport's MTU;
  *                              0 if transmission is currently not possible.
  */
-typedef uint16_t (*smp_transport_get_mtu_fn)(const struct net_buf *nb);
+typedef uint16_t (*smp_transport_get_mtu_fn)(const struct net_buf *nb) __deprecated;
 
 /** @typedef smp_transport_ud_copy_fn
  * @brief SMP copy user_data callback
@@ -101,6 +113,94 @@ typedef bool (*smp_transport_query_valid_check_fn)(struct net_buf *nb, void *arg
  */
 typedef void (*smp_transport_ud_req_init_fn)(struct net_buf *nb, void *priv);
 
+/** @typedef smp_transport_bridge_connect_fn
+ * @brief SMP transport bridge connect
+ *
+ * Used when establishing a bridge to another transport.
+ *
+ * @param bridge		contains the bridging context
+ * @param direction		specifies direction of transport, either
+ *				#TRANSPORT_MGMT_DIRECTION_INCOMING or
+ *				#TRANSPORT_MGMT_DIRECTION_OUTGOING
+ * @param mode			mode of the transport
+ * @param same_transport	true if the incoming and outgoing transports both are using this
+ *				transport
+ * @param input_data		CBOR data from input
+ * @param output_data		CBOR data for output (to return an error)
+ *
+ * @return                      true on success, false on error.
+ */
+typedef bool (*smp_transport_bridge_connect_fn)(struct smp_transport_bridge *bridge,
+						bool direction, uint32_t mode, bool same_transport,
+						zcbor_state_t *input_data,
+						zcbor_state_t *output_data);
+
+/** @typedef smp_transport_bridge_disconnect_fn
+ * @brief SMP transport bridge disconnect
+ *
+ * Used when disconnecting an already established bridge with another transport.
+ *
+ * @param bridge		contains the bridging context
+ * @param direction		specifies direction of transport, either
+ *				#TRANSPORT_MGMT_DIRECTION_INCOMING or
+ *				#TRANSPORT_MGMT_DIRECTION_OUTGOING
+ */
+typedef void (*smp_transport_bridge_disconnect_fn)(struct smp_transport_bridge *bridge,
+						   bool direction);
+
+/** @typedef smp_transport_bridge_out_fn
+ * @brief SMP transport bridge output data
+ *
+ * Pass data for output through transport bridge.
+ *
+ * @param bridge		contains the bridging context
+ * @param nb			data that should be output
+ * @param direction		specifies direction of transport, either
+ *				#TRANSPORT_MGMT_DIRECTION_INCOMING or
+ *				#TRANSPORT_MGMT_DIRECTION_OUTGOING
+ *
+ * @return                      0 on success, #mcumgr_err_t code on failure.
+ */
+typedef int (*smp_transport_bridge_out_fn)(const struct smp_transport_bridge *bridge,
+					   struct net_buf *nb, bool direction);
+
+/** @typedef mgmt_client_transport_cb_t
+ * @brief Callback for SMP client transports
+ *
+ * @param transport             SMP client transport
+ * @param user_data             user data supplied to smp_client_transport_foreach() function
+ *
+ * @return                      true to continue with the next transport, false to abort.
+ */
+typedef bool (*mgmt_client_transport_cb_t)(const struct smp_client_transport_entry *transport,
+					   void *user_data);
+
+/** @typedef smp_transport_bridge_modes_fn
+ * @brief SMP transport bridge details
+ *
+ * Used to see number of transport modes.
+ *
+ * @param output_data		CBOR data for output
+ * @param rc			#mcumgr_err_t code to return, if error
+ *
+ * @return			true on success, false on failure.
+ */
+typedef bool (*smp_transport_bridge_modes_fn)(zcbor_state_t *output_data, int *rc);
+
+/** @typedef smp_transport_bridge_config_details_fn
+ * @brief SMP transport bridge config details
+ *
+ * Used to see what configuration options a transport has to establish a connection.
+ *
+ * @param mode			mode of the transport
+ * @param output_data		CBOR data for output
+ * @param rc			#mcumgr_err_t code to return, if error
+ *
+ * @return			true on success, false on failure.
+ */
+typedef bool (*smp_transport_bridge_config_details_fn)(uint32_t mode, zcbor_state_t *output_data,
+						       int *rc);
+
 /**
  * @brief Function pointers of SMP transport functions, if a handler is NULL then it is not
  * supported/implemented.
@@ -109,8 +209,12 @@ struct smp_transport_api_t {
 	/** Transport's send function. */
 	smp_transport_out_fn output;
 
-	/** Transport's get-MTU function. */
-	smp_transport_get_mtu_fn get_mtu;
+	/**
+	 * Transport's get-MTU function.
+	 *
+	 * @deprecated Not called by the SMP layer, see #smp_transport_get_mtu_fn.
+	 */
+	uint16_t (*get_mtu)(const struct net_buf *nb) __deprecated;
 
 	/** Transport buffer user_data copy function. */
 	smp_transport_ud_copy_fn ud_copy;
@@ -123,6 +227,25 @@ struct smp_transport_api_t {
 
 	/** Transport's request buffer init function */
 	smp_transport_ud_req_init_fn ud_init;
+
+#if defined(CONFIG_MCUMGR_GRP_TRANSPORT) || defined(__DOXYGEN__)
+	/** Transport connect bridge to another transport function. */
+	smp_transport_bridge_connect_fn bridge_connect;
+
+	/** Transport disconnect bridge function. */
+	smp_transport_bridge_disconnect_fn bridge_disconnect;
+
+	/** Transport send data over bridged connection function. */
+	smp_transport_bridge_out_fn bridge_output;
+
+#if defined(CONFIG_MCUMGR_GRP_TRANSPORT_INFO_FUNCTIONS) || defined(__DOXYGEN__)
+	/** Transport get modes function. */
+	smp_transport_bridge_modes_fn bridge_modes;
+
+	/** Transport get config details function. */
+	smp_transport_bridge_config_details_fn bridge_config_details;
+#endif
+#endif
 };
 
 /**
@@ -148,11 +271,33 @@ struct smp_transport {
 };
 
 /**
+ * @brief Bridged transport context
+ */
+struct smp_transport_bridge {
+	/** Status of the bridge: 0 for no bridge (free), 1 for bridged (in use) */
+	uint8_t status;
+
+	/**
+	 * The incoming transport, (MCUmgr operating in server mode on device) which accepts read
+	 * and write requests
+	 */
+	struct smp_transport *incoming_transport;
+
+	/**
+	 * The outgoing transport, (MCUmgr operating in client mode on device) which accepts read
+	 * and write responses
+	 */
+	struct smp_transport *outgoing_transport;
+};
+
+/**
  * @brief SMP transport type for client registration
  */
 enum smp_transport_type {
 	/** SMP serial */
 	SMP_SERIAL_TRANSPORT = 0,
+	/** SMP raw serial (not SMP over console) */
+	SMP_RAW_SERIAL_TRANSPORT,
 	/** SMP bluetooth */
 	SMP_BLUETOOTH_TRANSPORT,
 	/** SMP shell*/
@@ -163,8 +308,13 @@ enum smp_transport_type {
 	SMP_UDP_IPV6_TRANSPORT,
 	/** SMP LoRaWAN */
 	SMP_LORAWAN_TRANSPORT,
+	/** SMP SPI */
+	SMP_SPI_TRANSPORT,
+
+	/** IDs up to 63 reserved for future in-tree transports */
+
 	/** SMP user defined type */
-	SMP_USER_DEFINED_TRANSPORT
+	SMP_USER_DEFINED_TRANSPORT = 64,
 };
 
 /**
@@ -176,6 +326,11 @@ struct smp_client_transport_entry {
 	struct smp_transport *smpt;
 	/** Transport type */
 	int smpt_type;
+
+#if defined(CONFIG_MCUMGR_GRP_TRANSPORT_INFO_FUNCTIONS) || defined(__DOXYGEN__)
+	/** Transport name, used for transport mgmt (or NULL to omit) */
+	char *name;
+#endif
 };
 
 /**
@@ -223,6 +378,16 @@ void smp_client_transport_register(struct smp_client_transport_entry *entry);
 struct smp_transport *smp_client_transport_get(int smpt_type);
 
 /**
+ * @brief Iterate over SMP client/transports.
+ *
+ * @param user_cb	Callback function
+ * @param user_data	User data supplied to callback function
+ *
+ * @return		true if all transports were iterated, false otherwise.
+ */
+bool smp_client_transport_foreach(mgmt_client_transport_cb_t user_cb, void *user_data);
+
+/**
  * @}
  */
 
@@ -230,4 +395,4 @@ struct smp_transport *smp_client_transport_get(int smpt_type);
 }
 #endif
 
-#endif
+#endif /* ZEPHYR_INCLUDE_MGMT_MCUMGR_TRANSPORT_SMP_H_ */

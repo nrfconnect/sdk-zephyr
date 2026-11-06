@@ -52,7 +52,8 @@ static int post_status_stage(struct usbd_context *const uds_ctx)
 		}
 	}
 
-	if (setup->bRequest == USB_SREQ_SET_FEATURE &&
+	if (USBD_SUPPORTS_HIGH_SPEED &&
+	    setup->bRequest == USB_SREQ_SET_FEATURE &&
 	    setup->wValue == USB_SFS_TEST_MODE) {
 		uint8_t mode = SF_TEST_MODE_SELECTOR(setup->wIndex);
 
@@ -279,6 +280,11 @@ static int sreq_set_feature(struct usbd_context *const uds_ctx)
 	}
 
 	if (unlikely(setup->wValue == USB_SFS_TEST_MODE)) {
+		if (!USBD_SUPPORTS_HIGH_SPEED) {
+			/* Test Mode is only required for High-Speed devices */
+			return -ENOTSUP;
+		}
+
 		return set_feature_test_mode(uds_ctx);
 	}
 
@@ -470,7 +476,7 @@ static struct net_buf *sreq_get_desc_cfg(struct usbd_context *const uds_ctx,
 	net_buf_add_mem(buf, cfg_desc, MIN(net_buf_tailroom(buf), cfg_desc->bLength));
 
 	SYS_SLIST_FOR_EACH_CONTAINER(&cfg_nd->class_list, c_nd, node) {
-		struct usb_desc_header **dhp;
+		struct usb_desc_header *const *dhp;
 
 		dhp = usbd_class_get_desc(c_nd->c_data, get_desc_speed);
 		if (dhp == NULL) {

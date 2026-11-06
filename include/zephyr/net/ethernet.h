@@ -1,7 +1,6 @@
-/** @file
- @brief Ethernet
-
- This is not to be included by the application.
+/**
+ * @file
+ * @brief Ethernet
  */
 
 /*
@@ -57,6 +56,7 @@ struct net_eth_addr {
 
 #define NET_ETH_HDR(pkt) ((struct net_eth_hdr *)net_pkt_data(pkt))
 
+/* clang-format off */
 /* zephyr-keep-sorted-start */
 #define NET_ETH_PTYPE_ALL		0x0003 /* from linux/if_ether.h */
 #define NET_ETH_PTYPE_ARP		0x0806
@@ -69,10 +69,12 @@ struct net_eth_addr {
 #define NET_ETH_PTYPE_IP		0x0800
 #define NET_ETH_PTYPE_IPV6		0x86dd
 #define NET_ETH_PTYPE_LLDP		0x88cc
+#define NET_ETH_PTYPE_OAM		0x8902
 #define NET_ETH_PTYPE_PTP		0x88f7
 #define NET_ETH_PTYPE_TSN		0x22f0 /* TSN (IEEE 1722) packet */
 #define NET_ETH_PTYPE_VLAN		0x8100
 /* zephyr-keep-sorted-stop */
+/* clang-format on */
 
 /* zephyr-keep-sorted-start re(^#define) */
 #if !defined(ETH_P_8021Q)
@@ -166,9 +168,6 @@ enum ethernet_hw_caps {
 
 	/** 5 Gbits link supported */
 	ETHERNET_LINK_5000BASE		= BIT(7),
-
-	/** IEEE 802.1AS (gPTP) clock supported */
-	ETHERNET_PTP			= BIT(8),
 
 	/** IEEE 802.1Qav (credit-based shaping) supported */
 	ETHERNET_QAV			= BIT(9),
@@ -401,7 +400,31 @@ enum ethernet_if_types {
 	L2_ETH_IF_TYPE_WIFI,
 } __packed;
 
-/** Ethernet filter description */
+/**
+ * @brief Ethernet filter description
+ *
+ * The Ethernet L2 keeps track of the multicast addresses that the upper
+ * layers have joined, so a driver is told to set a given address only when
+ * the first user joins the group and to unset it only when the last user
+ * leaves. A driver therefore does not need to count how many times an
+ * address was registered.
+ *
+ * A driver may also treat the request as a hint that the set of multicast
+ * addresses changed and reprogram its receive filter from scratch by
+ * iterating the addresses with net_eth_mcast_addr_foreach(). This is the
+ * preferred approach for devices that filter by a hash of the address, as
+ * such a device cannot tell from a single address whether some other
+ * address still needs the same hash bucket.
+ *
+ * The multicast destination addresses given to
+ * NET_REQUEST_ETHERNET_SET_MAC_FILTER share the same accounting, so the
+ * guarantee holds for them too. Source addresses and unicast destination
+ * addresses are not tracked and are passed to the driver as they are.
+ *
+ * The number of multicast addresses an interface can track is limited, so
+ * joining a group fails with -ENOMEM once the interface is out of room, and
+ * unsetting a multicast address that was never set fails with -ENOENT.
+ */
 struct ethernet_filter {
 	/** Type of filter */
 	enum ethernet_filter_type type;
@@ -409,6 +432,48 @@ struct ethernet_filter {
 	struct net_eth_addr mac_address;
 	/** Set (true) or unset (false) the filter */
 	bool set;
+};
+
+/** @cond INTERNAL_HIDDEN */
+
+/* How many L2 multicast addresses one interface can track. The build system
+ * sums up what the subsystems asked for and gives the result here, the
+ * Kconfig value is only the floor and is used if the header is compiled
+ * outside of a Zephyr build.
+ */
+#ifndef NET_ETH_MCAST_FILTER_COUNT
+#define NET_ETH_MCAST_FILTER_COUNT CONFIG_NET_L2_ETHERNET_MCAST_FILTER_COUNT
+#endif
+
+/* The L2 multicast addresses are tracked only if something joins the groups,
+ * either the IP level, a packet socket, or other parts of the system.
+ */
+#if defined(CONFIG_NET_L2_ETHERNET) && !defined(CONFIG_NET_RAW_MODE) &&	\
+	(NET_ETH_MCAST_FILTER_COUNT > 0)
+#define NET_ETH_MCAST_FILTER_SUPPORTED 1
+#endif
+
+/** @endcond */
+
+/**
+ * @brief L2 multicast address of a network interface
+ *
+ * Stores a link layer multicast address that the interface listens to, and
+ * the number of users that have joined it.
+ */
+struct net_eth_mcast_addr {
+	/** Multicast MAC address */
+	struct net_eth_addr addr;
+
+	/** Reference counter. Used to track the multicast group joining and
+	 * leaving from the IP level and from the packet sockets.
+	 */
+	atomic_t atomic_ref;
+
+	/** Is this address used or not */
+	uint8_t is_used : 1;
+
+	uint8_t _unused : 7;
 };
 
 /** @cond INTERNAL_HIDDEN */
@@ -656,6 +721,11 @@ struct ethernet_context {
 	void *dsa_switch_ctx;
 #endif
 
+#if defined(NET_ETH_MCAST_FILTER_SUPPORTED)
+	/** L2 multicast addresses this interface listens to */
+	struct net_eth_mcast_addr mcast_addrs[NET_ETH_MCAST_FILTER_COUNT];
+#endif
+
 	/** Is network carrier up */
 	bool is_net_carrier_up : 1;
 
@@ -857,6 +927,130 @@ void net_eth_ipv6_mcast_to_mac_addr(const struct net_in6_addr *ipv6_addr,
 				    struct net_eth_addr *mac_addr);
 
 /**
+ * @typedef net_eth_mcast_addr_cb_t
+ * @brief Callback used by net_eth_mcast_addr_foreach()
+ *
+ * @param iface Pointer to the network interface
+ * @param addr Pointer to a L2 multicast address of the interface
+ * @param user_data Data given to net_eth_mcast_addr_foreach()
+ */
+typedef void (*net_eth_mcast_addr_cb_t)(struct net_if *iface,
+					const struct net_eth_mcast_addr *addr,
+					void *user_data);
+
+#if defined(NET_ETH_MCAST_FILTER_SUPPORTED) || defined(__DOXYGEN__)
+
+/**
+ * @brief Join a L2 multicast group on a network interface.
+ *
+ * @details Adds the address to the multicast addresses of the interface, or
+ * increments the reference count of the address if the group was already
+ * joined. The receive filter of the device is programmed only when the
+ * address is joined by its first user. A device that has no receive filter
+ * passes the group up anyway, so the group is joined in that case too.
+ *
+ * This is called by the Ethernet L2 itself when the IP level or a packet
+ * socket joins a multicast group. Drivers should not need to call this.
+ *
+ * @param iface Network interface
+ * @param addr Multicast MAC address to join
+ *
+ * @return 0 if ok, -ENOMEM if the interface cannot track another address,
+ * <0 for any other error
+ */
+int net_eth_mcast_addr_add(struct net_if *iface,
+			   const struct net_eth_addr *addr);
+
+/**
+ * @brief Leave a L2 multicast group on a network interface.
+ *
+ * @details Decrements the reference count of the address, and removes it
+ * from the multicast addresses of the interface if this was the last user.
+ * The receive filter of the device is reprogrammed only when the address is
+ * left by its last user.
+ *
+ * @param iface Network interface
+ * @param addr Multicast MAC address to leave
+ *
+ * @return 0 if ok, -ENOENT if the group was not joined, <0 for any other
+ * error
+ */
+int net_eth_mcast_addr_rm(struct net_if *iface,
+			  const struct net_eth_addr *addr);
+
+/**
+ * @brief Go through all the L2 multicast addresses of a network interface.
+ *
+ * @details Drivers that reprogram their whole receive filter when they get
+ * an ETHERNET_CONFIG_TYPE_FILTER request can use this to find out what the
+ * device should listen to. The callback must not join or leave a group.
+ *
+ * @param iface Network interface
+ * @param cb Callback to call for each multicast address
+ * @param user_data Data to pass to the callback
+ */
+void net_eth_mcast_addr_foreach(struct net_if *iface,
+				net_eth_mcast_addr_cb_t cb,
+				void *user_data);
+
+/** @cond INTERNAL_HIDDEN */
+
+/**
+ * @brief Join or leave the L2 multicast group of an IP multicast address.
+ *
+ * @details Converts the IP address to its Ethernet multicast address and
+ * calls net_eth_mcast_addr_add() or net_eth_mcast_addr_rm() with it.
+ *
+ * @param iface Network interface
+ * @param addr IPv4 or IPv6 multicast address
+ * @param add True to join the group, false to leave it
+ *
+ * @return -EINVAL if the address family is not supported, otherwise the
+ * return value of net_eth_mcast_addr_add() or net_eth_mcast_addr_rm()
+ */
+int net_eth_mcast_ip_addr_update(struct net_if *iface, const struct net_addr *addr, bool add);
+
+/** @endcond */
+
+#else /* NET_ETH_MCAST_FILTER_SUPPORTED */
+
+static inline int net_eth_mcast_addr_add(struct net_if *iface,
+					 const struct net_eth_addr *addr)
+{
+	ARG_UNUSED(iface);
+	ARG_UNUSED(addr);
+
+	return -ENOTSUP;
+}
+
+static inline int net_eth_mcast_addr_rm(struct net_if *iface,
+					const struct net_eth_addr *addr)
+{
+	ARG_UNUSED(iface);
+	ARG_UNUSED(addr);
+
+	return -ENOTSUP;
+}
+
+static inline void net_eth_mcast_addr_foreach(struct net_if *iface,
+					      net_eth_mcast_addr_cb_t cb,
+					      void *user_data)
+{
+	ARG_UNUSED(iface);
+	ARG_UNUSED(cb);
+	ARG_UNUSED(user_data);
+}
+
+static inline int net_eth_mcast_ip_addr_update(struct net_if *iface __unused,
+					       const struct net_addr *addr __unused,
+					       bool add __unused)
+{
+	return -ENOTSUP;
+}
+
+#endif /* NET_ETH_MCAST_FILTER_SUPPORTED */
+
+/**
  * @brief Return ethernet device hardware capability information.
  *
  * @param iface Network interface
@@ -867,10 +1061,12 @@ static inline
 enum ethernet_hw_caps net_eth_get_hw_capabilities(struct net_if *iface)
 {
 	const struct device *dev = net_if_get_device(iface);
-	const struct ethernet_api *api = (struct ethernet_api *)dev->api;
+	const struct ethernet_api *api;
 	enum ethernet_hw_caps caps = (enum ethernet_hw_caps)0;
 #if defined(CONFIG_NET_DSA)
 	struct ethernet_context *eth_ctx = net_if_l2_data(iface);
+
+	NET_ASSERT(eth_ctx != NULL);
 
 	if (eth_ctx->dsa_port == DSA_CONDUIT_PORT) {
 		caps = ETHERNET_DSA_CONDUIT_PORT;
@@ -878,6 +1074,9 @@ enum ethernet_hw_caps net_eth_get_hw_capabilities(struct net_if *iface)
 		caps = ETHERNET_DSA_USER_PORT;
 	}
 #endif
+	NET_ASSERT(dev != NULL);
+
+	api = (const struct ethernet_api *)dev->api;
 	if (api == NULL || api->get_capabilities == NULL) {
 		return caps;
 	}
@@ -899,7 +1098,13 @@ int net_eth_get_hw_config(struct net_if *iface, enum ethernet_config_type type,
 			 struct ethernet_config *config)
 {
 	const struct device *dev = net_if_get_device(iface);
-	const struct ethernet_api *eth = (struct ethernet_api *)dev->api;
+	const struct ethernet_api *eth;
+
+	NET_ASSERT(dev != NULL);
+
+	eth = (const struct ethernet_api *)dev->api;
+
+	NET_ASSERT(eth != NULL);
 
 	if (!eth->get_config) {
 		return -ENOTSUP;
@@ -1409,6 +1614,14 @@ int net_eth_txinjection_mode(struct net_if *iface, bool enable);
 /**
  * @brief Set or unset HW filtering for MAC address @p mac.
  *
+ * @details A multicast destination address is shared with the groups that
+ * the IP stack and the packet sockets have joined, so the device is only
+ * told to listen to it when the first user asks for it and to stop when the
+ * last one is gone. Every set of such an address must therefore be matched
+ * by an unset, and unsetting an address that was never set fails with
+ * -ENOENT. Source addresses and unicast destination addresses are given to
+ * the device as they are.
+ *
  * @param iface Network interface
  * @param mac Pointer to an ethernet MAC address
  * @param type Filter type, either source or destination
@@ -1470,6 +1683,8 @@ static inline bool net_eth_type_is_wifi(struct net_if *iface)
 	const struct ethernet_context *ctx = (struct ethernet_context *)
 		net_if_l2_data(iface);
 
+	NET_ASSERT(ctx != NULL);
+
 	return ctx->eth_if_type == L2_ETH_IF_TYPE_WIFI;
 }
 
@@ -1484,6 +1699,8 @@ static inline bool net_eth_type_is_ethernet(struct net_if *iface)
 {
 	const struct ethernet_context *ctx = (struct ethernet_context *)net_if_l2_data(iface);
 
+	NET_ASSERT(ctx != NULL);
+
 	return ctx->eth_if_type == L2_ETH_IF_TYPE_ETHERNET;
 }
 
@@ -1495,6 +1712,8 @@ static inline bool net_eth_type_is_ethernet(struct net_if *iface)
 static inline void net_eth_set_if_type_wifi(struct net_if *iface)
 {
 	struct ethernet_context *ctx = (struct ethernet_context *)net_if_l2_data(iface);
+
+	NET_ASSERT(ctx != NULL);
 
 	ctx->eth_if_type = L2_ETH_IF_TYPE_WIFI;
 }

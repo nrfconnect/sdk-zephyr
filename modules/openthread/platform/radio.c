@@ -691,12 +691,8 @@ void platformRadioProcess(otInstance *aInstance)
 
 	if (is_pending_event_set(PENDING_EVENT_TX_DONE)) {
 		reset_pending_event(PENDING_EVENT_TX_DONE);
-
-		if (sState == OT_RADIO_STATE_TRANSMIT ||
-		    radio_api->get_capabilities(radio_dev) & IEEE802154_HW_SLEEP_TO_TX) {
-			sState = OT_RADIO_STATE_RECEIVE;
-			handle_tx_done(aInstance);
-		}
+		sState = OT_RADIO_STATE_RECEIVE;
+		handle_tx_done(aInstance);
 	}
 
 	if (is_pending_event_set(PENDING_EVENT_SLEEP)) {
@@ -927,13 +923,7 @@ otError otPlatRadioTransmit(otInstance *aInstance, otRadioFrame *aPacket)
 
 	__ASSERT_NO_MSG(aPacket == &sTransmitFrame);
 
-	enum ieee802154_hw_caps radio_caps;
-
-	radio_caps = radio_api->get_capabilities(radio_dev);
-
-	if (sState == OT_RADIO_STATE_RECEIVE ||
-	    (sState == OT_RADIO_STATE_SLEEP &&
-	     radio_caps & IEEE802154_HW_SLEEP_TO_TX)) {
+	if (sState == OT_RADIO_STATE_RECEIVE || sState == OT_RADIO_STATE_SLEEP) {
 		if (run_tx_task(aInstance) == 0) {
 			error = OT_ERROR_NONE;
 		}
@@ -1013,9 +1003,8 @@ otRadioCaps otPlatRadioGetCaps(otInstance *aInstance)
 		caps |= OT_RADIO_CAPS_ACK_TIMEOUT;
 	}
 
-	if (radio_caps & IEEE802154_HW_SLEEP_TO_TX) {
-		caps |= OT_RADIO_CAPS_SLEEP_TO_TX;
-	}
+	/* All Zephyr 802.15.4 drivers support transmitting from a low-power state. */
+	caps |= OT_RADIO_CAPS_SLEEP_TO_TX;
 
 #if !defined(CONFIG_OPENTHREAD_THREAD_VERSION_1_1)
 	if (radio_caps & IEEE802154_HW_TX_SEC) {
@@ -1303,6 +1292,7 @@ void otPlatRadioSetMacKey(otInstance *aInstance, uint8_t aKeyIdMode, uint8_t aKe
 			  const otMacKeyMaterial *aNextKey, otRadioKeyType aKeyType)
 {
 	ARG_UNUSED(aInstance);
+	ARG_UNUSED(aKeyIdMode);
 	__ASSERT_NO_MSG(aPrevKey != NULL && aCurrKey != NULL && aNextKey != NULL);
 
 #if defined(CONFIG_OPENTHREAD_PLATFORM_KEYS_EXPORTABLE_ENABLE)
@@ -1341,14 +1331,12 @@ void otPlatRadioSetMacKey(otInstance *aInstance, uint8_t aKeyIdMode, uint8_t aKe
 	const uint8_t *next_key_data = aNextKey->mKeyMaterial.mKey.m8;
 #endif
 
-	/* aKeyIdMode is passed as the enum value (Mac::Frame::kKeyIdMode1 = 1),
-	 * not the raw wire byte. The old >> 3 shift was for the wire format where
-	 * KeyIdMode occupied bits [5:3] of the Security Control byte. With the
-	 * new OT API the enum value is passed directly, so no shift is needed.
-	 * (The OT spec also notes that platforms should ignore aKeyIdMode and
-	 * always treat keys as Mode-1, but we keep the branch for clarity.)
+	/* The OpenThread platform API requires aKeyIdMode to be ignored: keys set
+	 * through otPlatRadioSetMacKey() are always Key ID Mode 1 (see the
+	 * function documentation in openthread/platform/radio.h). The driver is
+	 * given the IEEE 802.15.4 mode number. aKeyId == 0 clears the keys.
 	 */
-	uint8_t key_id_mode = aKeyIdMode;
+	const uint8_t key_id_mode = 1;
 	uint8_t prev_key_id = 0;
 	uint8_t next_key_id = 0;
 
@@ -1376,7 +1364,7 @@ void otPlatRadioSetMacKey(otInstance *aInstance, uint8_t aKeyIdMode, uint8_t aKe
 		},
 	};
 
-	if (key_id_mode == 1) {
+	if (aKeyId != 0) {
 		/* aKeyId in range: (1, 0x80) means valid keys */
 		prev_key_id = aKeyId == 1 ? 0x80 : aKeyId - 1;
 		next_key_id = aKeyId == 0x80 ? 1 : aKeyId + 1;
@@ -1389,9 +1377,6 @@ void otPlatRadioSetMacKey(otInstance *aInstance, uint8_t aKeyIdMode, uint8_t aKe
 
 		keys[2].key_id = &next_key_id;
 		keys[2].key_value = (uint8_t *)next_key_data;
-	} else {
-		/* aKeyId == 0 is used only to clear keys for stack reset in RCP */
-		__ASSERT_NO_MSG((key_id_mode == 0) && (aKeyId == 0));
 	}
 
 	struct ieee802154_config config = {

@@ -888,8 +888,8 @@ and inside the :file:`modules.cmake` file, add the following content
    set(ZEPHYR_FOO_CMAKE_DIR ${CMAKE_CURRENT_LIST_DIR}/foo)
    set(ZEPHYR_FOO_KCONFIG   ${CMAKE_CURRENT_LIST_DIR}/foo/Kconfig)
 
-Module integration files (zephyr/module.yml)
---------------------------------------------
+Module description file (zephyr/module.yml)
+-------------------------------------------
 
 The module description file :file:`zephyr/module.yml` can be used to specify
 that the build files, :file:`CMakeLists.txt` and :file:`Kconfig`, are located
@@ -999,7 +999,7 @@ when executing twister, for example:
 
   ./scripts/zephyr_module.py --twister-out module_tests.args
   if [ -s module_tests.args ]; then
-      ./scripts/twister +module_tests.args --outdir module_tests ...
+      west twister +module_tests.args --outdir module_tests ...
   fi
 
 

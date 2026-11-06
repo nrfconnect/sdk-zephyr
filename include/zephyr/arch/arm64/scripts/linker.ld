@@ -283,6 +283,11 @@ SECTIONS
         . = ALIGN(8);
         __bss_start = .;
 
+/* Located in generated directory. This file is populated by the
+ * zephyr_linker_sources() Cmake function.
+ */
+#include <snippets-bss.ld>
+
         *(.bss)
         *(".bss.*")
         *(COMMON)
@@ -342,7 +347,6 @@ SECTIONS
         KEEP(*(.gnu.attributes))
     }
 
-    /DISCARD/ : { *(.note.GNU-stack) }
 
 /* Output section descriptions are needed for these sections to suppress
  * warnings when "--orphan-handling=warn" is set for lld.

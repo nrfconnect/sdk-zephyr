@@ -183,6 +183,10 @@
 	rsr.scompare1 \SCRATCH_REG
 	s32i \SCRATCH_REG, \BSA_PTR, ___xtensa_irq_bsa_t_scompare1_OFFSET
 #endif
+#if XCHAL_HAVE_BOOLEANS
+	rsr.br \SCRATCH_REG
+	s32i \SCRATCH_REG, \BSA_PTR, ___xtensa_irq_bsa_t_br_OFFSET
+#endif
 #if XCHAL_HAVE_THREADPTR && \
 	(defined(CONFIG_USERSPACE) || defined(CONFIG_THREAD_LOCAL_STORAGE))
 	rur.THREADPTR \SCRATCH_REG
@@ -217,6 +221,10 @@
 #if XCHAL_HAVE_S32C1I
 	l32i \SCRATCH_REG, \BSA_PTR, ___xtensa_irq_bsa_t_scompare1_OFFSET
 	wsr.scompare1 \SCRATCH_REG
+#endif
+#if XCHAL_HAVE_BOOLEANS
+	l32i \SCRATCH_REG, \BSA_PTR, ___xtensa_irq_bsa_t_br_OFFSET
+	wsr.br \SCRATCH_REG
 #endif
 #if XCHAL_HAVE_THREADPTR && \
 	(defined(CONFIG_USERSPACE) || defined(CONFIG_THREAD_LOCAL_STORAGE))
@@ -329,7 +337,8 @@ _swap_page_table_\@:
  * A2 has the return value of the called function, and A3 is
  * clobbered.  A4-A15 become part of called frames and MUST NOT BE IN
  * USE by the code that expands this macro.  The called function gets
- * the context save handle in A1 as it's first argument.
+ * the context save handle in A1 as it's first argument.  On return
+ * PS.INTLEVEL is XCHAL_NUM_INTLEVELS.
  */
 .macro CROSS_STACK_CALL
 	/* Since accessing A4-A11 may trigger window overflows so
@@ -377,9 +386,9 @@ _xstack_call0_\@:
 	callx4 a7		/* call handler */
 	mov a2, a6		/* copy return value */
 
-#ifdef CONFIG_USERSPACE
 	rsil a6, XCHAL_NUM_INTLEVELS
 
+#ifdef CONFIG_USERSPACE
 	/* If "next" handle to be restored is the same as
 	 * the current handle, there is no need to swap page
 	 * tables or MPU entries since we will return to
@@ -565,12 +574,6 @@ _switch_stacks_\@:
 _do_call_\@:
 	CROSS_STACK_CALL
 
-	/* Mask interrupts (which have been unmasked during the handler
-	 * execution) while we muck with the windows and decrement the nested
-	 * count.  The restore will unmask them correctly.
-	 */
-	rsil a0, XCHAL_NUM_INTLEVELS
-
 	/* Decrement nest count */
 	rsr.ZSR_CPU a3
 	l32i a0, a3, \NEST_OFF
@@ -587,8 +590,7 @@ _do_call_\@:
 	 */
 	beq a6, a1, _restore_\@
 
-#if !defined(CONFIG_KERNEL_COHERENCE) || \
-    (defined(CONFIG_KERNEL_COHERENCE) && defined(CONFIG_SCHED_CPU_MASK_PIN_ONLY))
+#if !defined(CONFIG_KERNEL_COHERENCE)
 	l32i a1, a1, 0
 	l32i a0, a1, ___xtensa_irq_bsa_t_a0_OFFSET
 	addi a1, a1, ___xtensa_irq_bsa_t_SIZEOF
@@ -599,9 +601,7 @@ _do_call_\@:
 	SPILL_ALL_WINDOWS
 #endif
 
-#if defined(CONFIG_KERNEL_COHERENCE) && \
-	defined(CONFIG_USERSPACE) && \
-	!defined(CONFIG_SCHED_CPU_MASK_PIN_ONLY)
+#if defined(CONFIG_KERNEL_COHERENCE) && defined(CONFIG_USERSPACE)
 
 	/* With userspace enabled, we need to swap page table via function calls
 	 * above after returning from syscall handler above in CROSS_STACK_CALL.
@@ -744,16 +744,19 @@ _not_triple_fault:
 	s32i a2, a1, ___xtensa_irq_bsa_t_a2_OFFSET
 	s32i a3, a1, ___xtensa_irq_bsa_t_a3_OFFSET
 
-#ifdef CONFIG_XTENSA_MMU
-.if \LVL != 1
-#endif
+#ifndef CONFIG_XTENSA_MMU
+.if \LVL == 1
 	/* Save register needed for handling the exception as
 	 * this register can be overwritten during nested
-	 * exceptions.
+	 * exceptions.  EXCVADDR describes exceptions, not
+	 * interrupts, so only the level 1 vector (which serves
+	 * both) needs it: nothing consumes it from the frames of
+	 * interrupt-only levels and nothing restores it on exit.
+	 * (With the MMU enabled, level 1 saved it on vector entry
+	 * already.)
 	 */
 	rsr.excvaddr a0
 	s32i a0, a1, ___xtensa_irq_bsa_t_excvaddr_OFFSET
-#ifdef CONFIG_XTENSA_MMU
 .endif
 #endif
 

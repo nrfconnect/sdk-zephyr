@@ -79,7 +79,7 @@ void ite_intc_isr_clear(unsigned int irq)
 {
 	uint32_t g, i;
 
-	if (irq > CONFIG_NUM_IRQS) {
+	if (irq >= CONFIG_NUM_IRQS) {
 		return;
 	}
 	g = irq / MAX_REGISR_IRQ_NUM;
@@ -93,7 +93,7 @@ void ite_intc_irq_enable(unsigned int irq)
 	uint32_t g, i;
 	uint8_t en;
 
-	if (irq > CONFIG_NUM_IRQS) {
+	if (irq >= CONFIG_NUM_IRQS) {
 		return;
 	}
 	g = irq / MAX_REGISR_IRQ_NUM;
@@ -115,7 +115,7 @@ void ite_intc_irq_disable(unsigned int irq)
 
 	volatile uint8_t _ier __unused;
 
-	if (irq > CONFIG_NUM_IRQS) {
+	if (irq >= CONFIG_NUM_IRQS) {
 		return;
 	}
 	g = irq / MAX_REGISR_IRQ_NUM;
@@ -140,21 +140,21 @@ void ite_intc_irq_polarity_set(unsigned int irq, unsigned int flags)
 	uint32_t g, i;
 	uint8_t tri;
 
-	if ((irq > CONFIG_NUM_IRQS) || ((flags & IRQ_TYPE_EDGE_BOTH) == IRQ_TYPE_EDGE_BOTH)) {
+	if ((irq >= CONFIG_NUM_IRQS) || ((flags & IRQ_TYPE_EDGE_BOTH) == IRQ_TYPE_EDGE_BOTH)) {
 		return;
 	}
 	g = irq / MAX_REGISR_IRQ_NUM;
 	i = irq % MAX_REGISR_IRQ_NUM;
 
 	tri = sys_read8(intc_base + INTC_GRPNIPOLR(g));
-	if ((flags & IRQ_TYPE_LEVEL_HIGH) || (flags & IRQ_TYPE_EDGE_RISING)) {
+	if (flags & (IRQ_TYPE_LEVEL_HIGH | IRQ_TYPE_EDGE_RISING)) {
 		sys_write8(tri & ~BIT(i), intc_base + INTC_GRPNIPOLR(g));
 	} else {
 		sys_write8(tri | BIT(i), intc_base + INTC_GRPNIPOLR(g));
 	}
 
 	tri = sys_read8(intc_base + INTC_GRPNIELMR(g));
-	if ((flags & IRQ_TYPE_LEVEL_LOW) || (flags & IRQ_TYPE_LEVEL_HIGH)) {
+	if (flags & (IRQ_TYPE_LEVEL_LOW | IRQ_TYPE_LEVEL_HIGH)) {
 		sys_write8(tri & ~BIT(i), intc_base + INTC_GRPNIELMR(g));
 	} else {
 		sys_write8(tri | BIT(i), intc_base + INTC_GRPNIELMR(g));
@@ -169,7 +169,7 @@ int ite_intc_irq_is_enable(unsigned int irq)
 	uint32_t g, i;
 	uint8_t en;
 
-	if (irq > CONFIG_NUM_IRQS) {
+	if (irq >= CONFIG_NUM_IRQS) {
 		return 0;
 	}
 	g = irq / MAX_REGISR_IRQ_NUM;

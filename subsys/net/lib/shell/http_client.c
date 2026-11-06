@@ -26,8 +26,7 @@ LOG_MODULE_DECLARE(net_shell);
 
 #define HTTP_SCHEMA_LEN   sizeof("https://")
 #define HTTP_PROTOCOL_LEN sizeof("HTTP/1.1")
-#define HTTP_HEADERS_LEN  2
-#define HTTP_HEADER_SIZE  64
+#define HTTP_HEADERS_LEN  3
 
 #if defined(CONFIG_HTTP_CLIENT)
 static K_SEM_DEFINE(l4_wait, 0, 1);
@@ -48,11 +47,10 @@ struct http_client_sh_ctx {
 	enum http_method method;
 	http_response_cb_t cb;
 	uint8_t recv_buf[NET_IPV4_MTU];
-	uint8_t payload[NET_IPV4_MTU];
+	const uint8_t *payload;
 	uint16_t payload_size;
 	uint8_t protocol[HTTP_PROTOCOL_LEN];
 	const char *headers[HTTP_HEADERS_LEN];
-	uint8_t header_data[HTTP_HEADER_SIZE];
 	bool is_ssl_verifyhost;
 	int is_ssl_verifypeer;
 	int sec_tag;
@@ -66,20 +64,24 @@ static int http_client_url_fields_get(const uint8_t *url, const struct http_pars
 				      enum http_parser_url_fields url_field, uint8_t *field,
 				      uint16_t field_len)
 {
-	uint16_t off = purl->field_data[url_field].off;
-	uint16_t len = purl->field_data[url_field].len;
+	size_t off = purl->field_data[url_field].off;
+	size_t len = purl->field_data[url_field].len;
 
-	if (len == 0 || len >= field_len) {
+	if (len == 0) {
 		return -EINVAL;
 	}
 
 	if (url_field == UF_PATH) {
-		memcpy(field, url + off, strlen(url));
-		field[strlen(url)] = '\0';
-	} else {
-		memcpy(field, url + off, len);
-		field[len] = '\0';
+		/* The request URI is the path with the query and fragment that follow it. */
+		len = strlen(url) - off;
 	}
+
+	if (len >= field_len) {
+		return -ENOBUFS;
+	}
+
+	memcpy(field, url + off, len);
+	field[len] = '\0';
 
 	return 0;
 }
@@ -138,8 +140,22 @@ static int http_client_url_parser(struct http_client_sh_ctx *ctx, const uint8_t 
 	}
 
 	ret = http_client_url_fields_get(url, &purl, UF_PATH, uri, sizeof(ctx->url_fields.uri));
-	if (ret < 0) {
-		memcpy(uri, "/", sizeof("/"));
+	if (ret == -ENOBUFS) {
+		PR_ERROR("URL path too long (max %zu bytes)\n", sizeof(ctx->url_fields.uri) - 1);
+		return ret;
+	} else if (ret < 0) {
+		/* An empty path is sent as "/", followed by the query if there is one. */
+		memcpy(uri, "/?", sizeof("/?"));
+
+		ret = http_client_url_fields_get(url, &purl, UF_QUERY, uri + 2,
+						 sizeof(ctx->url_fields.uri) - 2);
+		if (ret == -ENOBUFS) {
+			PR_ERROR("URL query too long (max %zu bytes)\n",
+				 sizeof(ctx->url_fields.uri) - 3);
+			return ret;
+		} else if (ret < 0) {
+			uri[1] = '\0';
+		}
 	}
 
 	return 0;
@@ -189,7 +205,7 @@ static void http_client_dns_cb(enum dns_resolve_status status, struct dns_addrin
 		return;
 	}
 
-	ctx->sa = *(net_sas(&info->ai_addr));
+	ctx->sa = info->ai_addr_storage;
 	ctx->sa.ss_family = info->ai_family;
 	ctx->err = 0;
 }
@@ -465,22 +481,13 @@ static int http_client_args_to_params(struct http_client_sh_ctx *ctx, size_t arg
 		state = sys_getopt_state_get();
 		switch (opt) {
 		case 'd':
-			ctx->payload_size =
-				snprintf(ctx->payload, sizeof(ctx->payload), "%s", state->optarg);
-			if (ctx->payload_size >= sizeof(ctx->payload)) {
-				PR_ERROR("Payload is too big\n");
-				return -EINVAL;
-			}
+			ctx->payload = state->optarg;
+			ctx->payload_size = strlen(state->optarg);
 			break;
 		case 'H':
-			ret = snprintf(ctx->header_data, sizeof(ctx->header_data), "%s" HTTP_CRLF,
-				       state->optarg);
-			if (ret >= sizeof(ctx->header_data)) {
-				PR_ERROR("HTTP header is too long\n");
-				return -EINVAL;
-			}
-			ctx->headers[0] = ctx->header_data;
-			ctx->headers[1] = NULL;
+			ctx->headers[0] = state->optarg;
+			ctx->headers[1] = HTTP_CRLF;
+			ctx->headers[2] = NULL;
 			break;
 		case 'p':
 			ret = snprintf(ctx->protocol, sizeof(ctx->protocol), "%s", state->optarg);

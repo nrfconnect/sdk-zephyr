@@ -6,6 +6,7 @@ import re
 import sys
 import textwrap
 from pathlib import Path
+from urllib.request import urlopen
 
 ZEPHYR_BASE = Path(__file__).resolve().parents[1]
 ZEPHYR_BUILD = Path(os.environ.get("OUTPUT_DIR")).resolve()
@@ -89,6 +90,7 @@ if SKIP_EXTERNAL_CONTENT:
 # -- General configuration ------------------------------------------------
 
 extensions = [
+    "zephyr.build_timer",
     "sphinx_rtd_theme",
     "sphinx.ext.todo",
     "sphinx.ext.extlinks",
@@ -97,6 +99,7 @@ extensions = [
     "sphinxcontrib.jquery",
     "sphinxcontrib.mermaid",
     "sphinxcontrib.programoutput",
+    "sphinx_design",
     "zephyr.application",
     "zephyr.html_redirects",
     "zephyr.kconfig",
@@ -109,6 +112,7 @@ extensions = [
     "zephyr.doxytooltip",
     "zephyr.doxyxref",
     "zephyr.gh_utils",
+    "zephyr.licensing",
     "zephyr.manifest_projects_table",
     "notfound.extension",
     "sphinx_copybutton",
@@ -117,6 +121,8 @@ extensions = [
     "zephyr.domain",
     "zephyr.api_overview",
     "zephyr.partial_build",
+    "moderncmakedomain",
+    "sphinx.ext.intersphinx",
 ]
 
 # Only use image conversion when it is really needed, e.g. LaTeX build.
@@ -135,9 +141,9 @@ exclude_patterns = ["_build"]
 RELEASE_NOTES_GLOB_PATTERNS = [
     "releases/release-notes-[12].*.rst",
     "releases/release-notes-3.[0-6].rst",
-    "releases/release-notes-4.[01].rst",
+    "releases/release-notes-4.[0-3].rst",
     "releases/migration-guide-3.[56].rst",
-    "releases/migration-guide-4.[01].rst",
+    "releases/migration-guide-4.[0-3].rst",
 ]
 exclude_patterns.extend(RELEASE_NOTES_GLOB_PATTERNS)
 
@@ -159,6 +165,27 @@ pygments_style = "sphinx"
 highlight_language = "none"
 
 todo_include_todos = False
+
+CMAKE_DOCS_URL = "https://cmake.org/cmake/help/latest"
+
+
+def _inventory_reachable(url: str) -> bool:
+    """Check that an intersphinx inventory can be fetched."""
+    try:
+        with urlopen(f"{url}/objects.inv", timeout=10):
+            return True
+    except Exception as err:
+        print(f"NOTE: {url} is unreachable ({err}), its references will not be linked")
+        return False
+
+
+# Fetching an inventory is best effort: a doc set that cannot be reached (site
+# down, build without network access) is left out of the mapping, so that the
+# references into it degrade to plain text instead of failing the build under
+# -W, the same way a reference to an unknown Kconfig option does.
+intersphinx_mapping = {}
+if _inventory_reachable(CMAKE_DOCS_URL):
+    intersphinx_mapping["cmake"] = (CMAKE_DOCS_URL, None)
 
 nitpick_ignore = [
     # ignore C standard identifiers (they are not defined in Zephyr docs)
@@ -212,7 +239,7 @@ html_theme = "sphinx_rtd_theme"
 html_theme_options = {
     "logo_only": True,
     "prev_next_buttons_location": None,
-    "navigation_depth": 5,
+    "navigation_depth": 6,
 }
 html_baseurl = "https://docs.zephyrproject.org/latest/"
 html_title = "Zephyr Project Documentation"
@@ -241,8 +268,8 @@ html_context = {
     "current_version": version,
     "versions": (
         ("latest", "/"),
+        ("4.5.0", "/4.5.0/"),
         ("4.4.0", "/4.4.0/"),
-        ("4.3.0", "/4.3.0/"),
         ("3.7.0 (LTS)", "/3.7.0/"),
     ),
     "display_gh_links": True,
@@ -250,6 +277,7 @@ html_context = {
         "API": f"{reference_prefix}/doxygen/html/index.html",
         "Kconfig Options": f"{reference_prefix}/kconfig.html",
         "Devicetree Bindings": f"{reference_prefix}/build/dts/api/bindings.html",
+        "CMake modules": f"{reference_prefix}/build/cmake-ref/index.html",
         "West Projects": f"{reference_prefix}/develop/manifest/index.html",
         "Glossary": f"{reference_prefix}/glossary.html",
     },
@@ -304,6 +332,11 @@ doxyrunner_projects = {
         "fmt_vars": {
             "ZEPHYR_BASE": str(ZEPHYR_BASE),
             "ZEPHYR_VERSION": version,
+            # Directory with the generated requirement .dox files (populated by
+            # the CMake 'requirements' target before the Sphinx build runs).
+            "DOXY_REQ_INPUT": os.environ.get(
+                "DOXY_REQ_INPUT", str(ZEPHYR_BUILD / "requirements" / "dox")
+            ),
         },
         "outdir_var": "DOXY_OUT",
     },
@@ -383,6 +416,8 @@ kconfig_zephyr_version = f"v{version}" if is_release else "main"
 external_content_contents = [
     (ZEPHYR_BASE / "doc", "[!_]*"),
     (ZEPHYR_BASE, "tests/**/*.pts"),
+    (ZEPHYR_BASE, "cmake/modules"),
+    (ZEPHYR_BASE, "share/sysbuild/cmake/modules"),
 ]
 if not SKIP_EXTERNAL_CONTENT:
     external_content_contents += [
@@ -400,6 +435,8 @@ external_content_keep = [
     "build/dts/api/bindings.rst",
     "build/dts/api/bindings/**/*",
     "build/dts/api/compatibles/**/*",
+    "build/requirements/*",
+    "build/requirements/**/*",
 ]
 
 # -- Options for zephyr.domain --------------------------------------------
@@ -436,8 +473,11 @@ sitemap_url_scheme = "{link}"
 
 #-- Options for sphinxcontrib-mermaid -------------------------------------
 
-mermaid_version = "11.14.0"
+mermaid_version = "12.1.0"
 d3_version = "7.9.0"
+
+# Without this, every diagram is drawn in a box of a fixed height and centered in it.
+mermaid_height = "auto"
 
 if tags.has("no-external-deps"): # pylint: disable=undefined-variable  # noqa: F821
     mermaid_use_local = "js/mermaid/mermaid.esm.mjs"

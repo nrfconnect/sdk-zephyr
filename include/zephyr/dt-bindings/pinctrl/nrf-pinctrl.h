@@ -184,8 +184,11 @@
 #define NRF_FUN_GRTC_CLKOUT_FAST 55U
 /** GRTC slow clock output */
 #define NRF_FUN_GRTC_CLKOUT_32K  56U
+/** VPR VIO (pin controlled by a VPR through its VIO interface) */
+#define NRF_FUN_VPR_VIO          57U
+/* ID 57 is taken by NRF_FUN_VPR_VIO, so SCK is not in sequence with the other SDP_MSPI pins. */
 /** SDP_MSPI clock pin */
-#define NRF_FUN_SDP_MSPI_SCK 57U
+#define NRF_FUN_SDP_MSPI_SCK 84U
 /** SDP_MSPI data pin 0 */
 #define NRF_FUN_SDP_MSPI_DQ0 58U
 /** SDP_MSPI data pin 1 */

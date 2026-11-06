@@ -158,6 +158,54 @@ ZTEST_USER(pwm_loopback, test_pulse_and_period_capture)
 		     PWM_CAPTURE_TYPE_BOTH | PWM_POLARITY_NORMAL);
 }
 
+ZTEST_USER(pwm_loopback, test_period_shrink_while_running)
+{
+	struct test_pwm in;
+	struct test_pwm out;
+	uint32_t long_period = CONFIG_TEST_PWM_PERIOD_USEC;
+	/* Floor of 2 keeps short_period / 2 (the pulse width below) from rounding to 0. */
+	uint32_t short_period = MAX(long_period / 10, 2);
+	uint64_t period_capture = 0;
+	uint64_t pulse_capture = 0;
+	int err;
+
+	get_test_pwms(&out, &in);
+
+	TC_PRINT("Testing period shrink %u -> %u usec while running\n", long_period, short_period);
+
+	err = pwm_set(out.dev, out.pwm, PWM_USEC(long_period), PWM_USEC(long_period / 2),
+		      out.flags);
+	zassert_equal(err, 0, "failed to set long pwm period (err %d)", err);
+
+	/*
+	 * Let the counter advance well past the shorter period's match value
+	 * before shrinking the period. A driver that reprograms the period
+	 * without realigning its counter leaves the counter above the new match
+	 * value, so the match never fires again and the output stops.
+	 */
+	k_sleep(K_USEC(long_period * 3 / 4));
+
+	err = pwm_set(out.dev, out.pwm, PWM_USEC(short_period), PWM_USEC(short_period / 2),
+		      out.flags);
+	zassert_equal(err, 0, "failed to shrink pwm period (err %d)", err);
+
+	/* Allow drivers that only apply a new period at the next period boundary to catch up. */
+	k_sleep(K_USEC(long_period));
+
+	err = pwm_capture_usec(in.dev, in.pwm, in.flags | PWM_CAPTURE_TYPE_PERIOD, &period_capture,
+			       &pulse_capture, K_USEC(short_period * 10));
+	pwm_disable_capture(in.dev, in.pwm);
+
+	if (err == -ENOTSUP) {
+		TC_PRINT("period capture not supported\n");
+		ztest_test_skip();
+	}
+
+	zassert_equal(err, 0, "no pwm output after shrinking the period (err %d)", err);
+	zassert_within(period_capture, short_period, MAX(short_period / 100, 1),
+		       "period capture off by more than 1%%");
+}
+
 ZTEST_USER(pwm_loopback, test_capture_timeout)
 {
 	struct test_pwm in;
@@ -348,3 +396,48 @@ ZTEST(pwm_loopback, test_capture_busy)
 	err = pwm_disable_capture(in.dev, in.pwm);
 	zassert_equal(err, 0, "failed to disable pwm capture (err %d)", err);
 }
+
+#if DT_NODE_HAS_PROP(DT_PATH(zephyr_user), pwms)
+/*
+ * Generate and capture on the same instance. Each captured period then holds
+ * exactly one counter rollover, so a wrong rollover length shows up as an exact
+ * error instead of hiding inside the 1% tolerance.
+ */
+ZTEST(pwm_loopback, test_period_capture_same_instance)
+{
+	const struct pwm_dt_spec out = PWM_DT_SPEC_GET_BY_IDX(DT_PATH(zephyr_user), 0);
+	const struct pwm_dt_spec in = PWM_DT_SPEC_GET_BY_IDX(DT_PATH(zephyr_user), 1);
+	const uint32_t period = 1000U;
+	uint32_t period_capture = 0;
+	uint32_t pulse_capture = 0;
+	uint64_t period_usec;
+	int err;
+
+	zassert_true(pwm_is_ready_dt(&out), "same-instance output device is not ready");
+	zassert_true(pwm_is_ready_dt(&in), "same-instance input device is not ready");
+
+	err = pwm_cycles_to_usec(out.dev, out.channel, period, &period_usec);
+	zassert_equal(err, 0, "failed to calculate usec (err %d)", err);
+
+	err = pwm_set_cycles(out.dev, out.channel, period, period / 4U, out.flags);
+	zassert_equal(err, 0, "failed to set pwm output (err %d)", err);
+
+	k_sleep(K_USEC(period_usec));
+
+	err = pwm_capture_cycles(in.dev, in.channel,
+				 in.flags | PWM_CAPTURE_TYPE_PERIOD | PWM_POLARITY_INVERTED,
+				 &period_capture, &pulse_capture, K_USEC(period_usec * 10));
+
+	/* Leave the line at a constant inactive level for the tests that follow. */
+	(void)pwm_set_cycles(out.dev, out.channel, period, 0, out.flags);
+
+	if (err == -ENOTSUP) {
+		TC_PRINT("period capture not supported\n");
+		ztest_test_skip();
+	}
+
+	zassert_equal(err, 0, "failed to capture pwm (err %d)", err);
+	zassert_equal(period_capture, period, "period capture %u cycles, expected %u",
+		      period_capture, period);
+}
+#endif /* DT_NODE_HAS_PROP(DT_PATH(zephyr_user), pwms) */

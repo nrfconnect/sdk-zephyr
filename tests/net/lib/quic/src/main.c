@@ -165,9 +165,20 @@ static struct eth_fake_context eth_fake_data = {
 
 static struct quic_endpoint *reset_test_ep(struct quic_endpoint *ep)
 {
+	/* A previous test that recorded an ack-eliciting packet may have left
+	 * the PTO timer armed, so ep->recovery.pto_work is still linked in the
+	 * system timeout list. Cancel it before memset(): wiping a delayable
+	 * work item out from under the timeout list leaves a dangling node that
+	 * faults when the timer subsystem next walks it. Safe on the first call
+	 * too -- a zeroed work item reads as inactive.
+	 */
+	k_work_cancel_delayable(&ep->recovery.pto_work);
+
 	memset(ep, 0, sizeof(*ep));
 	ep->sock = -1;
 	quic_recovery_init(ep);
+	k_mutex_init(&ep->pending.lock);
+	k_mutex_init(&ep->send_lock);
 
 	return ep;
 }
@@ -198,7 +209,7 @@ static int eth_fake_send(const struct device *dev, struct net_pkt *pkt)
 	return 0;
 }
 
-static struct ethernet_api eth_fake_api_funcs = {
+static const struct ethernet_api eth_fake_api_funcs = {
 	.iface_api.init = eth_fake_iface_init,
 	.send = eth_fake_send,
 };
@@ -420,11 +431,16 @@ static void before(void *arg)
 #define MAX_WAIT_COUNT 3
 #define WAIT_DELAY_MS 100
 
+static void multi_server_cleanup(void);
+
 static void after(void *arg)
 {
 	struct test_config *cfg = arg;
 	int loop = MAX_WAIT_COUNT;
 	bool fail;
+
+	/* A test that failed half way did not get to stop its server */
+	multi_server_cleanup();
 
 	/* Wait a few iterations to allow any pending cleanup to complete */
 	while (loop-- > 0) {
@@ -585,6 +601,24 @@ static size_t count_new_quic_closed_contexts(const struct quic_closed_stats_snap
 		if (snapshot->entries[i].id > baseline_id) {
 			count++;
 		}
+	}
+
+	return count;
+}
+
+/* A connection context can close a moment after its socket: the QUIC service
+ * thread drops the last reference of a stream once it has handled the frame
+ * whose data the application read before closing the stream.
+ */
+static size_t wait_new_quic_closed_contexts(struct quic_closed_stats_snapshot *snapshot,
+					    int baseline_id, size_t expected)
+{
+	size_t count = count_new_quic_closed_contexts(snapshot, baseline_id);
+
+	for (size_t i = 0U; i < 100U && count < expected; i++) {
+		k_sleep(K_MSEC(10));
+		copy_quic_closed_context_stats(snapshot);
+		count = count_new_quic_closed_contexts(snapshot, baseline_id);
 	}
 
 	return count;
@@ -753,6 +787,39 @@ ZTEST(net_socket_quic, test_010_open_connection_and_close)
 
 	zassert_equal(0, atomic_get(&ctx->refcount),
 		      "Invalid refcount %d after close", (int)atomic_get(&ctx->refcount));
+}
+
+ZTEST(net_socket_quic, test_015_alpn_list_must_leave_room_for_terminator)
+{
+	/* One more protocol than alpn_list can hold together with its NULL
+	 * terminator. Accepting this writes the terminator past the array.
+	 */
+	static const char * const too_many[ALPN_MAX_PROTOCOLS + 1] = {
+		[0 ... ALPN_MAX_PROTOCOLS] = "h3",
+	};
+	static const char * const just_right[ALPN_MAX_PROTOCOLS] = {
+		[0 ... ALPN_MAX_PROTOCOLS - 1] = "h3",
+	};
+	int sock;
+	int ret;
+
+	ret = quic_connection_open((struct net_sockaddr *)&remote_addr_ipv4,
+				   (struct net_sockaddr *)&local_addr_ipv4);
+	zassert_true(ret >= 0, "Failed to open QUIC connection (%d)", ret);
+	sock = ret;
+
+	ret = zsock_setsockopt(sock, ZSOCK_SOL_TLS, ZSOCK_TLS_ALPN_LIST,
+			       too_many, sizeof(too_many));
+	zassert_equal(ret, -1, "Oversized ALPN list must be rejected");
+	zassert_equal(errno, EINVAL, "Expected EINVAL, got %d", errno);
+
+	/* A full list that still leaves room for the terminator is fine. */
+	ret = zsock_setsockopt(sock, ZSOCK_SOL_TLS, ZSOCK_TLS_ALPN_LIST,
+			       just_right, sizeof(just_right));
+	zassert_equal(ret, 0, "Maximum sized ALPN list must be accepted (%d)", -errno);
+
+	ret = quic_connection_close(sock);
+	zassert_equal(0, ret, "Failed to close QUIC connection (%d)", ret);
 }
 
 /* Test 020: Stream open/close */
@@ -2269,6 +2336,40 @@ ZTEST(net_socket_quic, test_210_rfc9001_hp_mask)
 	psa_destroy_key(hp_key_id);
 }
 
+ZTEST(net_socket_quic, test_215_chacha20_header_protection_is_refused)
+{
+	psa_key_attributes_t attributes = PSA_KEY_ATTRIBUTES_INIT;
+	psa_key_id_t hp_key_id;
+	psa_status_t status;
+	uint8_t mask[5] = { 0xa5, 0xa5, 0xa5, 0xa5, 0xa5 };
+	uint8_t untouched[5] = { 0xa5, 0xa5, 0xa5, 0xa5, 0xa5 };
+	const uint8_t sample[] = {
+		0xd1, 0xb1, 0xc9, 0x8d, 0xd7, 0x68, 0x9f, 0xb8,
+		0xec, 0x11, 0xd2, 0x42, 0xb1, 0x23, 0xdc, 0x9b
+	};
+	int ret;
+
+	/* An AES key is fine here; the ChaCha20 branch must bail out before it
+	 * ever reaches the key.
+	 */
+	psa_set_key_usage_flags(&attributes, PSA_KEY_USAGE_ENCRYPT);
+	psa_set_key_algorithm(&attributes, PSA_ALG_ECB_NO_PADDING);
+	psa_set_key_type(&attributes, PSA_KEY_TYPE_AES);
+	psa_set_key_bits(&attributes, 128);
+
+	status = psa_import_key(&attributes, rfc9001_client_hp,
+				sizeof(rfc9001_client_hp), &hp_key_id);
+	zassert_equal(status, PSA_SUCCESS, "Failed to import HP key");
+
+	ret = quic_hp_mask(hp_key_id, QUIC_CIPHER_CHACHA20_POLY1305, sample, mask);
+	zassert_equal(ret, -ENOTSUP,
+		      "ChaCha20 header protection must be refused, got %d", ret);
+	zassert_mem_equal(mask, untouched, sizeof(mask),
+			  "Refused header protection must not write a mask");
+
+	psa_destroy_key(hp_key_id);
+}
+
 /* Test 220: RFC 9001 A.2 - Header decryption */
 ZTEST(net_socket_quic, test_220_rfc9001_header_decryption)
 {
@@ -3278,6 +3379,362 @@ static const uint8_t too_short_initial_msg[] =
 "\xc8\x52\xd0\x4e\x5c\x37\xb8\xd8\x89\xfe\xae\x70\xe4\x52\x54\x53"
 "\x5e\x6f\x97\x98\x9f\x0d\xa0\xf0\xf6\x6a\xb0\x68\x78\x11\xa4\xc2";
 
+#define MULTI_CONN_COUNT 2
+#define MULTI_SERVER_ADDR_STR "127.0.0.1:54330"
+#define MULTI_CLIENT_ADDR_FMT "127.0.0.1:%d"
+#define MULTI_CLIENT_BASE_PORT 19930
+
+/* A lost handshake packet is only recovered after one probe timeout, which
+ * is about one second. A handshake over loopback must stay well below that.
+ * This is only checked where the test runs at the speed of the host: on an
+ * emulated target the handshake computations alone can take longer.
+ */
+#define MULTI_HANDSHAKE_MAX_MS 500
+
+struct multi_server {
+	int sock;
+	int conn[MULTI_CONN_COUNT];
+	int stream[MULTI_CONN_COUNT];
+	int conn_count;
+	int error;
+	struct k_sem started;
+	volatile bool done;
+};
+
+static void multi_server_echo(struct multi_server *srv, int stream)
+{
+	static uint8_t buf[SMALL_BUF_SIZE];
+
+	while (true) {
+		ssize_t len = zsock_recv(stream, buf, sizeof(buf), ZSOCK_MSG_DONTWAIT);
+
+		if (len <= 0) {
+			if (len < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
+				srv->error = -errno;
+			}
+
+			return;
+		}
+
+		len = quic_test_send_all(stream, buf, len);
+		if (len < 0) {
+			srv->error = len;
+			return;
+		}
+	}
+}
+
+/* Accept connections and one stream on each, and echo what the streams
+ * receive, until told to stop.
+ */
+static void multi_server_thread(void *p1, void *p2, void *p3)
+{
+	struct multi_server *srv = p1;
+	struct zsock_pollfd fds[1 + 2 * MULTI_CONN_COUNT];
+
+	ARG_UNUSED(p2);
+	ARG_UNUSED(p3);
+
+	k_sem_give(&srv->started);
+
+	while (!srv->done && srv->error == 0) {
+		int ret;
+
+		fds[0].fd = srv->sock;
+
+		for (int i = 0; i < MULTI_CONN_COUNT; i++) {
+			/* A connection is only polled until its stream arrives */
+			fds[1 + i].fd = srv->stream[i] < 0 ? srv->conn[i] : -1;
+			fds[1 + MULTI_CONN_COUNT + i].fd = srv->stream[i];
+		}
+
+		for (int i = 0; i < ARRAY_SIZE(fds); i++) {
+			fds[i].events = ZSOCK_POLLIN;
+			fds[i].revents = 0;
+		}
+
+		ret = zsock_poll(fds, ARRAY_SIZE(fds), HELPER_POLL_TIMEOUT_MS);
+		if (ret < 0) {
+			srv->error = -errno;
+			break;
+		}
+
+		if ((fds[0].revents & ZSOCK_POLLIN) != 0 && srv->conn_count < MULTI_CONN_COUNT) {
+			ret = zsock_accept(srv->sock, NULL, NULL);
+			if (ret < 0) {
+				srv->error = -errno;
+				break;
+			}
+
+			srv->conn[srv->conn_count++] = ret;
+		}
+
+		for (int i = 0; i < MULTI_CONN_COUNT; i++) {
+			if ((fds[1 + i].revents & ZSOCK_POLLIN) != 0) {
+				ret = zsock_accept(srv->conn[i], NULL, NULL);
+				if (ret < 0) {
+					srv->error = -errno;
+					break;
+				}
+
+				srv->stream[i] = ret;
+			}
+
+			if (srv->stream[i] >= 0) {
+				multi_server_echo(srv, srv->stream[i]);
+			}
+		}
+	}
+}
+
+static void multi_client_echo(int stream, uint8_t value)
+{
+	struct zsock_pollfd pfd = {
+		.fd = stream,
+		.events = ZSOCK_POLLIN,
+	};
+	uint8_t reply = 0;
+	int ret;
+
+	ret = quic_test_send_all(stream, &value, sizeof(value));
+	zassert_ok(ret, "Failed to send on stream %d (%d)", stream, ret);
+
+	ret = zsock_poll(&pfd, 1, 5 * POLL_TIMEOUT_MS);
+	zassert_true(ret > 0, "No echo on stream %d (%d)", stream, ret);
+
+	ret = zsock_recv(stream, &reply, sizeof(reply), 0);
+	zassert_equal(ret, sizeof(reply), "Failed to recv on stream %d (%d)", stream, -errno);
+	zassert_equal(reply, value, "Wrong echo on stream %d", stream);
+}
+
+static K_THREAD_STACK_DEFINE(multi_server_stack, 2048);
+static struct k_thread multi_server_thread_data;
+static struct multi_server multi_srv;
+static bool multi_server_active;
+static bool multi_server_thread_started;
+static struct net_sockaddr_storage multi_server_addr;
+static int multi_client_sock[MULTI_CONN_COUNT];
+static int multi_client_stream[MULTI_CONN_COUNT];
+
+static const char * const multi_alpn_list[] = {
+	"test-quic",
+	NULL
+};
+
+static void multi_server_start(void)
+{
+	sec_tag_t server_sec_tags[] = {
+		SERVER_CERTIFICATE_TAG,
+	};
+	int ret;
+
+	ret = loopback_set_packet_drop_ratio(0.0);
+	zassert_ok(ret, "Failed to set loopback packet drop ratio (%d)", ret);
+
+	ret = net_ipaddr_parse(MULTI_SERVER_ADDR_STR, strlen(MULTI_SERVER_ADDR_STR),
+			       (struct net_sockaddr *)&multi_server_addr);
+	zassert_true(ret, "Failed to parse server IP address");
+
+	memset(&multi_srv, 0, sizeof(multi_srv));
+	k_sem_init(&multi_srv.started, 0, 1);
+
+	multi_srv.sock = -1;
+
+	for (int i = 0; i < MULTI_CONN_COUNT; i++) {
+		multi_srv.conn[i] = -1;
+		multi_srv.stream[i] = -1;
+		multi_client_sock[i] = -1;
+		multi_client_stream[i] = -1;
+	}
+
+	/* From here on the after hook cleans up whatever a failing test
+	 * leaves behind.
+	 */
+	multi_server_active = true;
+
+	prepare_quic_socket(&multi_srv.sock, NULL,
+			    (const struct net_sockaddr *)&multi_server_addr);
+	setup_quic_certs(multi_srv.sock, server_sec_tags, ARRAY_SIZE(server_sec_tags));
+	setup_alpn(multi_srv.sock, multi_alpn_list, ARRAY_SIZE(multi_alpn_list));
+
+	(void)k_thread_create(&multi_server_thread_data, multi_server_stack,
+			      K_THREAD_STACK_SIZEOF(multi_server_stack),
+			      multi_server_thread, &multi_srv, NULL, NULL,
+			      K_PRIO_PREEMPT(1), 0, K_NO_WAIT);
+	multi_server_thread_started = true;
+
+	ret = k_sem_take(&multi_srv.started, K_FOREVER);
+	zassert_ok(ret, "Failed to take semaphore (%d)", ret);
+}
+
+/* Open client connection idx with one stream and check that data flows */
+static void multi_client_connect(int idx)
+{
+	sec_tag_t client_sec_tags[] = {
+		CA_CERTIFICATE_TAG,
+	};
+	struct net_sockaddr_storage client_addr;
+	char client_str[sizeof("127.0.0.1:65535")];
+	int ret;
+
+	snprintk(client_str, sizeof(client_str), MULTI_CLIENT_ADDR_FMT,
+		 MULTI_CLIENT_BASE_PORT + idx);
+	ret = net_ipaddr_parse(client_str, strlen(client_str),
+			       (struct net_sockaddr *)&client_addr);
+	zassert_true(ret, "Failed to parse client IP address %s", client_str);
+
+	prepare_quic_socket(&multi_client_sock[idx],
+			    (const struct net_sockaddr *)&multi_server_addr,
+			    (const struct net_sockaddr *)&client_addr);
+	setup_quic_certs(multi_client_sock[idx], client_sec_tags, ARRAY_SIZE(client_sec_tags));
+	setup_alpn(multi_client_sock[idx], multi_alpn_list, ARRAY_SIZE(multi_alpn_list));
+
+	multi_client_stream[idx] = quic_stream_open(multi_client_sock[idx], QUIC_STREAM_CLIENT,
+						    QUIC_STREAM_BIDIRECTIONAL, 0);
+	zassert_true(multi_client_stream[idx] >= 0,
+		     "Failed to open stream on connection %d (%d)",
+		     idx, multi_client_stream[idx]);
+
+	multi_client_echo(multi_client_stream[idx], 0xa0 + idx);
+}
+
+static void multi_close_fd(int *fd)
+{
+	if (*fd >= 0) {
+		(void)zsock_close(*fd);
+		*fd = -1;
+	}
+}
+
+/* Stop the server thread and close every socket that is still open. This
+ * does not assert, so that it can also run after a test has failed.
+ */
+static void multi_server_cleanup(void)
+{
+	if (!multi_server_active) {
+		return;
+	}
+
+	if (multi_server_thread_started) {
+		multi_srv.done = true;
+		(void)k_thread_join(&multi_server_thread_data, K_MSEC(500));
+		multi_server_thread_started = false;
+	}
+
+	for (int i = 0; i < MULTI_CONN_COUNT; i++) {
+		multi_close_fd(&multi_client_stream[i]);
+		multi_close_fd(&multi_srv.stream[i]);
+		multi_close_fd(&multi_srv.conn[i]);
+		multi_close_fd(&multi_client_sock[i]);
+	}
+
+	multi_close_fd(&multi_srv.sock);
+
+	multi_server_active = false;
+}
+
+static void multi_server_stop(int expected_conn_count)
+{
+	int ret;
+
+	multi_srv.done = true;
+	ret = k_thread_join(&multi_server_thread_data, K_MSEC(500));
+	multi_server_thread_started = false;
+	zassert_ok(ret, "Cannot join thread (%d)", ret);
+	zassert_ok(multi_srv.error, "Server thread reported error (%d)", multi_srv.error);
+	zassert_equal(multi_srv.conn_count, expected_conn_count,
+		      "Server accepted %d connections", multi_srv.conn_count);
+
+	for (int i = 0; i < expected_conn_count; i++) {
+		ret = quic_stream_close(multi_client_stream[i]);
+		multi_client_stream[i] = -1;
+		zassert_ok(ret, "Failed to close client stream %d (%d)", i, ret);
+
+		ret = quic_stream_close(multi_srv.stream[i]);
+		multi_srv.stream[i] = -1;
+		zassert_ok(ret, "Failed to close server stream %d (%d)", i, ret);
+
+		ret = quic_connection_close(multi_srv.conn[i]);
+		multi_srv.conn[i] = -1;
+		zassert_ok(ret, "Failed to close server connection %d (%d)", i, ret);
+
+		ret = quic_connection_close(multi_client_sock[i]);
+		multi_client_sock[i] = -1;
+		zassert_ok(ret, "Failed to close client connection %d (%d)", i, ret);
+	}
+
+	ret = quic_connection_close(multi_srv.sock);
+	multi_srv.sock = -1;
+	zassert_ok(ret, "Failed to close server socket (%d)", ret);
+
+	multi_server_active = false;
+}
+
+ZTEST(net_socket_quic, test_316_quic_ipv4_concurrent_connections)
+{
+	multi_server_start();
+
+	/* Open the connections one after the other and keep them all open,
+	 * so every handshake but the first runs next to a live connection.
+	 */
+	for (int i = 0; i < MULTI_CONN_COUNT; i++) {
+		int64_t start = k_uptime_get();
+		int64_t took;
+
+		multi_client_connect(i);
+
+		took = k_uptime_delta(&start);
+		if (IS_ENABLED(CONFIG_ARCH_POSIX)) {
+			zassert_true(took < MULTI_HANDSHAKE_MAX_MS,
+				     "Connection %d took %lld ms to become usable", i, took);
+		}
+	}
+
+	/* Every connection is still usable after the later ones were set up */
+	for (int i = 0; i < MULTI_CONN_COUNT; i++) {
+		multi_client_echo(multi_client_stream[i], 0xb0 + i);
+	}
+
+	multi_server_stop(MULTI_CONN_COUNT);
+}
+
+/* The longest idle timeout this test is willing to sit through */
+#define IDLE_TEST_MAX_TIMEOUT_MS 2000
+
+ZTEST(net_socket_quic, test_317_quic_ipv4_traffic_keeps_connection_alive)
+{
+	int64_t end;
+
+	if (CONFIG_QUIC_MAX_IDLE_TIMEOUT == 0 ||
+	    CONFIG_QUIC_MAX_IDLE_TIMEOUT > IDLE_TEST_MAX_TIMEOUT_MS) {
+		ztest_test_skip();
+	}
+
+	multi_server_start();
+
+	/* Use more than one connection: the server side endpoints share one
+	 * UDP socket, and each of them must track its own traffic.
+	 */
+	for (int i = 0; i < MULTI_CONN_COUNT; i++) {
+		multi_client_connect(i);
+	}
+
+	/* Keep both directions busy for well over the idle timeout. Neither
+	 * end may consider a connection idle.
+	 */
+	end = k_uptime_get() + 2 * CONFIG_QUIC_MAX_IDLE_TIMEOUT;
+
+	while (k_uptime_get() < end) {
+		k_msleep(CONFIG_QUIC_MAX_IDLE_TIMEOUT / 5);
+
+		for (int i = 0; i < MULTI_CONN_COUNT; i++) {
+			multi_client_echo(multi_client_stream[i], 0xc0 + i);
+		}
+	}
+
+	multi_server_stop(MULTI_CONN_COUNT);
+}
+
 ZTEST(net_socket_quic, test_320_quic_initial_too_short)
 {
 	/* Make sure that if we receive an Initial packet that is too short to contain the
@@ -3355,6 +3812,100 @@ ZTEST(net_socket_quic, test_320_quic_initial_too_short)
 	copy_quic_global_stats(&stats_after);
 	zassert_equal(stats_after.packets_rx - stats_before.packets_rx, 1U,
 		      "Malformed Initial must still count as one received packet");
+
+	ret = zsock_close(client_sock);
+	zassert_ok(ret, "Cannot close client socket %d (%d)", client_sock, -errno);
+
+	ret = quic_connection_close(server_sock);
+	zassert_ok(ret, "Cannot close server socket %d (%d)", server_sock, -errno);
+}
+
+/* Long header packets of a valid version for a connection nobody knows.
+ * Both are far below the 1200 bytes an Initial datagram needs and carry
+ * no address validation token.
+ */
+#define UNKNOWN_CONN_LONG_HEADER(first_byte)				\
+	{								\
+		first_byte,                   /* Long header, type */	\
+		0x00, 0x00, 0x00, 0x01,       /* QUIC version 1 */	\
+		0x08, 0xa1, 0xa2, 0xa3, 0xa4, /* DCID len=8, DCID */	\
+		0xa5, 0xa6, 0xa7, 0xa8,					\
+		0x08, 0xb1, 0xb2, 0xb3, 0xb4, /* SCID len=8, SCID */	\
+		0xb5, 0xb6, 0xb7, 0xb8,					\
+		0x18,                         /* Length = 24 */		\
+		0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,		\
+		0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,		\
+		0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,		\
+	}
+
+static const uint8_t unknown_conn_handshake_msg[] = UNKNOWN_CONN_LONG_HEADER(0xe0);
+static const uint8_t unknown_conn_0rtt_msg[] = UNKNOWN_CONN_LONG_HEADER(0xd0);
+
+ZTEST(net_socket_quic, test_325_quic_only_initial_starts_a_connection)
+{
+	static const struct {
+		const uint8_t *msg;
+		size_t len;
+		const char *name;
+	} packets[] = {
+		{ unknown_conn_handshake_msg, sizeof(unknown_conn_handshake_msg), "Handshake" },
+		{ unknown_conn_0rtt_msg, sizeof(unknown_conn_0rtt_msg), "0-RTT" },
+	};
+	struct net_sockaddr_storage server_addr;
+	struct net_sockaddr_storage client_addr;
+	struct quic_context *server_ctx;
+	int server_sock;
+	int client_sock;
+	int ret;
+
+	ret = net_ipaddr_parse("127.0.0.1:54360", strlen("127.0.0.1:54360"),
+			       (struct net_sockaddr *)&server_addr);
+	zassert_true(ret, "Failed to parse server IP address");
+
+	ret = net_ipaddr_parse("127.0.0.1:19960", strlen("127.0.0.1:19960"),
+			       (struct net_sockaddr *)&client_addr);
+	zassert_true(ret, "Failed to parse client IP address");
+
+	prepare_quic_socket(&server_sock, NULL, (const struct net_sockaddr *)&server_addr);
+
+	client_sock = zsock_socket(NET_AF_INET, NET_SOCK_DGRAM, NET_IPPROTO_UDP);
+	zassert_true(client_sock >= 0, "Could not create client socket (%d)", -errno);
+
+	ret = zsock_bind(client_sock, (const struct net_sockaddr *)&client_addr,
+			 sizeof(client_addr));
+	zassert_ok(ret, "Could not bind client socket (%d)", -errno);
+
+	server_ctx = quic_get_context(server_sock);
+	zassert_not_null(server_ctx, "Could not get server QUIC context");
+	assert_quic_stats_zero(&server_ctx->stats, "listener");
+
+	ARRAY_FOR_EACH(packets, i) {
+		uint32_t expected = i + 1;
+
+		ret = zsock_sendto(client_sock, packets[i].msg, packets[i].len, 0,
+				   (const struct net_sockaddr *)&server_addr,
+				   sizeof(server_addr));
+		zassert_equal(ret, packets[i].len, "Failed to send the %s packet (%d)",
+			      packets[i].name, -errno);
+
+		/* Let the socket service forward the packet to the QUIC server */
+		for (int j = 0; j < 10 && server_ctx->stats.drop_rx < expected; j++) {
+			k_msleep(10);
+		}
+
+		/* The listener itself turns the packet away. Nothing is set up
+		 * for a connection that did not start with an Initial packet.
+		 */
+		zassert_equal(server_ctx->stats.peer_not_found, expected,
+			      "%s packet for an unknown connection was not turned away (%u)",
+			      packets[i].name, server_ctx->stats.peer_not_found);
+		zassert_equal(server_ctx->stats.drop_rx, expected,
+			      "%s packet for an unknown connection was not dropped (%u)",
+			      packets[i].name, server_ctx->stats.drop_rx);
+	}
+
+	zassert_equal(server_ctx->stats.handshake_init_rx, 0,
+		      "No handshake may be counted as started");
 
 	ret = zsock_close(client_sock);
 	zassert_ok(ret, "Cannot close client socket %d (%d)", client_sock, -errno);
@@ -3470,6 +4021,61 @@ ZTEST(net_socket_quic, test_336_quic_unsupported_version_before_initial_validati
 	zassert_equal(ret, 1,
 		      "Expected unsupported version path before Initial validation (%d)",
 		      ret);
+}
+
+ZTEST(net_socket_quic, test_338_long_header_truncated_at_scid_len)
+{
+	/* DCID consumes the last byte of the datagram, so the SCID length
+	 * byte that follows lies exactly one past the end of the buffer.
+	 */
+	uint8_t packet[] = {
+		0xc0,                         /* Long header, Initial packet */
+		0x00, 0x00, 0x00, 0x01,       /* Version 1 */
+		0x01, 0xaa,                   /* DCID len=1, DCID byte */
+	};
+	struct quic_long_header_info info;
+	int ret;
+
+	ret = quic_parse_long_header(&info, packet, sizeof(packet));
+	zassert_not_equal(ret, 0,
+			  "Header truncated at the SCID length byte must be rejected");
+}
+
+ZTEST(net_socket_quic, test_337_long_header_every_truncation_is_safe)
+{
+	/* A well-formed Initial packet. Parsing any prefix of it must either
+	 * fail, or report a total length that stays inside the buffer it was
+	 * given. Anything else means the parser walked off the end.
+	 */
+	uint8_t packet[] = {
+		0xc0,                         /* Long header, Initial packet */
+		0x00, 0x00, 0x00, 0x01,       /* Version 1 */
+		0x08, 0x83, 0x94, 0xc8, 0xf0, /* DCID len=8, DCID bytes */
+		0x3e, 0x51, 0x57, 0x08,
+		0x08, 0x10, 0x11, 0x12, 0x13, /* SCID len=8, SCID bytes */
+		0x14, 0x15, 0x16, 0x17,
+		0x00,                         /* Token length = 0 */
+		0x01,                         /* Payload length = 1 (PN only) */
+		0x00,                         /* Packet number = 0 */
+	};
+	struct quic_long_header_info info;
+	int ret;
+
+	ret = quic_parse_long_header(&info, packet, sizeof(packet));
+	zassert_ok(ret, "Reference packet must parse (%d)", ret);
+
+	for (size_t prefix = 0; prefix < sizeof(packet); prefix++) {
+		memset(&info, 0, sizeof(info));
+
+		ret = quic_parse_long_header(&info, packet, prefix);
+		if (ret != 0) {
+			continue;
+		}
+
+		zassert_true(info.total_len <= prefix,
+			     "Prefix of %zu bytes accepted with total_len %zu",
+			     prefix, info.total_len);
+	}
 }
 
 ZTEST(net_socket_quic, test_340_quic_check_retransmissions)
@@ -4367,7 +4973,8 @@ static void quic_server_and_client_with_server_cert(const char *server,
 						    const char *client,
 						    int client_verify_mode,
 						    bool setup_client_ca,
-						    bool expect_success)
+						    bool expect_success,
+						    const char *client_hostname)
 {
 	struct net_sockaddr_storage server_addr;
 	struct net_sockaddr_storage client_addr;
@@ -4453,6 +5060,13 @@ static void quic_server_and_client_with_server_cert(const char *server,
 				       ZSOCK_TLS_PEER_VERIFY,
 				       &client_verify_mode, sizeof(client_verify_mode));
 		zassert_equal(ret, 0, "Failed to set client verify mode (%d)", -errno);
+	}
+
+	if (client_hostname != NULL) {
+		ret = zsock_setsockopt(client_sock, ZSOCK_SOL_TLS,
+				       ZSOCK_TLS_HOSTNAME,
+				       client_hostname, strlen(client_hostname));
+		zassert_equal(ret, 0, "Failed to set client hostname (%d)", -errno);
 	}
 
 	setup_alpn(client_sock, alpn_list, ARRAY_SIZE(alpn_list));
@@ -4951,7 +5565,7 @@ ZTEST(net_socket_quic, test_440_client_requires_server_ca_by_default)
 
 	quic_server_and_client_with_server_cert(LOCAL_ADDR_IPV4_STR3,
 						REMOTE_ADDR_IPV4_STR3,
-						-1, false, false);
+						-1, false, false, NULL);
 }
 
 ZTEST(net_socket_quic, test_450_client_can_disable_server_verification)
@@ -4964,7 +5578,221 @@ ZTEST(net_socket_quic, test_450_client_can_disable_server_verification)
 	quic_server_and_client_with_server_cert(LOCAL_ADDR_IPV4_STR3,
 						REMOTE_ADDR_IPV4_STR3,
 						MBEDTLS_SSL_VERIFY_NONE,
-						false, true);
+						false, true, NULL);
+}
+
+ZTEST(net_socket_quic, test_456_server_cert_matching_hostname_is_accepted)
+{
+	int ret;
+
+	ret = loopback_set_packet_drop_ratio(0.0);
+	zassert_ok(ret, "Failed to set packet drop ratio (%d)", ret);
+
+	/* The test server certificate carries CN=localhost and a matching
+	 * subjectAltName.
+	 */
+	quic_server_and_client_with_server_cert(LOCAL_ADDR_IPV4_STR3,
+						REMOTE_ADDR_IPV4_STR3,
+						MBEDTLS_SSL_VERIFY_REQUIRED,
+						true, true, "localhost");
+}
+
+ZTEST(net_socket_quic, test_457_server_cert_wrong_hostname_is_rejected)
+{
+	int ret;
+
+	ret = loopback_set_packet_drop_ratio(0.0);
+	zassert_ok(ret, "Failed to set packet drop ratio (%d)", ret);
+
+	/* Same certificate, issued by a CA the client trusts, but for a
+	 * different name. Required verification must reject it.
+	 */
+	quic_server_and_client_with_server_cert(LOCAL_ADDR_IPV4_STR3,
+						REMOTE_ADDR_IPV4_STR3,
+						MBEDTLS_SSL_VERIFY_REQUIRED,
+						true, false, "not-the-server.example.com");
+}
+
+/* A ClientHello whose fixed part is well formed. The extensions length is
+ * filled in per test so the parser can be pushed past the end of the buffer.
+ */
+#define TEST_CH_EXT_LEN_OFFSET 41U
+
+static const uint8_t test_client_hello[] = {
+	0x03, 0x03,                   /* Legacy version TLS 1.2 */
+	0x00, 0x01, 0x02, 0x03, 0x04, /* Client random (32 bytes) */
+	0x05, 0x06, 0x07, 0x08, 0x09,
+	0x0a, 0x0b, 0x0c, 0x0d, 0x0e,
+	0x0f, 0x10, 0x11, 0x12, 0x13,
+	0x14, 0x15, 0x16, 0x17, 0x18,
+	0x19, 0x1a, 0x1b, 0x1c, 0x1d,
+	0x1e, 0x1f,
+	0x00,                         /* Legacy session ID length = 0 */
+	0x00, 0x02, 0x13, 0x01,       /* Cipher suites: TLS_AES_128_GCM_SHA256 */
+	0x01, 0x00,                   /* Compression methods: null */
+	0x00, 0x00,                   /* Extensions length (patched per test) */
+};
+
+ZTEST(net_socket_quic, test_452_client_hello_extensions_length_must_fit)
+{
+	struct quic_endpoint *ep = reset_test_ep(&test_ep_a);
+	uint8_t hello[sizeof(test_client_hello)];
+	struct quic_tls_context ctx = { 0 };
+	int ret;
+
+	ep->is_server = true;
+	ctx.ep = ep;
+
+	memcpy(hello, test_client_hello, sizeof(hello));
+
+	/* Claim 65535 bytes of extensions in a buffer that holds none. */
+	hello[TEST_CH_EXT_LEN_OFFSET] = 0xff;
+	hello[TEST_CH_EXT_LEN_OFFSET + 1] = 0xff;
+
+	ret = parse_client_hello(&ctx, hello, sizeof(hello), hello, sizeof(hello));
+	zassert_equal(ret, -EINVAL,
+		      "Extensions length past the end of the message must be rejected (%d)",
+		      ret);
+}
+
+ZTEST(net_socket_quic, test_451_client_hello_chacha20_only_is_refused)
+{
+	struct quic_endpoint *ep = reset_test_ep(&test_ep_a);
+	uint8_t hello[sizeof(test_client_hello)];
+	struct quic_tls_context ctx = { 0 };
+	int ret;
+
+	ep->is_server = true;
+	ctx.ep = ep;
+
+	memcpy(hello, test_client_hello, sizeof(hello));
+
+	/* Offer only TLS_CHACHA20_POLY1305_SHA256. Header protection for it is
+	 * not implemented, so the server must not select it.
+	 */
+	hello[37] = 0x13;
+	hello[38] = 0x03;
+
+	ret = parse_client_hello(&ctx, hello, sizeof(hello), hello, sizeof(hello));
+	zassert_equal(ret, -ENOTSUP,
+		      "A ChaCha20-only ClientHello must not be accepted (%d)", ret);
+}
+
+ZTEST(net_socket_quic, test_458_configured_cipher_suite_list_is_enforced)
+{
+	struct quic_endpoint *ep = reset_test_ep(&test_ep_a);
+	uint8_t hello[sizeof(test_client_hello)];
+	struct quic_tls_context ctx = { 0 };
+	int ret;
+
+	ep->is_server = true;
+	ctx.ep = ep;
+
+	/* Application restricts the server to AES-256 only. */
+	ctx.options.ciphersuites[0] = TLS_AES_256_GCM_SHA384;
+
+	memcpy(hello, test_client_hello, sizeof(hello));
+	/* The client offers AES-128, which is now excluded. */
+
+	ret = parse_client_hello(&ctx, hello, sizeof(hello), hello, sizeof(hello));
+	zassert_equal(ret, -ENOTSUP,
+		      "A suite outside the configured list must not be selected (%d)",
+		      ret);
+
+	/* With the offered suite allowed, selection proceeds normally. */
+	ctx.options.ciphersuites[0] = TLS_AES_128_GCM_SHA256;
+
+	ret = parse_client_hello(&ctx, hello, sizeof(hello), hello, sizeof(hello));
+	zassert_not_equal(ret, -ENOTSUP,
+			  "An allowed suite must still be selectable (%d)", ret);
+}
+
+ZTEST(net_socket_quic, test_459_server_hello_suite_must_come_from_our_offer)
+{
+	struct quic_tls_context ctx = { 0 };
+	uint8_t hello[40];
+	size_t pos = 0;
+	int ret;
+
+	/* Minimal ServerHello: version, random, empty session id echo, the
+	 * selected suite, compression, empty extensions.
+	 */
+	hello[pos++] = 0x03;
+	hello[pos++] = 0x03;
+	memset(&hello[pos], 0xab, 32);
+	pos += 32;
+	hello[pos++] = 0x00; /* Session ID echo length */
+	hello[pos++] = (TLS_AES_256_GCM_SHA384 >> 8) & 0xFF;
+	hello[pos++] = TLS_AES_256_GCM_SHA384 & 0xFF;
+	hello[pos++] = 0x00; /* Compression */
+	hello[pos++] = 0x00; /* Extensions length */
+	hello[pos++] = 0x00;
+
+	/* With an external PSK the ClientHello offers AES-128 only. A server
+	 * that declines the PSK must still not select a suite the offer left
+	 * out, even if the configured list would permit it.
+	 */
+	ctx.offered_suites[0] = TLS_AES_128_GCM_SHA256;
+	ctx.offered_suite_count = 1;
+
+	ret = parse_server_hello(&ctx, hello, sizeof(hello));
+	zassert_equal(ret, -ENOTSUP,
+		      "A suite absent from our offer must be rejected (%d)", ret);
+
+	/* The same suite passes the check once it is part of the offer; the
+	 * parse then fails later on the missing extensions instead.
+	 */
+	ctx.offered_suites[1] = TLS_AES_256_GCM_SHA384;
+	ctx.offered_suite_count = 2;
+
+	ret = parse_server_hello(&ctx, hello, sizeof(hello));
+	zassert_not_equal(ret, -ENOTSUP,
+			  "An offered suite must pass the offer check (%d)", ret);
+}
+
+ZTEST(net_socket_quic, test_453_client_hello_odd_cipher_suites_length)
+{
+	struct quic_endpoint *ep = reset_test_ep(&test_ep_a);
+	uint8_t hello[sizeof(test_client_hello)];
+	struct quic_tls_context ctx = { 0 };
+	int ret;
+
+	ep->is_server = true;
+	ctx.ep = ep;
+
+	memcpy(hello, test_client_hello, sizeof(hello));
+
+	/* An odd cipher suite list length makes the 2-byte read at the last
+	 * entry run one byte past the list.
+	 */
+	hello[35] = 0x00;
+	hello[36] = 0x01;
+
+	ret = parse_client_hello(&ctx, hello, sizeof(hello), hello, sizeof(hello));
+	zassert_equal(ret, -EINVAL,
+		      "Odd cipher suites length must be rejected (%d)", ret);
+}
+
+ZTEST(net_socket_quic, test_454_client_hello_every_truncation_is_safe)
+{
+	struct quic_endpoint *ep = reset_test_ep(&test_ep_a);
+	uint8_t hello[sizeof(test_client_hello)];
+
+	ep->is_server = true;
+
+	memcpy(hello, test_client_hello, sizeof(hello));
+
+	/* No prefix of a ClientHello may make the parser read past the length
+	 * it was handed. The return value is not interesting here; the point
+	 * is that none of these run off the end under a sanitizer.
+	 */
+	for (size_t prefix = 0; prefix <= sizeof(hello); prefix++) {
+		struct quic_tls_context ctx = { 0 };
+
+		ctx.ep = ep;
+
+		(void)parse_client_hello(&ctx, hello, prefix, hello, prefix);
+	}
 }
 
 ZTEST(net_socket_quic, test_455_required_peer_verification_rejects_empty_certificate)
@@ -5006,6 +5834,133 @@ ZTEST(net_socket_quic, test_460_required_peer_verification_rejects_finished_with
 		      ret);
 	zassert_not_equal(ctx.state, QUIC_TLS_STATE_CONNECTED,
 			  "Handshake must not reach CONNECTED without peer certificate");
+}
+
+ZTEST(net_socket_quic, test_462_forged_finished_is_rejected)
+{
+	struct quic_endpoint *ep = reset_test_ep(&test_ep_a);
+	struct quic_tls_context ctx = { 0 };
+	/* Right length for SHA-256, wrong contents. */
+	static const uint8_t finished_body[32] = { 0 };
+	static const uint8_t finished_msg[4 + 32] = { 0 };
+	int ret;
+
+	ep->is_server = false;
+	ctx.ep = ep;
+	/* No peer verification, so the certificate check cannot be what
+	 * rejects this. The Finished MAC has to.
+	 */
+	ctx.options.verify_level = MBEDTLS_SSL_VERIFY_NONE;
+	ctx.peer_cert_len = 0;
+	ctx.ks.cipher_suite = TLS_AES_128_GCM_SHA256;
+	ctx.ks.hash_alg = PSA_ALG_SHA_256;
+	ctx.ks.hash_len = 32;
+
+	/* A running transcript is needed, otherwise the hash lookup fails
+	 * before the MAC is ever compared.
+	 */
+	zassert_equal(psa_hash_setup(&ctx.ks.transcript_hash, PSA_ALG_SHA_256),
+		      PSA_SUCCESS, "Failed to start transcript hash");
+
+	ret = process_handshake_message(&ctx, TLS_HS_FINISHED,
+					finished_body, sizeof(finished_body),
+					finished_msg, sizeof(finished_msg));
+	zassert_equal(ret, -EBADMSG,
+		      "Expected a Finished with a bad MAC to be rejected (%d)", ret);
+	zassert_not_equal(ctx.state, QUIC_TLS_STATE_CONNECTED,
+			  "Handshake must not reach CONNECTED on a forged Finished");
+
+	psa_hash_abort(&ctx.ks.transcript_hash);
+}
+
+ZTEST(net_socket_quic, test_464_certificate_without_certificate_verify_is_rejected)
+{
+	struct quic_endpoint *ep = reset_test_ep(&test_ep_a);
+	struct quic_tls_context ctx = { 0 };
+	static const uint8_t finished_body[32] = { 0 };
+	static const uint8_t finished_msg[4 + 32] = { 0 };
+	int ret;
+
+	ep->is_server = false;
+	ctx.ep = ep;
+	ctx.options.verify_level = MBEDTLS_SSL_VERIFY_NONE;
+	ctx.ks.cipher_suite = TLS_AES_128_GCM_SHA256;
+	ctx.ks.hash_alg = PSA_ALG_SHA_256;
+	ctx.ks.hash_len = 32;
+
+	/* The peer presented a certificate but never proved it holds the
+	 * matching private key.
+	 */
+	ctx.peer_cert_len = 64;
+	ctx.peer_cert_verified = false;
+
+	zassert_equal(psa_hash_setup(&ctx.ks.transcript_hash, PSA_ALG_SHA_256),
+		      PSA_SUCCESS, "Failed to start transcript hash");
+
+	ret = process_handshake_message(&ctx, TLS_HS_FINISHED,
+					finished_body, sizeof(finished_body),
+					finished_msg, sizeof(finished_msg));
+	zassert_equal(ret, -EACCES,
+		      "Finished must be refused when CertificateVerify is missing (%d)",
+		      ret);
+	zassert_not_equal(ctx.state, QUIC_TLS_STATE_CONNECTED,
+			  "Handshake must not reach CONNECTED without CertificateVerify");
+
+	/* With CertificateVerify accounted for, the handshake gets past this
+	 * check and is only stopped by the Finished MAC, confirming the check
+	 * above is specific to CertificateVerify.
+	 */
+	ctx.peer_cert_verified = true;
+
+	ret = process_handshake_message(&ctx, TLS_HS_FINISHED,
+					finished_body, sizeof(finished_body),
+					finished_msg, sizeof(finished_msg));
+	zassert_equal(ret, -EBADMSG,
+		      "Expected the Finished MAC to be what fails now (%d)", ret);
+
+	psa_hash_abort(&ctx.ks.transcript_hash);
+}
+
+ZTEST(net_socket_quic, test_463_finished_wrong_length_is_rejected)
+{
+	struct quic_endpoint *ep = reset_test_ep(&test_ep_a);
+	struct quic_tls_context ctx = { 0 };
+	static const uint8_t finished_body[8] = { 0 };
+	static const uint8_t finished_msg[4 + 8] = { 0 };
+	int ret;
+
+	ep->is_server = false;
+	ctx.ep = ep;
+	ctx.options.verify_level = MBEDTLS_SSL_VERIFY_NONE;
+	ctx.ks.cipher_suite = TLS_AES_128_GCM_SHA256;
+	ctx.ks.hash_alg = PSA_ALG_SHA_256;
+	ctx.ks.hash_len = 32;
+
+	ret = process_handshake_message(&ctx, TLS_HS_FINISHED,
+					finished_body, sizeof(finished_body),
+					finished_msg, sizeof(finished_msg));
+	zassert_equal(ret, -EBADMSG,
+		      "Expected a short Finished to be rejected (%d)", ret);
+}
+
+/* RFC 9001 6: the TLS KeyUpdate message is prohibited in QUIC and must be
+ * rejected as a protocol violation, not silently ignored.
+ */
+ZTEST(net_socket_quic, test_461_tls_keyupdate_is_rejected)
+{
+	struct quic_endpoint *ep = reset_test_ep(&test_ep_a);
+	struct quic_tls_context ctx = { 0 };
+	static const uint8_t body[] = { 0x00 }; /* update_not_requested */
+	static const uint8_t full_msg[] = { TLS_HS_KEY_UPDATE, 0x00, 0x00, 0x01, 0x00 };
+	int ret;
+
+	ep->is_server = true;
+	ctx.ep = ep;
+
+	ret = process_handshake_message(&ctx, TLS_HS_KEY_UPDATE,
+					body, sizeof(body), full_msg, sizeof(full_msg));
+	zassert_equal(ret, -EPROTO,
+		      "TLS KeyUpdate must be rejected with -EPROTO (%d)", ret);
 }
 
 ZTEST(net_socket_quic, test_465_external_psk_handshake_can_exchange_data)
@@ -5187,6 +6142,7 @@ ZTEST(net_socket_quic, test_470_connection_statistics_track_traffic)
 	const struct quic_closed_context_stats *closed_client;
 	const struct quic_closed_context_stats *closed_server;
 	int closed_baseline_id;
+	size_t closed_count;
 #endif
 	int ret;
 
@@ -5236,7 +6192,8 @@ ZTEST(net_socket_quic, test_470_connection_statistics_track_traffic)
 	zassert_equal(stats_after.connections_opened - stats_before.connections_opened, 3U,
 		      "Expected listener, client, and accepted server connection opens");
 #if defined(CONFIG_QUIC_STATS_HISTORY)
-	zassert_equal(count_new_quic_closed_contexts(&closed_after, closed_baseline_id), 2U,
+	closed_count = wait_new_quic_closed_contexts(&closed_after, closed_baseline_id, 2U);
+	zassert_equal(closed_count, 2U,
 		      "Expected only client and accepted server contexts in closed stats history");
 
 	closed_client = find_new_quic_closed_context_stats(&closed_after, closed_baseline_id, false,
@@ -5255,6 +6212,570 @@ ZTEST(net_socket_quic, test_470_connection_statistics_track_traffic)
 	zassert_true(closed_server->stats.valid_rx > 0U, "Closed server valid_rx missing");
 	assert_quic_stats_no_errors(&closed_server->stats, "closed server");
 #endif
+}
+
+static struct quic_endpoint *quic_test_sock_endpoint(int sock)
+{
+	struct quic_context *ctx;
+	struct quic_endpoint *ep;
+
+	ctx = quic_get_context(sock);
+	zassert_not_null(ctx, "Failed to get QUIC context for socket %d", sock);
+	ep = SYS_SLIST_PEEK_HEAD_CONTAINER(&ctx->endpoints, ep, node);
+	zassert_not_null(ep, "Failed to get QUIC endpoint for socket %d", sock);
+
+	return ep;
+}
+
+static void quic_test_echo_round(int stream_sock, const uint8_t *tx, size_t tx_len,
+				 uint8_t *rx, size_t rx_size)
+{
+	struct zsock_pollfd pfd = {
+		.fd = stream_sock,
+		.events = ZSOCK_POLLIN,
+	};
+	size_t rcvd = 0;
+	int ret;
+
+	ret = quic_test_send_all(stream_sock, tx, tx_len);
+	zassert_ok(ret, "Failed to send data (%d)", ret);
+
+	while (rcvd < tx_len) {
+		pfd.revents = 0;
+
+		ret = zsock_poll(&pfd, 1, POLL_TIMEOUT_MS);
+		zassert_true(ret > 0, "Poll failed or timed out (%d)",
+			     ret < 0 ? -errno : 0);
+
+		ret = zsock_recv(stream_sock, rx + rcvd, rx_size - rcvd, 0);
+		zassert_true(ret > 0, "Failed to receive data (%d)", -errno);
+		rcvd += ret;
+	}
+
+	zassert_equal(rcvd, tx_len, "Echo length mismatch");
+	zassert_mem_equal(tx, rx, tx_len, "Echo payload mismatch");
+}
+
+/* Test 471: RFC 9001 Section 6 key update. The client initiates an update,
+ * data still flows in both directions afterwards, the server follows to the
+ * new phase, and repeated updates keep working.
+ */
+ZTEST(net_socket_quic, test_471_key_update_round_trips)
+{
+	struct net_sockaddr_storage server_addr;
+	struct net_sockaddr_storage client_addr;
+	sec_tag_t server_sec_tags[] = {
+		SERVER_CERTIFICATE_TAG,
+	};
+	sec_tag_t client_sec_tags[] = {
+		CA_CERTIFICATE_TAG,
+	};
+	static const char * const alpn_list[] = {
+		"test-quic",
+		NULL
+	};
+	static uint8_t tx_buf[] = "Hello across a key update!";
+	static uint8_t rx_buf[64];
+	struct quic_endpoint *client_ep;
+	struct quic_endpoint *server_ep;
+	int server_sock, client_sock, client_stream_sock, server_stream_sock;
+	int server_connected_sock;
+	k_tid_t tid;
+	int ret;
+
+	static K_THREAD_STACK_DEFINE(server_ku_thread_stack, STACK_SIZE);
+	static struct k_thread server_ku_thread_data;
+	static struct config server_ku_data;
+
+	ret = loopback_set_packet_drop_ratio(0.0);
+	zassert_ok(ret, "Failed to set packet drop ratio (%d)", ret);
+
+	ret = k_sem_init(&server_ku_data.sem, 0, 1);
+	zassert_ok(ret, "Failed to initialize semaphore (%d)", ret);
+
+	ret = net_ipaddr_parse(LOCAL_ADDR_IPV4_STR4, strlen(LOCAL_ADDR_IPV4_STR4),
+			       (struct net_sockaddr *)&server_addr);
+	zassert_true(ret, "Failed to parse server IP address");
+
+	ret = net_ipaddr_parse(REMOTE_ADDR_IPV4_STR4, strlen(REMOTE_ADDR_IPV4_STR4),
+			       (struct net_sockaddr *)&client_addr);
+	zassert_true(ret, "Failed to parse client IP address");
+
+	prepare_quic_socket(&server_sock, NULL,
+			    (const struct net_sockaddr *)&server_addr);
+	prepare_quic_socket(&client_sock,
+			    (const struct net_sockaddr *)&server_addr,
+			    (const struct net_sockaddr *)&client_addr);
+
+	zassert_true(server_sock >= 0, "Failed to create server socket");
+	zassert_true(client_sock >= 0, "Failed to create client socket");
+
+	setup_quic_certs(server_sock, server_sec_tags, ARRAY_SIZE(server_sec_tags));
+	setup_alpn(server_sock, alpn_list, ARRAY_SIZE(alpn_list));
+
+	server_ku_data.sock = server_sock;
+	server_ku_data.counter = 1;
+	server_ku_data.error = 0;
+	server_ku_data.connected_sock = -1;
+	server_ku_data.stream_recv_sock = -1;
+	server_ku_data.accept_delay_ms = 0;
+	server_ku_data.test_done = false;
+
+	tid = k_thread_create(&server_ku_thread_data, server_ku_thread_stack,
+			      K_THREAD_STACK_SIZEOF(server_ku_thread_stack),
+			      server_thread, &server_ku_data, NULL, NULL,
+			      K_PRIO_PREEMPT(1), 0, K_FOREVER);
+
+	if (IS_ENABLED(CONFIG_THREAD_NAME)) {
+		k_thread_name_set(&server_ku_thread_data, "quic_srv_ku");
+	}
+
+	k_thread_start(tid);
+
+	ret = k_sem_take(&server_ku_data.sem, K_FOREVER);
+	zassert_ok(ret, "Failed to take semaphore (%d)", ret);
+
+	setup_quic_certs(client_sock, client_sec_tags, ARRAY_SIZE(client_sec_tags));
+	setup_alpn(client_sock, alpn_list, ARRAY_SIZE(alpn_list));
+
+	client_stream_sock = quic_stream_open(client_sock, QUIC_STREAM_CLIENT,
+					      QUIC_STREAM_BIDIRECTIONAL, 0);
+	zassert_true(client_stream_sock >= 0, "Failed to open client stream (%d)",
+		     client_stream_sock);
+
+	/* Generation 0 exchange, both phases 0 */
+	quic_test_echo_round(client_stream_sock, tx_buf, sizeof(tx_buf),
+			     rx_buf, sizeof(rx_buf));
+
+	client_ep = quic_test_sock_endpoint(client_sock);
+	zassert_true(client_ep->crypto.ku.initialized,
+		     "Key update state not initialized after handshake");
+	zassert_equal(client_ep->crypto.ku.tx_phase, 0U, "Unexpected initial TX phase");
+	zassert_equal(client_ep->crypto.ku.rx_phase, 0U, "Unexpected initial RX phase");
+
+	for (int round = 1; round <= 3; round++) {
+		uint8_t expected_phase = round & 1;
+
+		/* Let in-flight acknowledgements drain so the RX thread is
+		 * not sending with the TX key the update replaces.
+		 */
+		k_msleep(50);
+
+		ret = quic_endpoint_initiate_key_update(client_ep);
+		zassert_ok(ret, "Failed to initiate key update %d (%d)", round, ret);
+		zassert_equal(client_ep->crypto.ku.tx_phase, expected_phase,
+			      "TX phase did not flip on update %d", round);
+
+		/* RFC 9001 Section 6.1: no new update until the peer caught
+		 * up with this one.
+		 */
+		ret = quic_endpoint_initiate_key_update(client_ep);
+		zassert_equal(ret, -EBUSY,
+			      "Second initiate before completion returned %d", ret);
+
+		quic_test_echo_round(client_stream_sock, tx_buf, sizeof(tx_buf),
+				     rx_buf, sizeof(rx_buf));
+
+		/* The echo came back protected with the server's updated
+		 * keys, so receiving it means our RX side followed.
+		 */
+		zassert_equal(client_ep->crypto.ku.rx_phase, expected_phase,
+			      "RX phase did not follow on update %d", round);
+	}
+
+	server_ku_data.test_done = true;
+
+	ret = zsock_close(client_stream_sock);
+	zassert_equal(ret, 0, "Failed to close client stream (%d)", ret);
+
+	ret = k_thread_join(&server_ku_thread_data, K_MSEC(500));
+	zassert_equal(ret, 0, "Cannot join thread (%d)", ret);
+
+	zassert_equal(server_ku_data.error, 0, "Server thread reported error (%d)",
+		      server_ku_data.error);
+
+	server_connected_sock = server_ku_data.connected_sock;
+	zassert_true(server_connected_sock >= 0, "Invalid connected socket (%d)",
+		     server_connected_sock);
+
+	/* The server followed the client through every update */
+	server_ep = quic_test_sock_endpoint(server_connected_sock);
+	zassert_equal(server_ep->crypto.ku.tx_phase, 1U,
+		      "Server TX phase did not follow the updates");
+	zassert_equal(server_ep->crypto.ku.rx_phase, 1U,
+		      "Server RX phase did not follow the updates");
+
+	server_stream_sock = server_ku_data.stream_recv_sock;
+	zassert_true(server_stream_sock >= 0, "Invalid server stream socket (%d)",
+		     server_stream_sock);
+
+	ret = quic_stream_close(server_stream_sock);
+	zassert_equal(ret, 0, "Failed to close server stream %d (%d)",
+		      server_stream_sock, ret);
+
+	ret = quic_connection_close(server_connected_sock);
+	zassert_equal(ret, 0, "Failed to close server connection %d (%d)",
+		      server_connected_sock, ret);
+
+	ret = quic_connection_close(client_sock);
+	zassert_equal(ret, 0, "Failed to close client connection (%d)", ret);
+
+	ret = quic_connection_close(server_sock);
+	zassert_equal(ret, 0, "Failed to close server connection (%d)", ret);
+}
+
+/* Test 472: a key update cannot start before the handshake has produced
+ * application keys.
+ */
+ZTEST(net_socket_quic, test_472_key_update_requires_application_keys)
+{
+	struct quic_endpoint *ep;
+	int ret, sock;
+
+	sock = quic_connection_open((struct net_sockaddr *)&remote_addr_ipv4,
+				    (struct net_sockaddr *)&local_addr_ipv4);
+	zassert_true(sock >= 0, "Failed to open QUIC connection (%d)", sock);
+
+	ep = quic_test_sock_endpoint(sock);
+
+	ret = quic_endpoint_initiate_key_update(ep);
+	zassert_equal(ret, -ENOTCONN,
+		      "Key update before handshake returned %d", ret);
+
+	ret = quic_connection_close(sock);
+	zassert_ok(ret, "Failed to close connection (%d)", ret);
+}
+
+/* Give the endpoint 1-RTT keys and key update state derived from a known
+ * secret, as the TLS secret callback would after a real handshake.
+ */
+static void quic_test_setup_app_keys(struct quic_endpoint *ep,
+				     const uint8_t *secret, size_t secret_len)
+{
+	struct quic_key_update *ku = &ep->crypto.ku;
+
+	memset(ep, 0, sizeof(*ep));
+
+	/* Model an endpoint whose handshake is confirmed: quic_ku_advance_tx()
+	 * takes send_lock, and the receive path only rotates keys once the
+	 * handshake is confirmed.
+	 */
+	k_mutex_init(&ep->send_lock);
+	ep->handshake_confirmed = true;
+
+	zassert_true(quic_setup_ciphers_ex(&ep->crypto.application.rx,
+					   PSA_ALG_SHA_256,
+					   QUIC_CIPHER_AES_128_GCM,
+					   secret, secret_len),
+		     "Failed to set up RX ciphers");
+	zassert_true(quic_setup_ciphers_ex(&ep->crypto.application.tx,
+					   PSA_ALG_SHA_256,
+					   QUIC_CIPHER_AES_128_GCM,
+					   secret, secret_len),
+		     "Failed to set up TX ciphers");
+	ep->crypto.application.initialized = true;
+
+	memcpy(ku->rx_secret, secret, secret_len);
+	memcpy(ku->tx_secret, secret, secret_len);
+	ku->secret_len = secret_len;
+	ku->hash_alg = PSA_ALG_SHA_256;
+	ku->cipher_algo = QUIC_CIPHER_AES_128_GCM;
+	ku->rx_phase_first_pn = UINT64_MAX;
+	ku->initialized = true;
+}
+
+/* Build a protected 1-RTT packet the way a peer would: payload protection
+ * from the given generation's keys, header protection always from the
+ * original one (the HP key never rotates, RFC 9001 Section 6).
+ */
+static size_t quic_test_build_1rtt_packet(struct quic_pp_cipher *pp,
+					  struct quic_hp_cipher *hp,
+					  uint64_t pn, bool phase,
+					  const uint8_t *payload, size_t payload_len,
+					  uint8_t *out, size_t out_size)
+{
+	const size_t pn_offset = 1;
+	const size_t pn_len = 2;
+	size_t header_len = pn_offset + pn_len;
+	size_t ct_len = 0;
+	int ret;
+
+	out[0] = 0x40 | (phase ? QUIC_SHORT_KEY_PHASE_MASK : 0) | (pn_len - 1);
+	out[1] = (pn >> 8) & 0xFF;
+	out[2] = pn & 0xFF;
+
+	ret = quic_encrypt_payload(pp, pn, out, header_len,
+				   payload, payload_len,
+				   &out[header_len], out_size - header_len,
+				   &ct_len);
+	zassert_ok(ret, "Failed to encrypt payload (%d)", ret);
+
+	ret = quic_encrypt_header(out, header_len + ct_len, pn_offset, pn_len,
+				  hp->key_id, hp->cipher_algo);
+	zassert_ok(ret, "Failed to protect header (%d)", ret);
+
+	return header_len + ct_len;
+}
+
+static void quic_test_destroy_ciphers(struct quic_ciphers *ciphers)
+{
+	if (ciphers->hp.initialized) {
+		psa_destroy_key(ciphers->hp.key_id);
+		ciphers->hp.initialized = false;
+	}
+
+	if (ciphers->pp.initialized) {
+		psa_destroy_key(ciphers->pp.key_id);
+		ciphers->pp.initialized = false;
+	}
+}
+
+/* Test 473: after a peer-initiated key update commits, a reordered packet
+ * from before the update still decrypts with the retained
+ * previous-generation keys and does not disturb the new phase.
+ */
+ZTEST(net_socket_quic, test_473_key_update_keeps_previous_generation_keys)
+{
+	static const uint8_t secret[32] = {
+		0x3a, 0x5c, 0x11, 0xe9, 0x27, 0x80, 0x4d, 0xb2,
+		0x66, 0x0f, 0xc4, 0x39, 0x9d, 0x71, 0x28, 0x5e,
+		0xaa, 0x13, 0xf6, 0x42, 0x8b, 0xd0, 0x37, 0x6c,
+		0x91, 0x2e, 0x58, 0xc7, 0x04, 0xbf, 0x6a, 0xd5,
+	};
+	static const uint8_t msg0[16] = "generation zero";
+	static const uint8_t msg1[16] = "generation one.";
+	struct quic_endpoint *ep = &test_ep_a;
+	struct quic_ciphers peer_gen0 = { 0 };
+	struct quic_ciphers peer_gen1 = { 0 };
+	struct quic_decrypted_packet result;
+	uint8_t s1[QUIC_HASH_MAX_LEN];
+	uint8_t packet[128];
+	uint8_t plaintext[128];
+	size_t len;
+	int ret;
+
+	quic_test_setup_app_keys(ep, secret, sizeof(secret));
+
+	zassert_true(quic_setup_ciphers_ex(&peer_gen0, PSA_ALG_SHA_256,
+					   QUIC_CIPHER_AES_128_GCM,
+					   secret, sizeof(secret)),
+		     "Failed to set up peer generation 0 ciphers");
+
+	ret = quic_ku_next_secret(&ep->crypto.ku, secret, s1);
+	zassert_ok(ret, "Failed to derive the next-generation secret (%d)", ret);
+
+	zassert_true(quic_setup_ciphers_ex(&peer_gen1, PSA_ALG_SHA_256,
+					   QUIC_CIPHER_AES_128_GCM,
+					   s1, sizeof(secret)),
+		     "Failed to set up peer generation 1 ciphers");
+
+	/* Plain generation 0 packet */
+	len = quic_test_build_1rtt_packet(&peer_gen0.pp, &peer_gen0.hp, 1, false,
+					  msg0, sizeof(msg0),
+					  packet, sizeof(packet));
+	ret = quic_decrypt_packet(ep, packet, len, 1, QUIC_PACKET_TYPE_1RTT,
+				  plaintext, sizeof(plaintext), &result);
+	zassert_ok(ret, "Failed to decrypt generation 0 packet (%d)", ret);
+	zassert_mem_equal(result.payload, msg0, sizeof(msg0),
+			  "Generation 0 payload mismatch");
+
+	/* The peer initiates a key update: flipped phase bit, generation 1
+	 * payload keys, unchanged header protection.
+	 */
+	len = quic_test_build_1rtt_packet(&peer_gen1.pp, &peer_gen0.hp, 5, true,
+					  msg1, sizeof(msg1),
+					  packet, sizeof(packet));
+	ret = quic_decrypt_packet(ep, packet, len, 1, QUIC_PACKET_TYPE_1RTT,
+				  plaintext, sizeof(plaintext), &result);
+	zassert_ok(ret, "Failed to decrypt generation 1 packet (%d)", ret);
+	zassert_mem_equal(result.payload, msg1, sizeof(msg1),
+			  "Generation 1 payload mismatch");
+	zassert_equal(ep->crypto.ku.rx_phase, 1U, "RX phase did not advance");
+	zassert_equal(ep->crypto.ku.tx_phase, 1U, "TX keys did not follow the peer");
+	zassert_equal(ep->crypto.ku.rx_phase_first_pn, 5U,
+		      "Wrong first packet number for the new phase");
+	zassert_true(ep->crypto.ku.prev_rx_pp.initialized,
+		     "Previous-generation keys were not kept");
+
+	/* A generation 0 packet reordered to after the update */
+	len = quic_test_build_1rtt_packet(&peer_gen0.pp, &peer_gen0.hp, 2, false,
+					  msg0, sizeof(msg0),
+					  packet, sizeof(packet));
+	ret = quic_decrypt_packet(ep, packet, len, 1, QUIC_PACKET_TYPE_1RTT,
+				  plaintext, sizeof(plaintext), &result);
+	zassert_ok(ret, "Failed to decrypt reordered previous-generation packet (%d)",
+		   ret);
+	zassert_mem_equal(result.payload, msg0, sizeof(msg0),
+			  "Previous-generation payload mismatch");
+	zassert_equal(ep->crypto.ku.rx_phase, 1U,
+		      "A reordered old packet must not change the phase");
+	zassert_equal(ep->crypto.ku.rx_phase_first_pn, 5U,
+		      "A reordered old packet must not move the phase boundary");
+
+	quic_test_destroy_ciphers(&peer_gen0);
+	quic_test_destroy_ciphers(&peer_gen1);
+	quic_crypto_context_destroy(&ep->crypto.application);
+	quic_key_update_destroy(&ep->crypto.ku);
+}
+
+/* Test 474: a forged key phase flip fails the trial decrypt and leaves the
+ * whole key update state untouched, while the derived candidate keys are
+ * retained (RFC 9001 Section 6.3) and used when the real update arrives.
+ */
+ZTEST(net_socket_quic, test_474_forged_key_phase_flip_leaves_state_untouched)
+{
+	static const uint8_t secret[32] = {
+		0xd5, 0x6a, 0xbf, 0x04, 0xc7, 0x58, 0x2e, 0x91,
+		0x6c, 0x37, 0xd0, 0x8b, 0x42, 0xf6, 0x13, 0xaa,
+		0x5e, 0x28, 0x71, 0x9d, 0x39, 0xc4, 0x0f, 0x66,
+		0xb2, 0x4d, 0x80, 0x27, 0xe9, 0x11, 0x5c, 0x3a,
+	};
+	static const uint8_t msg0[16] = "generation zero";
+	static const uint8_t msg1[16] = "generation one.";
+	struct quic_endpoint *ep = &test_ep_a;
+	struct quic_ciphers peer_gen0 = { 0 };
+	struct quic_ciphers peer_gen1 = { 0 };
+	struct quic_decrypted_packet result;
+	uint8_t rx_secret_snapshot[QUIC_HASH_MAX_LEN];
+	uint8_t s1[QUIC_HASH_MAX_LEN];
+	uint8_t packet[128];
+	uint8_t plaintext[128];
+	size_t len;
+	int ret;
+
+	quic_test_setup_app_keys(ep, secret, sizeof(secret));
+
+	zassert_true(quic_setup_ciphers_ex(&peer_gen0, PSA_ALG_SHA_256,
+					   QUIC_CIPHER_AES_128_GCM,
+					   secret, sizeof(secret)),
+		     "Failed to set up peer generation 0 ciphers");
+
+	ret = quic_ku_next_secret(&ep->crypto.ku, secret, s1);
+	zassert_ok(ret, "Failed to derive the next-generation secret (%d)", ret);
+
+	zassert_true(quic_setup_ciphers_ex(&peer_gen1, PSA_ALG_SHA_256,
+					   QUIC_CIPHER_AES_128_GCM,
+					   s1, sizeof(secret)),
+		     "Failed to set up peer generation 1 ciphers");
+
+	len = quic_test_build_1rtt_packet(&peer_gen0.pp, &peer_gen0.hp, 1, false,
+					  msg0, sizeof(msg0),
+					  packet, sizeof(packet));
+	ret = quic_decrypt_packet(ep, packet, len, 1, QUIC_PACKET_TYPE_1RTT,
+				  plaintext, sizeof(plaintext), &result);
+	zassert_ok(ret, "Failed to decrypt generation 0 packet (%d)", ret);
+
+	memcpy(rx_secret_snapshot, ep->crypto.ku.rx_secret,
+	       sizeof(rx_secret_snapshot));
+
+	/* Forged flip: the phase bit is set but the payload is still
+	 * protected with generation 0 keys, so the trial decrypt with the
+	 * generation 1 keys must fail.
+	 */
+	len = quic_test_build_1rtt_packet(&peer_gen0.pp, &peer_gen0.hp, 6, true,
+					  msg0, sizeof(msg0),
+					  packet, sizeof(packet));
+	ret = quic_decrypt_packet(ep, packet, len, 1, QUIC_PACKET_TYPE_1RTT,
+				  plaintext, sizeof(plaintext), &result);
+	zassert_equal(ret, -EBADMSG, "Forged phase flip must fail AEAD (%d)", ret);
+	zassert_equal(ep->crypto.ku.rx_phase, 0U,
+		      "A failed trial must not change the RX phase");
+	zassert_equal(ep->crypto.ku.tx_phase, 0U,
+		      "A failed trial must not change the TX phase");
+	zassert_false(ep->crypto.ku.prev_rx_pp.initialized,
+		      "A failed trial must not shift the generations");
+	zassert_true(ep->crypto.ku.next_rx_pp.initialized,
+		     "The derived candidate keys should be retained");
+	zassert_mem_equal(ep->crypto.ku.rx_secret, rx_secret_snapshot,
+			  sizeof(rx_secret_snapshot),
+			  "A failed trial must not advance the RX secret");
+
+	/* The real update commits with the retained candidate keys */
+	len = quic_test_build_1rtt_packet(&peer_gen1.pp, &peer_gen0.hp, 6, true,
+					  msg1, sizeof(msg1),
+					  packet, sizeof(packet));
+	ret = quic_decrypt_packet(ep, packet, len, 1, QUIC_PACKET_TYPE_1RTT,
+				  plaintext, sizeof(plaintext), &result);
+	zassert_ok(ret, "Failed to decrypt the real generation 1 packet (%d)", ret);
+	zassert_mem_equal(result.payload, msg1, sizeof(msg1),
+			  "Generation 1 payload mismatch");
+	zassert_equal(ep->crypto.ku.rx_phase, 1U, "RX phase did not advance");
+	zassert_false(ep->crypto.ku.next_rx_pp.initialized,
+		      "The candidate keys must be consumed on commit");
+
+	quic_test_destroy_ciphers(&peer_gen0);
+	quic_test_destroy_ciphers(&peer_gen1);
+	quic_crypto_context_destroy(&ep->crypto.application);
+	quic_key_update_destroy(&ep->crypto.ku);
+}
+
+/* Test 475: a peer must not initiate a key update before the handshake is
+ * confirmed (RFC 9001 Section 6.1). A phase flip received while the handshake
+ * is not yet confirmed is rejected without rotating either the receive or the
+ * send keys, so the connection can be closed with KEY_UPDATE_ERROR.
+ */
+ZTEST(net_socket_quic, test_475_key_update_before_handshake_confirmed_is_rejected)
+{
+	static const uint8_t secret[32] = {
+		0x27, 0x6b, 0xd4, 0x0a, 0x8f, 0x13, 0xc9, 0x52,
+		0xe0, 0x7d, 0x31, 0xaa, 0x64, 0xb8, 0x1f, 0x46,
+		0x9c, 0x02, 0xf5, 0x7e, 0x38, 0xd1, 0x6a, 0x23,
+		0xbc, 0x49, 0x85, 0x0e, 0x71, 0xa6, 0x5d, 0xf2,
+	};
+	static const uint8_t msg[16] = "premature updte";
+	struct quic_endpoint *ep = &test_ep_a;
+	struct quic_ciphers peer_gen0 = { 0 };
+	struct quic_ciphers peer_gen1 = { 0 };
+	struct quic_decrypted_packet result;
+	uint8_t s1[QUIC_HASH_MAX_LEN];
+	uint8_t packet[128];
+	uint8_t plaintext[128];
+	uint8_t rx_phase_before;
+	uint8_t tx_phase_before;
+	size_t len;
+	int ret;
+
+	quic_test_setup_app_keys(ep, secret, sizeof(secret));
+
+	/* Model a connection whose handshake is not yet confirmed. */
+	ep->handshake_confirmed = false;
+	rx_phase_before = ep->crypto.ku.rx_phase;
+	tx_phase_before = ep->crypto.ku.tx_phase;
+
+	/* Header protection never rotates; payload protection uses the next
+	 * generation, and the key phase bit is flipped: a key update.
+	 */
+	zassert_true(quic_setup_ciphers_ex(&peer_gen0, PSA_ALG_SHA_256,
+					   QUIC_CIPHER_AES_128_GCM,
+					   secret, sizeof(secret)),
+		     "Failed to set up peer generation 0 ciphers");
+
+	ret = quic_ku_next_secret(&ep->crypto.ku, secret, s1);
+	zassert_ok(ret, "Failed to derive the next-generation secret (%d)", ret);
+
+	zassert_true(quic_setup_ciphers_ex(&peer_gen1, PSA_ALG_SHA_256,
+					   QUIC_CIPHER_AES_128_GCM,
+					   s1, sizeof(secret)),
+		     "Failed to set up peer generation 1 ciphers");
+
+	len = quic_test_build_1rtt_packet(&peer_gen1.pp, &peer_gen0.hp, 1, true,
+					  msg, sizeof(msg), packet, sizeof(packet));
+
+	ret = quic_decrypt_packet(ep, packet, len, 1, QUIC_PACKET_TYPE_1RTT,
+				  plaintext, sizeof(plaintext), &result);
+	zassert_equal(ret, -EPROTO,
+		      "A pre-confirmation key update must be rejected (%d)", ret);
+	zassert_equal(ep->crypto.ku.rx_phase, rx_phase_before,
+		      "The RX phase must not rotate before handshake confirmation");
+	zassert_equal(ep->crypto.ku.tx_phase, tx_phase_before,
+		      "The TX phase must not advance before handshake confirmation");
+	zassert_false(ep->crypto.ku.next_rx_pp.initialized,
+		      "No candidate keys should be committed for a rejected update");
+
+	quic_test_destroy_ciphers(&peer_gen0);
+	quic_test_destroy_ciphers(&peer_gen1);
+	quic_crypto_context_destroy(&ep->crypto.application);
+	quic_key_update_destroy(&ep->crypto.ku);
 }
 
 ZTEST(net_socket_quic, test_480_retry_token_round_trip)
@@ -5301,6 +6822,666 @@ ZTEST(net_socket_quic, test_480_retry_token_round_trip)
 					  token, token_len, &validation);
 	zassert_equal(ret, -EADDRNOTAVAIL,
 		      "Token must be bound to client address (%d)", ret);
+}
+
+ZTEST(net_socket_quic, test_485_streams_blocked_does_not_inflate_the_limit)
+{
+	struct quic_endpoint *ep = reset_test_ep(&test_ep_a);
+	/* Repeated STREAMS_BLOCKED (bidi) frames claiming a huge blocked
+	 * limit. Each is two bytes: frame type plus a one byte varint.
+	 */
+	uint8_t payload[16];
+	uint64_t limit_after_first;
+	bool ack_only = false;
+	int ret;
+
+	for (size_t i = 0; i < sizeof(payload); i += 2) {
+		payload[i] = QUIC_FRAME_TYPE_STREAMS_BLOCKED_BIDI;
+		payload[i + 1] = 0x3f; /* varint 63 */
+	}
+
+	ep->rx_sl.max_bidi = 0;
+	ep->rx_sl.open_bidi = 0;
+	ep->rx_sl.total_bidi = 0;
+
+	ret = handle_crypto_level_packet(ep, QUIC_SECRET_LEVEL_APPLICATION,
+					 payload, 2, 2, &ack_only);
+	zassert_true(ret >= 0, "Payload handling failed (%d)", ret);
+
+	limit_after_first = ep->rx_sl.max_bidi;
+	zassert_equal(limit_after_first, CONFIG_QUIC_MAX_STREAMS_BIDI,
+		      "First frame should open the whole pool, got %" PRIu64,
+		      limit_after_first);
+
+	/* The peer has neither opened nor closed anything, so further frames
+	 * must not raise the limit any further.
+	 */
+	ret = handle_crypto_level_packet(ep, QUIC_SECRET_LEVEL_APPLICATION,
+					 payload, sizeof(payload),
+					 sizeof(payload), &ack_only);
+	zassert_true(ret >= 0, "Payload handling failed (%d)", ret);
+
+	zassert_equal(ep->rx_sl.max_bidi, limit_after_first,
+		      "Stream limit grew from %" PRIu64 " to %" PRIu64
+		      " without any stream being opened or closed",
+		      limit_after_first, ep->rx_sl.max_bidi);
+}
+
+ZTEST(net_socket_quic, test_486_replies_per_payload_are_capped)
+{
+	struct quic_endpoint *ep = reset_test_ep(&test_ep_a);
+	/* A payload packed with DATA_BLOCKED frames. Each one is two bytes and
+	 * would otherwise be answered with a MAX_DATA packet of its own.
+	 */
+	uint8_t payload[128];
+	bool ack_only = false;
+	int ret;
+
+	for (size_t i = 0; i < sizeof(payload); i += 2) {
+		payload[i] = QUIC_FRAME_TYPE_DATA_BLOCKED;
+		payload[i + 1] = 0x00;
+	}
+
+	/* Advertise a window above the blocked limit so every frame would
+	 * otherwise trigger a reply.
+	 */
+	ep->rx_fc.max_data = 1000;
+
+	quic_test_reply_budget_spent = 0;
+
+	ret = handle_crypto_level_packet(ep, QUIC_SECRET_LEVEL_APPLICATION,
+					 payload, sizeof(payload),
+					 sizeof(payload), &ack_only);
+	zassert_true(ret >= 0, "Payload handling failed (%d)", ret);
+
+	zassert_equal(quic_test_reply_budget_spent, CONFIG_QUIC_MAX_REPLIES_PER_PAYLOAD,
+		      "Expected replies to stop at %d, got %u",
+		      CONFIG_QUIC_MAX_REPLIES_PER_PAYLOAD, quic_test_reply_budget_spent);
+	zassert_true(sizeof(payload) / 2 > CONFIG_QUIC_MAX_REPLIES_PER_PAYLOAD,
+		     "Test payload must carry more frames than the budget allows");
+}
+
+ZTEST(net_socket_quic, test_498_nothing_is_sent_at_a_discarded_level)
+{
+	static const uint8_t ping[] = { QUIC_FRAME_TYPE_PING };
+	struct quic_endpoint *ep = reset_test_ep(&test_ep_a);
+	int ret;
+
+	/* Without keys a send fails, in the way the callers rely on: the
+	 * Initial level reports an error, the Handshake level asks to be
+	 * tried again once its keys are there.
+	 */
+	ret = quic_send_packet(ep, QUIC_SECRET_LEVEL_INITIAL, ping, sizeof(ping));
+	zassert_equal(ret, -EINVAL, "Unexpected result without Initial keys (%d)", ret);
+
+	ret = quic_send_packet(ep, QUIC_SECRET_LEVEL_HANDSHAKE, ping, sizeof(ping));
+	zassert_equal(ret, -EAGAIN, "Unexpected result without Handshake keys (%d)", ret);
+
+	/* Once the keys of a level are discarded there is nothing to wait
+	 * for and nothing wrong either: the send is dropped quietly.
+	 */
+	quic_endpoint_discard_keys(ep, QUIC_SECRET_LEVEL_INITIAL);
+	ret = quic_send_packet(ep, QUIC_SECRET_LEVEL_INITIAL, ping, sizeof(ping));
+	zassert_ok(ret, "Send at the discarded Initial level was not ignored (%d)", ret);
+
+	quic_endpoint_discard_keys(ep, QUIC_SECRET_LEVEL_HANDSHAKE);
+	ret = quic_send_packet(ep, QUIC_SECRET_LEVEL_HANDSHAKE, ping, sizeof(ping));
+	zassert_ok(ret, "Send at the discarded Handshake level was not ignored (%d)", ret);
+
+	k_work_cancel_delayable(&ep->recovery.pto_work);
+}
+
+static int packets_in_flight(struct quic_endpoint *ep)
+{
+	int count = 0;
+
+	ARRAY_FOR_EACH(ep->recovery.sent_pkts, space) {
+		for (int i = 0; i < CONFIG_QUIC_SENT_PKT_HISTORY_SIZE; i++) {
+			if (ep->recovery.sent_pkts[space][i].in_flight) {
+				count++;
+			}
+		}
+	}
+
+	return count;
+}
+
+ZTEST(net_socket_quic, test_499_recovery_state_goes_with_the_keys)
+{
+	struct quic_endpoint *ep = reset_test_ep(&test_ep_a);
+
+	/* Two Initial packets, one Handshake packet and one 1-RTT packet
+	 * are in flight.
+	 */
+	quic_recovery_on_packet_sent(ep, QUIC_SECRET_LEVEL_INITIAL, 0, 1200, true, false, 0);
+	quic_recovery_on_packet_sent(ep, QUIC_SECRET_LEVEL_INITIAL, 1, 1200, true, false, 0);
+	quic_recovery_on_packet_sent(ep, QUIC_SECRET_LEVEL_HANDSHAKE, 0, 300, true, false, 0);
+	quic_recovery_on_packet_sent(ep, QUIC_SECRET_LEVEL_APPLICATION, 0, 100, true, false, 0);
+
+	zassert_equal(ep->recovery.bytes_in_flight, 2800, "Unexpected bytes in flight %" PRIu64,
+		      ep->recovery.bytes_in_flight);
+	zassert_equal(packets_in_flight(ep), 4, "Unexpected packets in flight");
+
+	/* Packets sent with discarded keys can never be acknowledged, so
+	 * they must not be counted or tracked any longer.
+	 */
+	quic_endpoint_discard_keys(ep, QUIC_SECRET_LEVEL_INITIAL);
+
+	zassert_true(ep->crypto.initial.discarded, "Initial keys were not discarded");
+	zassert_false(ep->crypto.handshake.discarded, "Handshake keys were discarded too");
+	zassert_equal(ep->recovery.bytes_in_flight, 400,
+		      "Initial packets still count as in flight (%" PRIu64 ")",
+		      ep->recovery.bytes_in_flight);
+	zassert_equal(packets_in_flight(ep), 2, "Initial packets are still tracked");
+
+	quic_endpoint_discard_keys(ep, QUIC_SECRET_LEVEL_HANDSHAKE);
+
+	zassert_true(ep->crypto.handshake.discarded, "Handshake keys were not discarded");
+	zassert_equal(ep->recovery.bytes_in_flight, 100,
+		      "Handshake packets still count as in flight (%" PRIu64 ")",
+		      ep->recovery.bytes_in_flight);
+	zassert_equal(packets_in_flight(ep), 1, "Handshake packets are still tracked");
+
+	k_work_cancel_delayable(&ep->recovery.pto_work);
+}
+
+/* Put a bare stream on the stream list of a context, as a stream that a
+ * peer opened on the given endpoint.
+ */
+static void link_test_stream(struct quic_stream *stream, struct quic_context *ctx,
+			     struct quic_endpoint *ep, uint64_t stream_id)
+{
+	memset(stream, 0, sizeof(*stream));
+
+	stream->id = stream_id;
+	stream->ep = ep;
+	stream->conn = ctx;
+
+	k_mutex_init(&stream->cond.data_available);
+	k_condvar_init(&stream->cond.recv);
+	k_poll_signal_init(&stream->recv.signal);
+
+	sys_slist_append(&ctx->streams, &stream->node);
+}
+
+static void unlink_test_stream(struct quic_stream *stream, struct quic_context *ctx)
+{
+	(void)sys_slist_find_and_remove(&ctx->streams, &stream->node);
+}
+
+/* Open a listening QUIC socket to get a context to hang test streams on */
+static struct quic_context *open_test_listener(int *sock, const char *addr_str)
+{
+	struct net_sockaddr_storage addr;
+	struct quic_context *ctx;
+	int ret;
+
+	ret = net_ipaddr_parse(addr_str, strlen(addr_str), (struct net_sockaddr *)&addr);
+	zassert_true(ret, "Failed to parse address %s", addr_str);
+
+	prepare_quic_socket(sock, NULL, (const struct net_sockaddr *)&addr);
+
+	ctx = quic_get_context(*sock);
+	zassert_not_null(ctx, "Could not get QUIC context");
+
+	return ctx;
+}
+
+ZTEST(net_socket_quic, test_491_stream_lookup_keeps_connections_apart)
+{
+	static struct quic_stream stream_a;
+	static struct quic_stream stream_b;
+	struct quic_endpoint *ep_a = reset_test_ep(&test_ep_a);
+	struct quic_endpoint *ep_b = reset_test_ep(&test_ep_b);
+	struct quic_context *ctx;
+	int sock;
+	int ret;
+
+	ctx = open_test_listener(&sock, "127.0.0.1:54350");
+
+	/* Two peers whose connections are not accepted yet both opened
+	 * stream 0, so both streams sit in the listening context.
+	 */
+	link_test_stream(&stream_a, ctx, ep_a, 0);
+	link_test_stream(&stream_b, ctx, ep_b, 0);
+
+	/* The lookup skips streams that are being released */
+	zassert_is_null(quic_find_stream(ctx, ep_a, 0),
+			"Found a stream that is being released");
+
+	atomic_set(&stream_a.refcount, 1);
+	atomic_set(&stream_b.refcount, 1);
+
+	zassert_equal_ptr(quic_find_stream(ctx, ep_a, 0), &stream_a,
+			  "Wrong stream for the first peer");
+	zassert_equal_ptr(quic_find_stream(ctx, ep_b, 0), &stream_b,
+			  "Wrong stream for the second peer");
+
+	/* A peer that has no such stream must not find someone else's */
+	unlink_test_stream(&stream_b, ctx);
+	zassert_is_null(quic_find_stream(ctx, ep_b, 0),
+			"Found the stream of another peer");
+
+	unlink_test_stream(&stream_a, ctx);
+
+	ret = quic_connection_close(sock);
+	zassert_ok(ret, "Cannot close socket %d (%d)", sock, -errno);
+}
+
+/* More streams than one payload may be answered for. Their IDs stay below
+ * 64 so that each fits a one byte varint.
+ */
+#define STOP_SENDING_TEST_STREAMS (CONFIG_QUIC_MAX_REPLIES_PER_PAYLOAD + 4)
+BUILD_ASSERT(STOP_SENDING_TEST_STREAMS <= 16, "Stream IDs need more than one byte");
+
+ZTEST(net_socket_quic, test_492_stop_sending_replies_are_capped)
+{
+	static struct quic_stream test_streams[STOP_SENDING_TEST_STREAMS];
+	struct quic_endpoint *ep = reset_test_ep(&test_ep_a);
+	uint8_t payload[3 * STOP_SENDING_TEST_STREAMS];
+	struct quic_context *ctx;
+	bool ack_only = false;
+	size_t pos = 0;
+	int sock;
+	int ret;
+
+	ctx = open_test_listener(&sock, "127.0.0.1:54351");
+
+	/* One STOP_SENDING frame for each of the streams */
+	ARRAY_FOR_EACH(test_streams, i) {
+		link_test_stream(&test_streams[i], ctx, ep, 4 * i);
+
+		payload[pos++] = QUIC_FRAME_TYPE_STOP_SENDING;
+		payload[pos++] = (uint8_t)(4 * i); /* Stream ID */
+		payload[pos++] = 0x00;             /* Error code */
+	}
+
+	quic_test_reply_budget_spent = 0;
+
+	ret = handle_crypto_level_packet(ep, QUIC_SECRET_LEVEL_APPLICATION,
+					 payload, pos, pos, &ack_only);
+	zassert_true(ret >= 0, "Payload handling failed (%d)", ret);
+
+	/* Each of the streams has to be reset by the one payload that asked
+	 * for it. The peer does not repeat a frame that was acknowledged,
+	 * so none may be left for later. These first replies are bounded by
+	 * the number of streams and do not use the reply budget.
+	 */
+	ARRAY_FOR_EACH(test_streams, i) {
+		zassert_true(test_streams[i].tx_reset, "Stream %zu was not reset", i);
+	}
+
+	zassert_equal(quic_test_reply_budget_spent, 0,
+		      "First replies must not use the reply budget, used %u",
+		      quic_test_reply_budget_spent);
+
+	/* A peer that repeats the frames for streams that are reset already
+	 * is answered again, but only as far as the reply budget goes.
+	 */
+	ret = handle_crypto_level_packet(ep, QUIC_SECRET_LEVEL_APPLICATION,
+					 payload, pos, pos, &ack_only);
+	zassert_true(ret >= 0, "Payload handling failed (%d)", ret);
+
+	zassert_equal(quic_test_reply_budget_spent, CONFIG_QUIC_MAX_REPLIES_PER_PAYLOAD,
+		      "Expected repeated replies to stop at %d, got %u",
+		      CONFIG_QUIC_MAX_REPLIES_PER_PAYLOAD, quic_test_reply_budget_spent);
+
+	ARRAY_FOR_EACH(test_streams, i) {
+		unlink_test_stream(&test_streams[i], ctx);
+	}
+
+	ret = quic_connection_close(sock);
+	zassert_ok(ret, "Cannot close socket %d (%d)", sock, -errno);
+}
+
+/* Hand a payload with one STOP_SENDING frame to the frame parser, with the
+ * endpoint attached to a listening context so that the parser can find the
+ * connection the stream would belong to.
+ */
+static int stop_sending_for_stream(struct quic_endpoint *ep, struct quic_context *ctx,
+				   uint8_t stream_id)
+{
+	const uint8_t payload[] = {
+		QUIC_FRAME_TYPE_STOP_SENDING,
+		stream_id,
+		0x00, /* Error code */
+	};
+	bool ack_only = false;
+	int ret;
+
+	/* The parser drops a reference when it gives up on the connection */
+	atomic_set(&ep->refcount, 2);
+	sys_slist_append(&ctx->endpoints, &ep->node);
+
+	ret = handle_crypto_level_packet(ep, QUIC_SECRET_LEVEL_APPLICATION,
+					 payload, sizeof(payload), sizeof(payload),
+					 &ack_only);
+
+	(void)sys_slist_find_and_remove(&ctx->endpoints, &ep->node);
+
+	return ret;
+}
+
+ZTEST(net_socket_quic, test_493_stop_sending_for_receive_only_stream)
+{
+	struct quic_endpoint *ep = reset_test_ep(&test_ep_a);
+	struct quic_context *ctx;
+	int sock;
+	int ret;
+
+	ctx = open_test_listener(&sock, "127.0.0.1:54352");
+
+	/* As a server, stream 2 is a unidirectional stream of the client:
+	 * we only receive on it, so we cannot be asked to stop sending.
+	 */
+	ep->is_server = true;
+	ret = stop_sending_for_stream(ep, ctx, 2);
+	zassert_equal(ret, -EPROTO,
+		      "STOP_SENDING for a receive-only stream must close the connection (%d)",
+		      ret);
+
+	/* The same for a client and a unidirectional stream of the server */
+	ep = reset_test_ep(&test_ep_a);
+	ep->is_server = false;
+	ret = stop_sending_for_stream(ep, ctx, 3);
+	zassert_equal(ret, -EPROTO,
+		      "STOP_SENDING for a receive-only stream must close the connection (%d)",
+		      ret);
+
+	ret = quic_connection_close(sock);
+	zassert_ok(ret, "Cannot close socket %d (%d)", sock, -errno);
+}
+
+ZTEST(net_socket_quic, test_494_stop_sending_for_stream_never_opened)
+{
+	struct quic_endpoint *ep = reset_test_ep(&test_ep_a);
+	struct quic_context *ctx;
+	int sock;
+	int ret;
+
+	ctx = open_test_listener(&sock, "127.0.0.1:54353");
+
+	/* As a server, streams 1 and 3 would be the first ones of our own.
+	 * None has been opened on this connection.
+	 */
+	ep->is_server = true;
+	zassert_equal(ctx->stream_id_counter, 0, "Unexpected streams on a new context");
+
+	ret = stop_sending_for_stream(ep, ctx, 1);
+	zassert_equal(ret, -EPROTO,
+		      "STOP_SENDING for a bidirectional stream that was never opened "
+		      "must close the connection (%d)", ret);
+
+	ep = reset_test_ep(&test_ep_a);
+	ep->is_server = true;
+	ret = stop_sending_for_stream(ep, ctx, 3);
+	zassert_equal(ret, -EPROTO,
+		      "STOP_SENDING for a unidirectional stream that was never opened "
+		      "must close the connection (%d)", ret);
+
+	/* Once a stream was opened, a frame for it is not an error even when
+	 * the stream is gone again: it can be late for a stream that is
+	 * closed already.
+	 */
+	ep = reset_test_ep(&test_ep_a);
+	ep->is_server = true;
+	ctx->stream_id_counter = 1;
+	ret = stop_sending_for_stream(ep, ctx, 1);
+	zassert_true(ret >= 0, "STOP_SENDING for a closed stream must be ignored (%d)", ret);
+	ctx->stream_id_counter = 0;
+
+	/* A stream of the peer that we do not know is not ours to judge
+	 * here either.
+	 */
+	ep = reset_test_ep(&test_ep_a);
+	ep->is_server = true;
+	ret = stop_sending_for_stream(ep, ctx, 0);
+	zassert_true(ret >= 0, "STOP_SENDING for an unknown peer stream must be ignored (%d)",
+		     ret);
+
+	ret = quic_connection_close(sock);
+	zassert_ok(ret, "Cannot close socket %d (%d)", sock, -errno);
+}
+
+/* One STREAM frame with a length field, without offset and FIN */
+static int stream_frame_for(struct quic_endpoint *ep, uint8_t stream_id,
+			    const uint8_t *data, uint8_t len)
+{
+	uint8_t payload[8];
+	bool ack_only = false;
+
+	__ASSERT_NO_MSG(len <= sizeof(payload) - 3);
+
+	payload[0] = QUIC_FRAME_TYPE_STREAM_BASE | 0x02; /* LEN */
+	payload[1] = stream_id;
+	payload[2] = len;
+
+	if (len > 0U) {
+		memcpy(&payload[3], data, len);
+	}
+
+	return handle_crypto_level_packet(ep, QUIC_SECRET_LEVEL_APPLICATION,
+					  payload, 3 + len, 3 + len, &ack_only);
+}
+
+/* Accept the first stream as soon as it is queued and close it, then let
+ * the peer open another stream, which can take the slot of the first one.
+ */
+static void accept_and_close_thread(void *p1, void *p2, void *p3)
+{
+	struct quic_endpoint *ep = p1;
+	int *sock = p2;
+	int *next_fd = p3;
+	int fd;
+
+	fd = zsock_accept(*sock, NULL, NULL);
+	if (fd < 0) {
+		return;
+	}
+
+	(void)zsock_close(fd);
+
+	if (stream_frame_for(ep, 4, NULL, 0) < 0) {
+		return;
+	}
+
+	*next_fd = zsock_accept(*sock, NULL, NULL);
+}
+
+ZTEST(net_socket_quic, test_540_stream_closed_while_its_frame_is_delivered)
+{
+	static K_THREAD_STACK_DEFINE(stack, 4096);
+	static struct k_thread thread;
+	static const uint8_t data[] = { 'A', 'B', 'C', 'D' };
+	static int sock;
+	static int next_fd;
+	struct quic_endpoint *ep = reset_test_ep(&test_ep_a);
+	struct quic_context *ctx;
+	uint8_t buf[sizeof(data)];
+	atomic_val_t listen_ref;
+	int ret;
+
+	ctx = open_test_listener(&sock, "127.0.0.1:54354");
+	listen_ref = atomic_get(&ctx->refcount);
+	next_fd = -1;
+
+	ep->is_server = true;
+	ep->rx_sl.max_bidi = 4;
+	ep->rx_fc.max_data = 1024;
+	ep->rx_fc.max_data_sent = 1024;
+	atomic_set(&ep->refcount, 1);
+	sys_slist_append(&ctx->endpoints, &ep->node);
+
+	/* The application waits for streams at a higher priority, so it runs
+	 * as soon as the first stream is queued, before the data of the frame
+	 * that opened it is delivered.
+	 */
+	k_thread_create(&thread, stack, K_THREAD_STACK_SIZEOF(stack),
+			accept_and_close_thread, ep, &sock, &next_fd,
+			k_thread_priority_get(k_current_get()) - 1, 0, K_NO_WAIT);
+	k_sleep(K_MSEC(10));
+
+	ret = stream_frame_for(ep, 0, data, sizeof(data));
+	zexpect_true(ret >= 0, "STREAM frame handling failed (%d)", ret);
+
+	ret = k_thread_join(&thread, K_SECONDS(1));
+	zassert_ok(ret, "Application thread did not finish (%d)", ret);
+	zassert_true(next_fd >= 0, "Second stream not accepted (%d)", next_fd);
+
+	/* The data was sent on the first stream, so the second one has none */
+	ret = zsock_recv(next_fd, buf, sizeof(buf), ZSOCK_MSG_DONTWAIT);
+	zexpect_true(ret == -1 && errno == EAGAIN,
+		     "Second stream received %d bytes of the first one", ret);
+
+	ret = zsock_close(next_fd);
+	zexpect_ok(ret, "Cannot close stream socket (%d)", -errno);
+
+	/* Both streams are released, the first one after its frame */
+	zexpect_equal(atomic_get(&ctx->refcount), listen_ref,
+		      "A stream still holds the listening context");
+
+	(void)sys_slist_find_and_remove(&ctx->endpoints, &ep->node);
+
+	ret = quic_connection_close(sock);
+	zassert_ok(ret, "Cannot close socket %d (%d)", sock, -errno);
+}
+
+ZTEST(net_socket_quic, test_488_token_replay_entry_survives_the_expiry_second)
+{
+	uint8_t nonce[8] = {
+		0x51, 0x3a, 0x7b, 0x00, 0x21, 0x9c, 0xde, 0x5f,
+	};
+
+	/* A token is still accepted during the second it expires, so its
+	 * replay entry must survive that second too. Retry with a fresh nonce
+	 * if the clock ticks over between the two claims, as that expires the
+	 * entry legitimately.
+	 */
+	for (int attempt = 0; attempt < 10; attempt++) {
+		uint64_t now;
+		bool replayed;
+
+		nonce[0] = (uint8_t)attempt;
+		now = quic_token_now_sec();
+
+		zassert_true(quic_token_claim_nonce(nonce, now),
+			     "First use of a live token must be accepted");
+		replayed = !quic_token_claim_nonce(nonce, now);
+
+		if (quic_token_now_sec() == now) {
+			zassert_true(replayed,
+				     "A token replayed in its expiry second must be rejected");
+			return;
+		}
+	}
+
+	zassert_unreachable("Clock ticked between the claims on every attempt");
+}
+
+ZTEST(net_socket_quic, test_489_cid_retirement_is_deferred_when_the_budget_runs_out)
+{
+	struct quic_endpoint *ep = reset_test_ep(&test_ep_a);
+	uint8_t payload[2 * CONFIG_QUIC_MAX_REPLIES_PER_PAYLOAD + 28];
+	uint8_t ping = QUIC_FRAME_TYPE_PING;
+	bool ack_only = false;
+	size_t pos = 0;
+	int ret;
+
+	/* Use the whole reply budget up with DATA_BLOCKED frames first. */
+	for (int i = 0; i < CONFIG_QUIC_MAX_REPLIES_PER_PAYLOAD; i++) {
+		payload[pos++] = QUIC_FRAME_TYPE_DATA_BLOCKED;
+		payload[pos++] = 0x00;
+	}
+	ep->rx_fc.max_data = 1000;
+
+	/* Then a NEW_CONNECTION_ID in the same payload retires the CID the
+	 * pool currently holds.
+	 */
+	ep->peer_cid_pool[0].active = true;
+	ep->peer_cid_pool[0].seq_num = 0;
+	ep->peer_cid_pool[0].cid_len = 8;
+
+	payload[pos++] = QUIC_FRAME_TYPE_NEW_CONNECTION_ID;
+	payload[pos++] = 0x01; /* Sequence number 1 */
+	payload[pos++] = 0x01; /* Retire prior to 1 */
+	payload[pos++] = 0x08; /* CID length */
+	for (int i = 0; i < 8; i++) {
+		payload[pos++] = (uint8_t)i; /* CID */
+	}
+	for (int i = 0; i < 16; i++) {
+		payload[pos++] = 0xa5; /* Stateless reset token */
+	}
+
+	ret = handle_crypto_level_packet(ep, QUIC_SECRET_LEVEL_APPLICATION,
+					 payload, pos, pos, &ack_only);
+	zassert_true(ret >= 0, "Payload handling failed (%d)", ret);
+
+	zassert_true(ep->peer_cid_pool[0].active, "New CID was not stored");
+	zassert_equal(ep->peer_cid_pool[0].seq_num, 1,
+		      "Pool slot should hold the new CID");
+	zassert_equal(ep->retire_backlog.count, 1,
+		      "An unsent retirement must be deferred, not dropped");
+	zassert_equal(ep->retire_backlog.seq[0], 0,
+		      "Wrong sequence number deferred");
+
+	/* The next payload flushes the backlog with its own budget. The send
+	 * fails on this unconnected test endpoint, so the retirement must
+	 * stay queued for a later attempt rather than be dropped.
+	 */
+	ret = handle_crypto_level_packet(ep, QUIC_SECRET_LEVEL_APPLICATION,
+					 &ping, 1, 1, &ack_only);
+	zassert_true(ret >= 0, "Payload handling failed (%d)", ret);
+	zassert_equal(ep->retire_backlog.count, 1,
+		      "A failed send must keep the retirement queued");
+}
+
+ZTEST(net_socket_quic, test_487_address_token_cannot_be_replayed)
+{
+	static const uint8_t orig_dcid[] = {
+		0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef,
+	};
+	struct net_sockaddr_in addr = {
+		.sin_family = NET_AF_INET,
+		.sin_port = net_htons(4446),
+	};
+	struct quic_token_validation validation;
+	uint8_t token[CONFIG_QUIC_TOKEN_MAX_LEN];
+	uint8_t second[CONFIG_QUIC_TOKEN_MAX_LEN];
+	size_t token_len, second_len;
+	int ret;
+
+	ret = net_addr_pton(NET_AF_INET, REMOTE_ADDR_IPV4, &addr.sin_addr);
+	zassert_equal(ret, 0, "Failed to parse token address (%d)", ret);
+
+	ret = quic_build_address_token(QUIC_TOKEN_NEW,
+				       (struct net_sockaddr *)&addr,
+				       orig_dcid, sizeof(orig_dcid),
+				       token, sizeof(token), &token_len);
+	zassert_ok(ret, "Failed to build NEW_TOKEN (%d)", ret);
+
+	ret = quic_validate_address_token((struct net_sockaddr *)&addr,
+					  token, token_len, &validation);
+	zassert_ok(ret, "First use of the token must be accepted (%d)", ret);
+
+	/* Tokens travel in the clear, so an observer can copy one and send it
+	 * again from a spoofed address. The second use must be refused.
+	 */
+	ret = quic_validate_address_token((struct net_sockaddr *)&addr,
+					  token, token_len, &validation);
+	zassert_equal(ret, -EALREADY, "Replayed token must be refused (%d)", ret);
+
+	/* A freshly issued token for the same address still works, so the
+	 * check is on the token and not on the address.
+	 */
+	ret = quic_build_address_token(QUIC_TOKEN_NEW,
+				       (struct net_sockaddr *)&addr,
+				       orig_dcid, sizeof(orig_dcid),
+				       second, sizeof(second), &second_len);
+	zassert_ok(ret, "Failed to build second NEW_TOKEN (%d)", ret);
+
+	ret = quic_validate_address_token((struct net_sockaddr *)&addr,
+					  second, second_len, &validation);
+	zassert_ok(ret, "A newly issued token must still be accepted (%d)", ret);
 }
 
 ZTEST(net_socket_quic, test_490_new_token_cache_round_trip)
@@ -5379,6 +7560,203 @@ ZTEST(net_socket_quic, test_495_new_token_cache_replaces_oldest_entry)
 	zassert_mem_equal(out, tokens[CONFIG_QUIC_TOKEN_CACHE_SIZE],
 			  sizeof(tokens[CONFIG_QUIC_TOKEN_CACHE_SIZE]),
 			  "Replacement token mismatch for new peer");
+}
+
+static int quic_test_count_history_pn(struct quic_endpoint *ep, uint64_t pkt_num)
+{
+	int count = 0;
+
+	for (int i = 0; i < CONFIG_QUIC_SENT_PKT_HISTORY_SIZE; i++) {
+		struct quic_sent_pkt_info *info = &ep->recovery.sent_pkts[2][i];
+
+		if (info->in_flight && info->pkt_num == pkt_num) {
+			count++;
+		}
+	}
+
+	return count;
+}
+
+/* Test 496: the sent-packet history must not silently evict in-flight
+ * stream data entries. Losing one drops the annotation that releases the
+ * stream TX buffer when the packet is acknowledged, wedging the stream
+ * forever. Stream sends are gated on free slots beyond a reserve, recording
+ * prefers free slots, and a forced overwrite picks a victim that carries no
+ * stream annotation.
+ */
+ZTEST(net_socket_quic, test_496_sent_packet_history_keeps_stream_entries)
+{
+	struct quic_endpoint *ep = reset_test_ep(&test_ep_a);
+	const enum quic_secret_level level = QUIC_SECRET_LEVEL_APPLICATION;
+	const uint64_t control_pn = 3;
+	uint64_t pn;
+
+	quic_recovery_init(ep);
+
+	zassert_true(quic_recovery_tx_slot_available(ep, level),
+		     "Empty history must have room for stream data");
+
+	/* Fill the whole history with in-flight ack-eliciting packets */
+	for (pn = 0; pn < CONFIG_QUIC_SENT_PKT_HISTORY_SIZE; pn++) {
+		quic_recovery_on_packet_sent(ep, level, pn, 100, true, false, 0);
+	}
+
+	zassert_false(quic_recovery_tx_slot_available(ep, level),
+		      "Full history must refuse more stream data");
+
+	/* Annotate everything as stream data except one control packet */
+	for (int i = 0; i < CONFIG_QUIC_SENT_PKT_HISTORY_SIZE; i++) {
+		struct quic_sent_pkt_info *info = &ep->recovery.sent_pkts[2][i];
+
+		if (info->pkt_num != control_pn) {
+			info->has_stream_frame = true;
+			info->stream_id = 0;
+			info->stream_offset = info->pkt_num * 100;
+			info->stream_data_len = 100;
+		}
+	}
+
+	/* A control packet that cannot back off is recorded into the full
+	 * history: the victim must be the entry without a stream annotation.
+	 */
+	pn = CONFIG_QUIC_SENT_PKT_HISTORY_SIZE;
+	quic_recovery_on_packet_sent(ep, level, pn, 50, true, false, 0);
+
+	zassert_equal(quic_test_count_history_pn(ep, control_pn), 0,
+		      "The non-stream entry must be the eviction victim");
+	zassert_equal(quic_test_count_history_pn(ep, pn), 1,
+		      "The new packet must be recorded");
+
+	for (uint64_t old = 0; old < CONFIG_QUIC_SENT_PKT_HISTORY_SIZE; old++) {
+		if (old == control_pn) {
+			continue;
+		}
+
+		zassert_equal(quic_test_count_history_pn(ep, old), 1,
+			      "Stream entry pn=%" PRIu64 " was evicted", old);
+	}
+
+	/* Freeing slots up to the reserve is not enough for stream data */
+	for (int i = 0, freed = 0;
+	     i < CONFIG_QUIC_SENT_PKT_HISTORY_SIZE && freed < QUIC_SENT_PKT_HISTORY_RESERVE;
+	     i++) {
+		struct quic_sent_pkt_info *info = &ep->recovery.sent_pkts[2][i];
+
+		if (info->in_flight) {
+			info->in_flight = false;
+			freed++;
+		}
+	}
+
+	zassert_false(quic_recovery_tx_slot_available(ep, level),
+		      "The reserve slots must not be used for stream data");
+
+	/* One more free slot opens the gate again */
+	for (int i = 0; i < CONFIG_QUIC_SENT_PKT_HISTORY_SIZE; i++) {
+		struct quic_sent_pkt_info *info = &ep->recovery.sent_pkts[2][i];
+
+		if (info->in_flight) {
+			info->in_flight = false;
+			break;
+		}
+	}
+
+	zassert_true(quic_recovery_tx_slot_available(ep, level),
+		     "A slot beyond the reserve must open the gate");
+
+	/* Recording reuses a free slot instead of evicting in-flight state */
+	pn++;
+	quic_recovery_on_packet_sent(ep, level, pn, 50, true, false, 0);
+
+	for (uint64_t old = QUIC_SENT_PKT_HISTORY_RESERVE + 1;
+	     old < CONFIG_QUIC_SENT_PKT_HISTORY_SIZE; old++) {
+		if (old == control_pn) {
+			continue;
+		}
+
+		zassert_equal(quic_test_count_history_pn(ep, old), 1,
+			      "Stream entry pn=%" PRIu64 " lost to slot reuse", old);
+	}
+}
+
+/* Test 497: a lost stream entry awaiting retransmit must not be treated as a
+ * free slot. Between loss detection marking it (in_flight cleared,
+ * retransmit_pending set) and the retransmit queue draining it, the slot is
+ * the only record of the data to re-send. Counting it free or recording over
+ * it drops the retransmission and wedges the stream -- the same failure the
+ * in-flight protection exists to prevent, reached via a narrower window.
+ */
+ZTEST(net_socket_quic, test_497_sent_packet_history_keeps_pending_retransmit)
+{
+	struct quic_endpoint *ep = reset_test_ep(&test_ep_a);
+	const enum quic_secret_level level = QUIC_SECRET_LEVEL_APPLICATION;
+	const uint64_t lost_pn = 0;
+	struct quic_sent_pkt_info *pending = NULL;
+	int freed = 0;
+	uint64_t pn;
+
+	quic_recovery_init(ep);
+
+	/* Fill the whole history with in-flight ack-eliciting packets */
+	for (pn = 0; pn < CONFIG_QUIC_SENT_PKT_HISTORY_SIZE; pn++) {
+		quic_recovery_on_packet_sent(ep, level, pn, 100, true, false, 0);
+	}
+
+	/* Mark pn=lost_pn as a stream entry that loss detection has declared
+	 * lost and queued for retransmission but not yet drained: out of
+	 * flight, retransmit_pending, still carrying its stream annotation.
+	 */
+	for (int i = 0; i < CONFIG_QUIC_SENT_PKT_HISTORY_SIZE; i++) {
+		struct quic_sent_pkt_info *info = &ep->recovery.sent_pkts[2][i];
+
+		if (info->pkt_num == lost_pn) {
+			info->has_stream_frame = true;
+			info->stream_id = 0;
+			info->stream_offset = 0;
+			info->stream_data_len = 100;
+			info->in_flight = false;
+			info->retransmit_pending = true;
+			pending = info;
+			break;
+		}
+	}
+
+	zassert_not_null(pending, "Pending retransmit slot not found");
+
+	/* Free exactly the reserve worth of additional slots. The gate must
+	 * still be closed: the reserve is for control packets, and the pending
+	 * slot is occupied by an unretransmitted stream frame, not free.
+	 */
+	for (int i = 0; i < CONFIG_QUIC_SENT_PKT_HISTORY_SIZE &&
+			 freed < QUIC_SENT_PKT_HISTORY_RESERVE; i++) {
+		struct quic_sent_pkt_info *info = &ep->recovery.sent_pkts[2][i];
+
+		if (info->in_flight) {
+			info->in_flight = false;
+			freed++;
+		}
+	}
+
+	zassert_false(quic_recovery_tx_slot_available(ep, level),
+		      "A pending-retransmit slot must not count as a free slot");
+
+	/* Point the ring index at the pending slot and record a control
+	 * packet that cannot back off. Recording must skip the pending slot
+	 * and reuse one of the free reserve slots instead of dropping the
+	 * queued retransmission.
+	 */
+	ep->recovery.sent_pkts_idx[2] =
+		(uint16_t)(pending - &ep->recovery.sent_pkts[2][0]);
+
+	pn = CONFIG_QUIC_SENT_PKT_HISTORY_SIZE;
+	quic_recovery_on_packet_sent(ep, level, pn, 50, true, false, 0);
+
+	zassert_true(pending->retransmit_pending,
+		     "Pending retransmit slot was reused and its data dropped");
+	zassert_equal(pending->pkt_num, lost_pn,
+		      "Pending retransmit slot was overwritten");
+	zassert_equal(quic_test_count_history_pn(ep, pn), 1,
+		      "The new packet must be recorded in a free slot");
 }
 
 ZTEST(net_socket_quic, test_500_transport_params_validate_retry_ids)

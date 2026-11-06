@@ -6,15 +6,15 @@
 
 /dts-v1/;
 
-#include <nxp/kinetis/nxp_ke17z.dtsi>
+#include <nxp/kinetis/ke1xz/nxp_ke17z.dtsi>
 #include "frdm_ke17z-pinctrl.dtsi"
 #include <zephyr/dt-bindings/gpio/arduino-header-r3.h>
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 #include <zephyr/dt-bindings/pwm/pwm.h>
 
 / {
-	model = "NXP Freedom KE17Z board";
 	compatible = "nxp,frdm-ke17z", "nxp,ke17z", "nxp,mke17z7";
+	model = "NXP Freedom KE17Z board";
 
 	aliases {
 		watchdog0 = &wdog;
@@ -129,26 +129,32 @@
 };
 
 &lpuart0 {
-	dmas = <&edma 1 2>, <&edma 2 3>;
-	dma-names = "rx", "tx";
-	status = "okay";
 	current-speed = <115200>;
 	pinctrl-0 = <&lpuart0_default>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
+&lpuart2 {
+	dmas = <&edma 2 6>, <&edma 3 7>;
+	dma-names = "rx", "tx";
+	current-speed = <115200>;
+	pinctrl-0 = <&lpuart2_default>;
 	pinctrl-names = "default";
 };
 
 &adc0 {
-	status = "okay";
 	sample-time = <12>;
 	vref-mv = <3300>;
 	pinctrl-0 = <&adc0_default>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &lpi2c0 {
-	status = "okay";
 	pinctrl-0 = <&lpi2c0_default>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &gpiod {
@@ -159,20 +165,29 @@
 	status = "okay";
 };
 
-&ftm2 {
+&sosc_clk {
+	clock-frequency = <DT_FREQ_M(8)>;
 	status = "okay";
+};
+
+&soscdiv2_clk {
+	clock-div = <1>;
+};
+
+&ftm2 {
 	compatible = "nxp,ftm-pwm";
 	#pwm-cells = <3>;
-	clocks = <&scg KINETIS_SCG_SIRC_CLK>;
+	clocks = <&scg KINETIS_SCG_SOSC_CLK>;
 	prescaler = <128>;
 	pinctrl-0 = <&ftm2_default>;
 	pinctrl-names = "default";
-	clock-source = "system";
+	clock-source = "fixed";
+	status = "okay";
 };
 
 &flash0 {
 	partitions {
-		compatible = "fixed-partitions";
+		ranges;
 		#address-cells = <1>;
 		#size-cells = <1>;
 
@@ -181,23 +196,27 @@
 		 * to the flash memory sector size of 2KB.
 		 */
 		boot_partition: partition@0 {
-			label = "mcuboot";
+			compatible = "zephyr,mapped-partition";
 			reg = <0x0 DT_SIZE_K(44)>;
+			label = "mcuboot";
 		};
 
 		slot0_partition: partition@b000 {
-			label = "image-0";
+			compatible = "zephyr,mapped-partition";
 			reg = <0xb000 DT_SIZE_K(100)>;
+			label = "image-0";
 		};
 
 		slot1_partition: partition@24000 {
-			label = "image-1";
+			compatible = "zephyr,mapped-partition";
 			reg = <0x24000 DT_SIZE_K(100)>;
+			label = "image-1";
 		};
 
 		storage_partition: partition@3d000 {
-			label = "storage";
+			compatible = "zephyr,mapped-partition";
 			reg = <0x3d000 DT_SIZE_K(12)>;
+			label = "storage";
 		};
 	};
 };
@@ -205,9 +224,9 @@
 &lpspi0 {
 	dmas = <&edma 0 14>, <&edma 1 15>;
 	dma-names = "rx", "tx";
-	status = "okay";
 	pinctrl-0 = <&lpspi0_default>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &edma {

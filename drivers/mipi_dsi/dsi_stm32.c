@@ -14,6 +14,7 @@
 #include <zephyr/sys/printk.h>
 #include <zephyr/drivers/clock_control.h>
 #include <zephyr/drivers/clock_control/stm32_clock_control.h>
+#include <zephyr/drivers/display.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/drivers/mipi_dsi.h>
 #include <zephyr/drivers/reset.h>
@@ -26,6 +27,7 @@ LOG_MODULE_REGISTER(dsi_stm32, CONFIG_MIPI_DSI_LOG_LEVEL);
 
 struct mipi_dsi_stm32_config {
 	const struct device *rcc;
+	const struct device *ltdc;
 	const struct reset_dt_spec reset;
 	struct stm32_pclken dsi_clk;
 	struct stm32_pclken dsisrc_clk;
@@ -352,6 +354,30 @@ static int mipi_dsi_stm32_attach(const struct device *dev, uint8_t channel,
 		mipi_dsi_stm32_log_config(dev);
 	}
 
+	if (config->ltdc != NULL) {
+		int err;
+		/* Forward the attached device timings to LTDC, with DE active low (see AN4860) */
+		const struct display_timing timing = {
+			.hactive = mdev->timings.hactive,
+			.vactive = mdev->timings.vactive,
+			.hsync_len = mdev->timings.hsync,
+			.hfront_porch = mdev->timings.hfp,
+			.hback_porch = mdev->timings.hbp,
+			.vsync_len = mdev->timings.vsync,
+			.vfront_porch = mdev->timings.vfp,
+			.vback_porch = mdev->timings.vbp,
+			.de_active = false,
+			.hsync_active = vcfg->HSPolarity == DSI_HSYNC_ACTIVE_HIGH,
+			.vsync_active = vcfg->VSPolarity == DSI_VSYNC_ACTIVE_HIGH,
+		};
+
+		err = display_set_timing(config->ltdc, &timing);
+		if (err < 0) {
+			LOG_ERR("Set LTDC timings failed! (%d)", err);
+			return err;
+		}
+	}
+
 	ret = HAL_DSI_Start(&data->hdsi);
 	if (ret != HAL_OK) {
 		LOG_ERR("Start DSI host failed! (%d)", ret);
@@ -364,6 +390,21 @@ static int mipi_dsi_stm32_attach(const struct device *dev, uint8_t channel,
 			LOG_ERR("Start DSI pattern generator failed! (%d)", ret);
 			return -EIO;
 		}
+	}
+
+	return 0;
+}
+
+static int mipi_dsi_stm32_detach(const struct device *dev, uint8_t channel,
+				 const struct mipi_dsi_device *mdev)
+{
+	struct mipi_dsi_stm32_data *data = dev->data;
+	HAL_StatusTypeDef ret;
+
+	ret = HAL_DSI_Stop(&data->hdsi);
+	if (ret != HAL_OK) {
+		LOG_ERR("Stop DSI host failed! (%d)", ret);
+		return -EIO;
 	}
 
 	return 0;
@@ -402,20 +443,25 @@ static ssize_t mipi_dsi_stm32_transfer(const struct device *dev, uint8_t channel
 	case MIPI_DSI_GENERIC_SHORT_WRITE_0_PARAM:
 	case MIPI_DSI_GENERIC_SHORT_WRITE_1_PARAM:
 	case MIPI_DSI_GENERIC_SHORT_WRITE_2_PARAM:
-		param1 = ((uint8_t *)msg->tx_buf)[0];
-		if (msg->tx_len == 1U) {
-			param2 = ((uint8_t *)msg->tx_buf)[1];
+		if (msg->tx_len >= 1U) {
+			param1 = ((uint8_t *)msg->tx_buf)[0];
 		}
 
 		if (msg->tx_len >= 2U) {
-			param2 = *(uint16_t *)&((uint8_t *)msg->tx_buf)[1];
+			param2 = ((uint8_t *)msg->tx_buf)[1];
 		}
 
 		ret = HAL_DSI_ShortWrite(&data->hdsi, channel, msg->type, param1, param2);
 		len = msg->tx_len;
 		break;
 	case MIPI_DSI_GENERIC_LONG_WRITE:
-		ret = HAL_DSI_LongWrite(&data->hdsi, channel, msg->type, msg->tx_len,
+		if (msg->tx_len == 0U) {
+			LOG_ERR("Generic long write with an empty buffer");
+			return -EINVAL;
+		}
+
+		/* The first payload byte is passed separately from the remaining ones. */
+		ret = HAL_DSI_LongWrite(&data->hdsi, channel, msg->type, msg->tx_len - 1U,
 					((uint8_t *)msg->tx_buf)[0], &((uint8_t *)msg->tx_buf)[1]);
 		len = msg->tx_len;
 		break;
@@ -448,6 +494,7 @@ static ssize_t mipi_dsi_stm32_transfer(const struct device *dev, uint8_t channel
 
 static DEVICE_API(mipi_dsi, dsi_stm32_api) = {
 	.attach = mipi_dsi_stm32_attach,
+	.detach = mipi_dsi_stm32_detach,
 	.transfer = mipi_dsi_stm32_transfer,
 };
 
@@ -517,6 +564,7 @@ static int mipi_dsi_stm32_init(const struct device *dev)
 		.active_errors = DT_INST_PROP_OR(inst, active_errors, HAL_DSI_ERROR_NONE),	\
 		.lp_rx_filter_freq = DT_INST_PROP_OR(inst, lp_rx_filter, 0),			\
 		.test_pattern = DT_INST_PROP_OR(inst, test_pattern, -1),			\
+		.ltdc = DEVICE_DT_GET_OR_NULL(DT_INST_PHANDLE(inst, st_ltdc)),			\
 	};											\
 	static struct mipi_dsi_stm32_data stm32_dsi_data_##inst = {				\
 		.hdsi = {									\

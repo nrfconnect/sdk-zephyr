@@ -124,12 +124,20 @@ void xtensa_arch_kernel_oops(int reason_p, void *ssf);
 
 #endif
 
+/**
+ * @brief Raise a fatal exception on behalf of the calling thread.
+ *
+ * User threads may only raise K_ERR_KERNEL_OOPS or K_ERR_STACK_CHK_FAIL;
+ * any other reason is converted to K_ERR_KERNEL_OOPS.
+ *
+ * @param reason Fatal error reason (K_ERR_*).
+ */
 __syscall void xtensa_user_fault(unsigned int reason);
 
 #include <zephyr/syscalls/arch.h>
 
 /* internal routine documented in C file, needed by IRQ_CONNECT() macro */
-void z_irq_priority_set(uint32_t irq, uint32_t prio, uint32_t flags);
+void z_irq_priority_set(unsigned int irq, unsigned int prio, uint32_t flags);
 
 #define ARCH_IRQ_CONNECT(irq_p, priority_p, isr_p, isr_param_p, flags_p) \
 	{ \

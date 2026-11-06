@@ -4,7 +4,9 @@
 
 #include <zephyr/kernel.h>
 #include <zephyr/kernel/smp.h>
+#include <zephyr/devicetree.h>
 #include <zephyr/spinlock.h>
+#include <zephyr/llext/symbol.h>
 #include <kswap.h>
 #include <kernel_internal.h>
 
@@ -67,6 +69,7 @@ unsigned int z_smp_global_lock(void)
 
 	return key;
 }
+EXPORT_SYMBOL(z_smp_global_lock);
 
 void z_smp_global_unlock(unsigned int key)
 {
@@ -80,6 +83,7 @@ void z_smp_global_unlock(unsigned int key)
 
 	arch_irq_unlock(key);
 }
+EXPORT_SYMBOL(z_smp_global_unlock);
 
 /* Called from within z_swap(), so assumes lock already held */
 void z_smp_release_global_lock(struct k_thread *thread)
@@ -218,6 +222,26 @@ void k_smp_cpu_resume(int id, smp_init_fn fn, void *arg,
 	k_spin_unlock(&cpu_start_lock, key);
 }
 
+/* Per-CPU boot deferral flags from the devicetree, indexed by logical CPU id
+ * (the order of the "cpu" children of /cpus). A CPU marked with
+ * zephyr,deferred-start is not started during kernel boot; it is brought up
+ * at run time with k_smp_cpu_start() or k_smp_cpu_resume().
+ */
+#if DT_NODE_EXISTS(DT_PATH(cpus))
+/* DT_PROP_OR: a cpu node without a binding covering the property simply
+ * cannot be deferred, rather than failing to compile.
+ */
+#define CPU_DEFERRED_START_FLAG(node_id) DT_PROP_OR(node_id, zephyr_deferred_start, 0),
+static const bool cpu_deferred_start[] = {
+	DT_FOREACH_CPU(CPU_DEFERRED_START_FLAG)
+};
+#define CPU_START_DEFERRED(i)                                                  \
+	(((unsigned int)(i) < ARRAY_SIZE(cpu_deferred_start)) &&               \
+	 cpu_deferred_start[i])
+#else
+#define CPU_START_DEFERRED(i) false
+#endif
+
 void z_smp_init(void)
 {
 	/* We are powering up all CPUs and we want to synchronize their
@@ -225,10 +249,15 @@ void z_smp_init(void)
 	 */
 	(void)atomic_clear(&cpu_start_flag);
 
-	/* Just start CPUs one by one. */
+	/* Just start CPUs one by one, skipping those the devicetree defers
+	 * to a later, run-time start.
+	 */
 	unsigned int num_cpus = arch_num_cpus();
 
 	for (int i = 1; i < num_cpus; i++) {
+		if (CPU_START_DEFERRED(i)) {
+			continue;
+		}
 		z_init_cpu(i);
 		start_cpu(i, NULL);
 	}
@@ -247,12 +276,11 @@ bool z_smp_cpu_mobile(void)
 __attribute_const__ struct k_thread *z_smp_current_get(void)
 {
 	/*
-	 * _current is a field read from _current_cpu, which can race
-	 * with preemption before it is read.  We must lock local
-	 * interrupts when reading it.
+	 * _raw_current can race with preemption before it is read.  We
+	 * must lock local interrupts when reading it.
 	 */
 	unsigned int key = arch_irq_lock();
-	struct k_thread *t = _current_cpu->current;
+	struct k_thread *t = _raw_current;
 
 	arch_irq_unlock(key);
 	return t;

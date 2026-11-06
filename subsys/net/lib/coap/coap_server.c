@@ -253,10 +253,13 @@ static int coap_service_remove_observer(const struct coap_service *service,
 {
 	struct coap_observer *obs;
 
-	if (tkl > 0 && addr != NULL) {
+	/* A token of length zero is still a token when the caller has one,
+	 * so a NULL token is what says the token is not known.
+	 */
+	if (token != NULL && addr != NULL) {
 		/* Prefer addr+token to find the observer */
 		obs = coap_find_observer(service->data->observers, MAX_OBSERVERS, addr, token, tkl);
-	} else if (tkl > 0) {
+	} else if (token != NULL && tkl > 0) {
 		/* Then try to find the observer by token */
 		obs = coap_find_observer_by_token(service->data->observers, MAX_OBSERVERS, token,
 						  tkl);
@@ -648,14 +651,15 @@ static int coap_server_process(int sock_fd)
 
 	pending = coap_pending_received(&request, service->data->pending, MAX_PENDINGS);
 	if (pending) {
-		uint8_t token[COAP_TOKEN_MAX_LEN];
-		uint8_t tkl;
-
 		switch (type) {
 		case COAP_TYPE_RESET:
-			tkl = coap_header_get_token(&request, token);
-			coap_service_remove_observer(service, NULL, net_sad(&client_addr), token,
-						     tkl);
+			/* A reset is an empty message, so it carries no token
+			 * that could say which observer it is about. It answers
+			 * a pending notification, and the address is what
+			 * identifies the observer that has gone away.
+			 */
+			coap_service_remove_observer(service, NULL, net_sad(&client_addr), NULL,
+						     0U);
 			__fallthrough;
 		case COAP_TYPE_ACK:
 			coap_server_free(pending->data);
@@ -782,6 +786,7 @@ static int coap_server_sendto(int sock_fd, const struct net_sockaddr_storage *lo
 		cmsg->cmsg_type = ZSOCK_IPV6_PKTINFO;
 		cmsg->cmsg_len = NET_CMSG_LEN(sizeof(info));
 		memcpy(NET_CMSG_DATA(cmsg), &info, sizeof(info));
+		msg.msg_controllen = NET_CMSG_SPACE(sizeof(info));
 	} else if (IS_ENABLED(CONFIG_NET_IPV4) && local_addr->ss_family == NET_AF_INET) {
 		struct net_in_pktinfo info = {
 			.ipi_spec_dst = ((const struct net_sockaddr_in *)local_addr)->sin_addr,
@@ -791,6 +796,7 @@ static int coap_server_sendto(int sock_fd, const struct net_sockaddr_storage *lo
 		cmsg->cmsg_type = ZSOCK_IP_PKTINFO;
 		cmsg->cmsg_len = NET_CMSG_LEN(sizeof(info));
 		memcpy(NET_CMSG_DATA(cmsg), &info, sizeof(info));
+		msg.msg_controllen = NET_CMSG_SPACE(sizeof(info));
 	}
 
 	return zsock_sendmsg(sock_fd, &msg, 0);
@@ -1199,7 +1205,7 @@ static int coap_service_send_internal(const struct coap_service *service,
 			/* For Observe notifications, find the observer to determine if the response
 			 * needs OSCORE protection
 			 */
-			if (tkl > 0 && addr != NULL) {
+			if (addr != NULL) {
 				/* Prefer addr+token to find the observer */
 				observer = coap_find_observer(service->data->observers,
 							      MAX_OBSERVERS, addr, token, tkl);
@@ -1207,9 +1213,6 @@ static int coap_service_send_internal(const struct coap_service *service,
 				/* Then try to find the observer by token */
 				observer = coap_find_observer_by_token(service->data->observers,
 								       MAX_OBSERVERS, token, tkl);
-			} else if (addr != NULL) {
-				observer = coap_find_observer_by_addr(service->data->observers,
-								      MAX_OBSERVERS, addr);
 			}
 
 			oscore_ctx = observer ? observer->oscore_ctx : NULL;
@@ -1404,9 +1407,6 @@ int coap_resource_parse_observe(struct coap_resource *resource, const struct coa
 	}
 
 	tkl = coap_header_get_token(request, token);
-	if (tkl == 0) {
-		return -EINVAL;
-	}
 
 	(void)k_mutex_lock(&lock, K_FOREVER);
 

@@ -328,6 +328,12 @@ SECTIONS
 		 */
 		 . = ALIGN(4);
 		 __bss_start = .;
+
+/* Located in generated directory. This file is populated by the
+ * zephyr_linker_sources() Cmake function.
+ */
+#include <snippets-bss.ld>
+
 		 *(.sbss)
 		 *(".sbss.*")
 		 *(.bss)
@@ -405,7 +411,9 @@ GROUP_START(DTCM)
 		__dtcm_data_end = .;
 	} GROUP_LINK_IN(DTCM AT> ROMABLE_REGION)
 
+	MPU_ALIGN(__dtcm_data_end - __dtcm_start);
 	__dtcm_end = .;
+	__dtcm_size = __dtcm_end - __dtcm_start;
 
 	__dtcm_data_load_start = LOADADDR(_DTCM_DATA_SECTION_NAME);
 
@@ -425,7 +433,6 @@ GROUP_END(DTCM)
 
 #include <zephyr/linker/debug-sections.ld>
 
-    /DISCARD/ : { *(.note.GNU-stack) }
 
     SECTION_PROLOGUE(.riscv.attributes, 0,)
 	{

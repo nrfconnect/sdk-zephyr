@@ -105,12 +105,23 @@
 #define REGION_2G   REGION_SIZE(2GB)
 #define REGION_4G   REGION_SIZE(4GB)
 
+#if defined(CONFIG_CPU_AARCH32_CORTEX_R)
+#define ARM_MPU_REGION_INIT(p_name, p_base, p_size, p_attr)                                        \
+	{                                                                                          \
+		.name = p_name,                                                                    \
+		.base = p_base,                                                                    \
+		.size = size_to_mpu_rasr_size(p_size),                                             \
+		.attr = p_attr(0U),                                                                \
+	}
+
+#else
 #define ARM_MPU_REGION_INIT(p_name, p_base, p_size, p_attr)                                        \
 	{                                                                                          \
 		.name = p_name,                                                                    \
 		.base = p_base,                                                                    \
 		.attr = p_attr(size_to_mpu_rasr_size(p_size)),                                     \
 	}
+#endif
 
 /* Some helper defines for common regions */
 
@@ -133,9 +144,16 @@
 #define REGION_FLASH_ATTR(size)                                                                    \
 	{(NORMAL_OUTER_INNER_WRITE_THROUGH_NON_SHAREABLE | size | P_RO_U_RO_Msk)}
 #endif
-#define REGION_PPB_ATTR(size)    {(STRONGLY_ORDERED_SHAREABLE | size | P_RW_U_NA_Msk)}
-#define REGION_IO_ATTR(size)     {(DEVICE_NON_SHAREABLE | size | P_RW_U_NA_Msk)}
-#define REGION_EXTMEM_ATTR(size) {(STRONGLY_ORDERED_SHAREABLE | size | NO_ACCESS_Msk)}
+/* Executing from Device or Strongly-ordered memory is architecturally
+ * UNPREDICTABLE on ARMv7-M, so device-type regions are always mapped
+ * Execute-Never. On Cortex-M7 the XN attribute is also what prevents the core
+ * from speculatively fetching instructions from these regions; the memory type
+ * alone does not. See the Arm Cortex-M7 TRM (DDI0489), "Memory system -
+ * Speculative accesses - Considerations for system design".
+ */
+#define REGION_PPB_ATTR(size)    {(STRONGLY_ORDERED_SHAREABLE | NOT_EXEC | size | P_RW_U_NA_Msk)}
+#define REGION_IO_ATTR(size)     {(DEVICE_NON_SHAREABLE | NOT_EXEC | size | P_RW_U_NA_Msk)}
+#define REGION_EXTMEM_ATTR(size) {(STRONGLY_ORDERED_SHAREABLE | NOT_EXEC | size | NO_ACCESS_Msk)}
 
 struct arm_mpu_region_attr {
 	/* Attributes belonging to RASR (including the encoded region size) */

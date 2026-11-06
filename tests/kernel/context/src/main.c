@@ -25,7 +25,7 @@
 #include <zephyr/kernel_structs.h>
 #include <zephyr/arch/cpu.h>
 #include <zephyr/irq_offload.h>
-#include <zephyr/sys_clock.h>
+#include <zephyr/sys/clock.h>
 
 #if defined(CONFIG_SOC_POSIX)
 /* TIMER_TICK_IRQ <soc.h> header for certain platforms */
@@ -80,6 +80,12 @@ extern const int32_t z_sys_timer_irq_for_test;
 #define HAS_POWERSAVE_INSTRUCTION
 #endif
 
+/* MAX32 CPU idle hook prevents WFI, so no powersave instruction if that
+ * config is set.
+ */
+#if defined(CONFIG_MAX32_ON_ENTER_CPU_IDLE_HOOK)
+#undef HAS_POWERSAVE_INSTRUCTION
+#endif
 
 /* whisper simulator does not currently have working implementation for
  * wfi instruction. It simply treats wfi as no-op such that k_cpu_idle()
@@ -337,6 +343,10 @@ ZTEST(context_cpu_idle, test_cpu_idle_atomic)
 	 * check below does not apply.
 	 */
 	TC_PRINT("Skipped: k_cpu_atomic_idle() is a no-op on ARM/ARM64\n");
+	ztest_test_skip();
+#elif defined(CONFIG_TRICORE)
+	/* TriCore cannot re-enable interrupts atomically with WAIT. */
+	TC_PRINT("Skipped: k_cpu_atomic_idle() does not wait on TriCore\n");
 	ztest_test_skip();
 #else
 	_test_kernel_cpu_idle(1);

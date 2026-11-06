@@ -142,20 +142,22 @@ static void update_recv_state_big_synced(const struct bt_bap_broadcast_sink *sin
 		subgroup_param->bis_sync = sink_subgroup->bis_indexes & sink->indexes_bitfield;
 	}
 
-	if (recv_state->encrypt_state == BT_BAP_BIG_ENC_STATE_BCODE_REQ ||
-	    recv_state->encrypt_state == BT_BAP_BIG_ENC_STATE_BAD_CODE) {
+	if (atomic_test_bit(sink->flags, BT_BAP_BROADCAST_SINK_FLAG_BIG_ENCRYPTED)) {
 		mod_src_param.encrypt_state = BT_BAP_BIG_ENC_STATE_DEC;
 	} else {
 		mod_src_param.encrypt_state = recv_state->encrypt_state;
 	}
 
-	/* Since the mod_src_param struct is 0-initialized the metadata won't
-	 * be modified by this
-	 */
-
 	/* Copy existing unchanged data */
 	mod_src_param.src_id = recv_state->src_id;
 	mod_src_param.broadcast_id = recv_state->broadcast_id;
+	for (uint8_t i = 0U; i < recv_state->num_subgroups; i++) {
+		struct bt_bap_bass_subgroup *subgroup_param = &mod_src_param.subgroups[i];
+
+		subgroup_param->metadata_len = recv_state->subgroups[i].metadata_len;
+		(void)memcpy(subgroup_param->metadata, recv_state->subgroups[i].metadata,
+			     subgroup_param->metadata_len);
+	}
 
 	err = bt_bap_scan_delegator_mod_src(&mod_src_param);
 	if (err != 0) {
@@ -211,12 +213,17 @@ static void update_recv_state_big_cleared(const struct bt_bap_broadcast_sink *si
 		}
 	}
 
-	/* Since the metadata_len is 0 then the metadata won't be modified by the operation either*/
-
 	/* Copy existing unchanged data */
 	mod_src_param.num_subgroups = recv_state->num_subgroups;
 	mod_src_param.src_id = recv_state->src_id;
 	mod_src_param.broadcast_id = recv_state->broadcast_id;
+	for (uint8_t i = 0U; i < recv_state->num_subgroups; i++) {
+		struct bt_bap_bass_subgroup *subgroup_param = &mod_src_param.subgroups[i];
+
+		subgroup_param->metadata_len = recv_state->subgroups[i].metadata_len;
+		(void)memcpy(subgroup_param->metadata, recv_state->subgroups[i].metadata,
+			     subgroup_param->metadata_len);
+	}
 
 	err = bt_bap_scan_delegator_mod_src(&mod_src_param);
 	if (err != 0) {
@@ -533,15 +540,30 @@ static bool base_subgroup_meta_cb(const struct bt_bap_base_subgroup *subgroup, v
 
 	ARG_UNUSED(user_data);
 
+	if (mod_src_param.num_subgroups == ARRAY_SIZE(mod_src_param.subgroups)) {
+		return false;
+	}
+
+	subgroup_param = &mod_src_param.subgroups[mod_src_param.num_subgroups];
+
 	ret = bt_bap_base_get_subgroup_codec_meta(subgroup, &meta);
 	if (ret < 0) {
 		return false;
 	}
 
-	subgroup_param = &mod_src_param.subgroups[mod_src_param.num_subgroups];
+	if (ret <= sizeof(subgroup_param->metadata)) {
+		subgroup_param->metadata_len = (uint8_t)ret;
+		(void)memcpy(subgroup_param->metadata, meta, subgroup_param->metadata_len);
+	} else {
+		/* If we cannot store the metadata, we just omit it.
+		 * BASS section 3.2.1.10 Metadata_Length field states
+		 * "the server may write the length of any Metadata
+		 *  parameters for each subgroup to the Metadata_Length field"
+		 */
+		subgroup_param->metadata_len = 0U;
+	}
+
 	mod_src_param.num_subgroups++;
-	subgroup_param->metadata_len = (uint8_t)ret;
-	memcpy(subgroup_param->metadata, meta, subgroup_param->metadata_len);
 
 	return true;
 }
@@ -574,9 +596,12 @@ static void update_recv_state_base(const struct bt_bap_broadcast_sink *sink,
 
 	(void)memset(&mod_src_param, 0, sizeof(mod_src_param));
 
+	/* Will set the mod_src_param.num_subgroups and subgroup-related parameters */
 	err = update_recv_state_base_copy_meta(base);
 	if (err != 0) {
-		LOG_WRN("Failed to modify Receive State for sink %p: %d", sink, err);
+		LOG_WRN_RATELIMIT(
+			"Failed to parse all subgroups from BASE for sink %p: %d (%u != %d)", sink,
+			err, mod_src_param.num_subgroups, bt_bap_base_get_subgroup_count(base));
 		return;
 	}
 
@@ -584,7 +609,7 @@ static void update_recv_state_base(const struct bt_bap_broadcast_sink *sink,
 	mod_src_param.src_id = recv_state->src_id;
 	mod_src_param.encrypt_state = recv_state->encrypt_state;
 	mod_src_param.broadcast_id = recv_state->broadcast_id;
-	mod_src_param.num_subgroups = sink->subgroup_count;
+
 	for (uint8_t i = 0U; i < sink->subgroup_count; i++) {
 		struct bt_bap_bass_subgroup *subgroup_param = &mod_src_param.subgroups[i];
 
@@ -645,8 +670,6 @@ static bool base_decode_subgroup_cb(const struct bt_bap_base_subgroup *subgroup,
 	int ret;
 
 	if (sink->subgroup_count == ARRAY_SIZE(sink->subgroups)) {
-		/* We've parsed as many subgroups as we support */
-		LOG_DBG("Could only store %u subgroups", sink->subgroup_count);
 		return false;
 	}
 
@@ -710,10 +733,11 @@ static bool pa_decode_base(struct bt_data *data, void *user_data)
 			ret = base_get_bis_count(base);
 
 			if (ret < 0) {
-				LOG_DBG("Invalid BASE: %d", ret);
+				LOG_DBG_RATELIMIT("Invalid BASE: %d", ret);
 				return false;
 			} else if (ret != sink->biginfo.num_bis) {
-				LOG_DBG("BASE contains different amount of BIS (%u) than reported "
+				LOG_DBG_RATELIMIT(
+					"BASE contains different amount of BIS (%u) than reported "
 					"by BIGInfo (%u)",
 					ret, sink->biginfo.num_bis);
 				return false;
@@ -722,9 +746,19 @@ static bool pa_decode_base(struct bt_data *data, void *user_data)
 
 		/* Store newest BASE info until we are BIG synced */
 		if (sink->big == NULL) {
+			int err;
+
 			sink->subgroup_count = 0U;
 			sink->valid_indexes_bitfield = 0U;
-			bt_bap_base_foreach_subgroup(base, base_decode_subgroup_cb, sink);
+
+			err = bt_bap_base_foreach_subgroup(base, base_decode_subgroup_cb, sink);
+			if (err != 0) {
+				LOG_WRN_RATELIMIT(
+					"Failed to parse all subgroups for sink %p: %d (%u != %d)",
+					sink, err, sink->subgroup_count,
+					bt_bap_base_get_subgroup_count(base));
+				return false;
+			}
 
 			LOG_DBG("Updating BASE for sink %p with %d subgroups\n", sink,
 				sink->subgroup_count);
@@ -733,6 +767,7 @@ static bool pa_decode_base(struct bt_data *data, void *user_data)
 			sink->base_size = base_size;
 		}
 
+		/* Metadata may change after syncing, so parse that regardless of `sink->big` */
 		if (atomic_test_bit(sink->flags, BT_BAP_BROADCAST_SINK_FLAG_SRC_ID_VALID)) {
 			update_recv_state_base(sink, base);
 		}
@@ -839,7 +874,7 @@ static void update_recv_state_encryption(const struct bt_bap_broadcast_sink *sin
 	mod_src_param.num_subgroups = recv_state->num_subgroups;
 	(void)memcpy(mod_src_param.subgroups,
 		     recv_state->subgroups,
-		     sizeof(recv_state->num_subgroups));
+		     sizeof(recv_state->subgroups));
 
 	err = bt_bap_scan_delegator_mod_src(&mod_src_param);
 	if (err != 0) {

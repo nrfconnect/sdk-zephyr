@@ -1,19 +1,19 @@
 /*
- * Copyright 2025 NXP
+ * Copyright 2025-2026 NXP
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
 /dts-v1/;
 
-#include <nxp/mcx/nxp_mcxe247.dtsi>
+#include <nxp/mcx/mcxe/nxp_mcxe247.dtsi>
 #include "frdm_mcxe247-pinctrl.dtsi"
 #include <zephyr/dt-bindings/gpio/arduino-header-r3.h>
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 
 / {
-	model = "NXP FRDM-MCXE247 board";
 	compatible = "nxp,mcxe247", "nxp,mcx";
+	model = "NXP FRDM-MCXE247 board";
 
 	aliases {
 		led0 = &red_led;
@@ -101,17 +101,17 @@
 };
 
 &adc0 {
-	status = "okay";
 	sample-time = <12>;
 	vref-mv = <3300>;
 	pinctrl-0 = <&pinmux_adc0>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &cmp0 {
-	status = "okay";
 	pinctrl-0 = <&pinmux_cmp0>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &cpu0 {
@@ -137,6 +137,10 @@
 
 &spll_clk {
 	status = "okay";
+};
+
+&splldiv1_clk {
+	clock-div = <1>;
 };
 
 &core_clk {
@@ -195,17 +199,17 @@
 };
 
 &lpuart1 {
-	status = "okay";
 	current-speed = <115200>;
 	pinctrl-0 = <&pinmux_lpuart1>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &lpuart2 {
-	status = "okay";
 	current-speed = <115200>;
 	pinctrl-0 = <&pinmux_lpuart2>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &lpit0 {
@@ -250,9 +254,9 @@
 };
 
 &lpspi1 {
-	status = "okay";
 	pinctrl-0 = <&pinmux_lpspi1>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &edma {
@@ -277,4 +281,38 @@
 
 &wdog {
 	status = "okay";
+};
+
+&mpu {
+	status = "okay";
+};
+
+&qspi {
+	pinctrl-0 = <&pinmux_qspi>;
+	pinctrl-names = "default";
+	clock-frequency = <20000000>;
+	packet-data-limit = <128>;
+	status = "disabled";
+
+	w25q64: qspi-nor-flash@0 {
+		compatible = "jedec,nor";
+		reg = <0>;
+		size = <DT_SIZE_M(64)>;
+		/* Single QSPI IP write must fit the 128-byte Tx FIFO. */
+		page-size = <128>;
+		jedec-id = [ef 40 17];
+		sfdp-bfp = [e5 20 f1 ff ff ff ff 03
+			    44 eb 08 6b 08 3b 04 bb
+			    ee ff ff ff ff ff 00 ff
+			    ff ff 00 ff 0c 20 0f 52
+			    10 d8 00 ff 23 72 f5 00
+			    82 ed 04 cc 44 83 68 44
+			    30 b0 30 b0 f7 c4 d5 5c
+			    00 be 29 ff f0 d0 ff ff];
+		mspi-max-frequency = <20000000>;
+		mspi-io-mode = "MSPI_IO_MODE_QUAD_1_1_4";
+		mspi-data-rate = "MSPI_DATA_RATE_SINGLE";
+		quad-enable-requirements = "S2B1v1";
+		status = "disabled";
+	};
 };

@@ -9,15 +9,13 @@
 
 #include <zephyr/device.h>
 #include <zephyr/drivers/i2c.h>
-#include <zephyr/drivers/video-controls.h>
 #include <zephyr/drivers/video.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/byteorder.h>
+#include <zephyr/video/video.h>
 
 #include "video_common.h"
-#include "video_ctrls.h"
-#include "video_device.h"
 
 LOG_MODULE_REGISTER(imx219, CONFIG_VIDEO_LOG_LEVEL);
 
@@ -184,12 +182,12 @@ enum {
 /* TODO switch to video_set_selection() API for cropping instead */
 static const struct video_format_cap imx219_fmts[] = {
 	[IMX219_RAW8_FULL_FRAME] = {
-		.pixelformat = VIDEO_PIX_FMT_SBGGR8,
+		.pixelformat = VIDEO_PIX_FMT_SRGGB8,
 		.width_min = 4, .width_max = IMX219_FULL_WIDTH, .width_step = 4,
 		.height_min = 4, .height_max = IMX219_FULL_HEIGHT, .height_step = 4,
 	},
 	[IMX219_RAW10_FULL_FRAME] = {
-		.pixelformat = VIDEO_PIX_FMT_SBGGR10P,
+		.pixelformat = VIDEO_PIX_FMT_SRGGB10P,
 		.width_min = 4, .width_max = IMX219_FULL_WIDTH, .width_step = 4,
 		.height_min = 4, .height_max = IMX219_FULL_HEIGHT, .height_step = 4,
 	},

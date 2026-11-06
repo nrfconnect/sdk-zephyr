@@ -15,11 +15,16 @@
  * The ESP32-C6 has a ROM at 0x40000000 containing libc and other utility
  * functions. This region needs to be accessible (R+X) from both kernel
  * and user mode for proper operation.
+ *
+ * The size is rounded up to the next power of two so the region encodes
+ * as a single NAPOT entry. The space past the ROM up to the rounded size
+ * is reserved and holds no memory.
  */
 #define SOC_ROM_NODE DT_NODELABEL(soc_rom)
+#define SOC_ROM_NAPOT_SIZE ((uintptr_t)NHPOT(DT_REG_SIZE(SOC_ROM_NODE)))
 
 PMP_SOC_REGION_DEFINE(esp32c6_soc_rom, DT_REG_ADDR(SOC_ROM_NODE),
-		      DT_REG_ADDR(SOC_ROM_NODE) + DT_REG_SIZE(SOC_ROM_NODE), PMP_R | PMP_X);
+		      DT_REG_ADDR(SOC_ROM_NODE) + SOC_ROM_NAPOT_SIZE, PMP_R | PMP_X);
 
 /*
  * ESP32-C6 IRAM text region.
@@ -37,3 +42,16 @@ extern char _iram_text_start[];
 extern char _iram_text_end[];
 
 PMP_SOC_REGION_DEFINE(esp32c6_iram_text, _iram_text_start, _iram_text_end, PMP_R | PMP_X);
+
+/*
+ * Flash-mapped read-only data (DROM).
+ *
+ * Const data and string literals live in a separate MMU window from
+ * executable flash text (__rom_region). Without an explicit PMP entry,
+ * user mode cannot read that window. Use _image_rodata_* so sections
+ * after __rodata_region_end that still map into DROM are covered.
+ */
+extern char _image_rodata_start[];
+extern char _image_rodata_end[];
+
+PMP_SOC_REGION_DEFINE(esp32c6_flash_rodata, _image_rodata_start, _image_rodata_end, PMP_R);

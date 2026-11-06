@@ -96,6 +96,7 @@ set(SYSCALL_LIST_H_TARGET      syscall_list_h_target)
 set(DRIVER_VALIDATION_H_TARGET driver_validation_h_target)
 set(KOBJ_TYPES_H_TARGET        kobj_types_h_target)
 set(DEVICE_API_LD_TARGET       device_api_ld_target)
+set(PARSE_SYSCALLS_TARGET      parse_syscalls_target)
 # Backward compatibility: open-amp explicitly depends on OFFSETS_H_TARGET
 # which is redundant as zephyr_generated_headers already provides this to
 # all Zephyr libraries.  Remove once open-amp drops this.
@@ -148,7 +149,6 @@ foreach(var AFLAGS CFLAGS CXXFLAGS CPPFLAGS LDFLAGS)
 endforeach()
 
 zephyr_compile_definitions(
-  KERNEL
   __ZEPHYR__=1
 )
 
@@ -169,7 +169,7 @@ if(CONFIG_COMPILER_WARNINGS_AS_ERRORS)
   zephyr_link_libraries($<TARGET_PROPERTY:linker,warnings_as_errors>)
 endif()
 
-if(CONFIG_DEPRECATION_TEST OR NOT CONFIG_WARN_DEPRECATED)
+if(NOT CONFIG_WARN_DEPRECATED)
   zephyr_compile_options($<$<COMPILE_LANGUAGE:C>:$<TARGET_PROPERTY:compiler,no_deprecation_warning>>)
   zephyr_compile_options($<$<COMPILE_LANGUAGE:CXX>:$<TARGET_PROPERTY:compiler,no_deprecation_warning>>)
   zephyr_compile_options($<$<COMPILE_LANGUAGE:ASM>:$<TARGET_PROPERTY:asm,no_deprecation_warning>>)
@@ -202,6 +202,9 @@ elseif(CONFIG_STACK_CANARIES_ALL)
 elseif(CONFIG_STACK_CANARIES_EXPLICIT)
   zephyr_compile_options("$<$<COMPILE_LANGUAGE:C>:$<TARGET_PROPERTY:compiler,security_canaries_explicit>>")
   zephyr_compile_options("$<$<COMPILE_LANGUAGE:CXX>:$<TARGET_PROPERTY:compiler,security_canaries_explicit>>")
+else()
+  zephyr_compile_options("$<$<COMPILE_LANGUAGE:C>:$<TARGET_PROPERTY:compiler,security_canaries_none>>")
+  zephyr_compile_options("$<$<COMPILE_LANGUAGE:CXX>:$<TARGET_PROPERTY:compiler,security_canaries_none>>")
 endif()
 
 # @Intent: Obtain compiler optimizations flags and store in variables
@@ -293,12 +296,6 @@ if(CONFIG_STD_C23)
   set(CSTD c2x)
 elseif(CONFIG_STD_C17)
   set(CSTD c17)
-elseif(CONFIG_STD_C11)
-  set(CSTD c11)
-elseif(CONFIG_STD_C99)
-  set(CSTD c99)
-elseif(CONFIG_STD_C90)
-  set(CSTD c90)
 else()
   message(FATAL_ERROR "Unreachable code. Expected C standard to have been chosen.")
 endif()
@@ -340,6 +337,9 @@ if(CONFIG_CPP)
   elseif(CONFIG_STD_CPP23)
     set(STD_CPP_DIALECT_FLAGS $<TARGET_PROPERTY:compiler-cpp,dialect_cpp23>)
     list(APPEND CMAKE_CXX_COMPILE_FEATURES ${compile_features_cpp23})
+  elseif(CONFIG_STD_CPP26)
+    set(STD_CPP_DIALECT_FLAGS $<TARGET_PROPERTY:compiler-cpp,dialect_cpp26>)
+    list(APPEND CMAKE_CXX_COMPILE_FEATURES ${compile_features_cpp26})
   else()
     message(FATAL_ERROR
       "Unreachable code. Expected C++ standard to have been chosen. See Kconfig.zephyr.")
@@ -691,6 +691,11 @@ elseif(NOT ZEPHYR_GIT_INDEX)
   endif()
 endif()
 
+zephyr_get(APP_BUILD_VERSION SYSBUILD LOCAL)
+if(DEFINED APP_BUILD_VERSION)
+  set(app_build_version_argument "-DAPP_BUILD_VERSION=${APP_BUILD_VERSION}")
+endif()
+
 if(ZEPHYR_GIT_INDEX)
   set(git_dependency ${ZEPHYR_GIT_INDEX})
 endif()
@@ -723,7 +728,7 @@ if(EXISTS ${APPLICATION_SOURCE_DIR}/VERSION)
       -DVERSION_TYPE=APP
       -DVERSION_FILE=${APPLICATION_SOURCE_DIR}/VERSION
       -DAPP_VERSION_CUSTOMIZATION="$<TARGET_PROPERTY:app_version_h,APP_VERSION_CUSTOMIZATION>"
-      ${build_version_argument}
+      ${app_build_version_argument}
       -P ${ZEPHYR_BASE}/cmake/gen_version_h.cmake
     DEPENDS ${APPLICATION_SOURCE_DIR}/VERSION ${git_dependency}
       $<TARGET_PROPERTY:app_version_h,APP_VERSION_DEPENDS>
@@ -866,8 +871,8 @@ else()
     file(WRITE ${syscalls_subdirs_txt} "")
   endif()
 
-  # On other OS'es, using git checkout is reflected on the folder timestamp and hence detected
-  # when using depend on directory level.
+  # On other OS'es, using git checkout (or switch, restore, etc.) is reflected on the folder
+  # timestamp and hence detected when using depend on directory level.
   # Thus CMake only needs to re-run when sub-directories are added / removed, which is indicated
   # by syscalls_subdirs_txt being updated.
   set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${syscalls_subdirs_txt})
@@ -923,6 +928,10 @@ add_custom_command(
           ${syscalls_file_list_output} syscalls_interface
   )
 
+# The Makefile generator copies the rule above into every target that depends on its outputs.
+# Commands that read the json files also depend on this target, so the rule runs only once.
+add_custom_target(${PARSE_SYSCALLS_TARGET} DEPENDS ${syscalls_json} ${struct_tags_json})
+
 # Make sure Picolibc is built before the rest of the system; there's no explicit
 # reference to any of the files as they're all picked up by various compiler
 # settings
@@ -961,7 +970,7 @@ endif()
 add_custom_command(
   OUTPUT
   include/generated/zephyr/syscall_dispatch.c
-  include/generated/zephyr/syscall_exports_llext.c
+  ${ZEPHYR_BINARY_DIR}/syscall_exports_llext.c
   syscall_weakdefs_llext.c
   ${syscall_list_h}
   # Also, some files are written to include/generated/zephyr/syscalls/
@@ -971,7 +980,7 @@ add_custom_command(
   --json-file        ${syscalls_json}                     # Read this file
   --base-output      include/generated/zephyr/syscalls    # Write to this dir
   --syscall-dispatch include/generated/zephyr/syscall_dispatch.c # Write this file
-  --syscall-exports-llext  include/generated/zephyr/syscall_exports_llext.c
+  --syscall-exports-llext  ${ZEPHYR_BINARY_DIR}/syscall_exports_llext.c # compiled in LLEXT subsys
   --syscall-weakdefs-llext syscall_weakdefs_llext.c # compiled in CMake library 'syscall_weakdefs'
   --syscall-list     ${syscall_list_h}
   $<$<BOOL:${CONFIG_USERSPACE}>:--gen-mrsh-files>
@@ -980,7 +989,7 @@ add_custom_command(
   COMMAND
   ${LEGACY_SYSCALL_LIST_H_ARGS}
   WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-  DEPENDS ${syscalls_json}
+  DEPENDS ${syscalls_json} ${PARSE_SYSCALLS_TARGET}
   )
 
 include(${ZEPHYR_BASE}/cmake/kobj.cmake)
@@ -991,12 +1000,12 @@ gen_kobject_list(
   OUTPUTS ${DRV_VALIDATION}
   SCRIPT_ARGS --validation-output ${DRV_VALIDATION}
   INCLUDES ${struct_tags_json}
-  DEPENDS ${struct_tags_json}
+  DEPENDS ${struct_tags_json} ${PARSE_SYSCALLS_TARGET}
   )
 
 gen_kobject_list_headers(
   INCLUDES ${struct_tags_json}
-  DEPENDS ${struct_tags_json}
+  DEPENDS ${struct_tags_json} ${PARSE_SYSCALLS_TARGET}
   )
 
 # Generate sections for kernel device subsystems
@@ -1009,8 +1018,15 @@ set(DEVICE_API_LINKER_SECTIONS_CMAKE
     ${CMAKE_CURRENT_BINARY_DIR}/include/generated/device-api-sections.cmake
 )
 
+set(DEVICE_API_EXPORTS_LLEXT
+    ${ZEPHYR_BINARY_DIR}/device_api_exports_llext.c
+)
+
 add_custom_command(
-  OUTPUT ${DEVICE_API_LD_SECTIONS} ${DEVICE_API_LINKER_SECTIONS_CMAKE}
+  OUTPUT
+    ${DEVICE_API_LD_SECTIONS}
+    ${DEVICE_API_LINKER_SECTIONS_CMAKE}
+    ${DEVICE_API_EXPORTS_LLEXT}
   COMMAND
     ${PYTHON_EXECUTABLE}
     ${ZEPHYR_BASE}/scripts/build/gen_iter_sections.py
@@ -1019,9 +1035,11 @@ add_custom_command(
     --tag __subsystem
     --ld-output ${DEVICE_API_LD_SECTIONS}
     --cmake-output ${DEVICE_API_LINKER_SECTIONS_CMAKE}
+    --llext-output ${DEVICE_API_EXPORTS_LLEXT}
   DEPENDS
     ${ZEPHYR_BASE}/scripts/build/gen_iter_sections.py
     ${struct_tags_json}
+    ${PARSE_SYSCALLS_TARGET}
   WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
   )
 
@@ -1102,7 +1120,7 @@ else()
   set(NO_WHOLE_ARCHIVE_LIBS kernel)
 endif()
 
-if(CONFIG_LLEXT)
+if(CONFIG_LLEXT_EXPORT_SYMBOL_GROUP_SYSCALL)
   # LLEXT exports symbols for all syscalls, including unimplemented ones.
   # Weak definitions for these must be added at the end of the link order
   # to avoid shadowing actual implementations.
@@ -1939,6 +1957,9 @@ endif()
 
 set(KERNEL_META_PATH  ${PROJECT_BINARY_DIR}/${KERNEL_META_NAME} CACHE INTERNAL "")
 if(CONFIG_BUILD_OUTPUT_META)
+  # SBOM tooling reads CMake's object model alongside this metadata.
+  cmake_file_api(QUERY API_VERSION 1 CODEMODEL 2 TOOLCHAINS 1)
+
   list(APPEND
     post_build_commands
     COMMAND ${PYTHON_EXECUTABLE} ${ZEPHYR_BASE}/scripts/zephyr_module.py
@@ -2271,7 +2292,7 @@ if(LOG_DICT_DB_NAME_ARG)
       ${LOG_DICT_DB_NAME}
     )
   else()
-    # Seprate build target for generating logging dictionary database.
+    # Separate build target for generating logging dictionary database.
     # This needs to be explicitly called/used to generate the database.
     add_custom_command(
       OUTPUT ${LOG_DICT_DB_NAME}
@@ -2316,7 +2337,6 @@ if(HEX_FILES_TO_MERGE)
     )
 
   add_custom_target(mergehex ALL DEPENDS ${MERGED_HEX_NAME})
-  list(APPEND RUNNERS_DEPS mergehex)
 
   message(VERBOSE "Merging hex files: ${HEX_FILES_TO_MERGE}")
 endif()
@@ -2365,7 +2385,7 @@ endif()
 
 if(CONFIG_SOC_DEPRECATED_RELEASE)
   message(WARNING "
-      WARNING:  The SoC '${SOC_NAME}' is deprecated and will be
+      WARNING:  The SoC '${CONFIG_SOC}' is deprecated and will be
       removed in version ${CONFIG_SOC_DEPRECATED_RELEASE}"
   )
 endif()
@@ -2382,9 +2402,9 @@ if((CMAKE_BUILD_TYPE IN_LIST build_types) AND (NOT NO_BUILD_TYPE_WARNING))
   # optimization flag is present in that string.
   # To avoid false-positive matches, the flag must either be matched first
   # or last in string, or come after / followed by minimum a space.
-  if(NOT (CMAKE_C_FLAGS_${CMAKE_BUILD_TYPE_uppercase} MATCHES "(^| )${OPTIMIZATION_FLAG}($| )"))
+  if(NOT (CMAKE_C_FLAGS_${CMAKE_BUILD_TYPE_uppercase} MATCHES "(^| )${COMPILER_OPTIMIZATION_FLAG}($| )"))
     message(WARNING "
-      The CMake build type was set to '${CMAKE_BUILD_TYPE}', but the optimization flag was set to '${OPTIMIZATION_FLAG}'.
+      The CMake build type was set to '${CMAKE_BUILD_TYPE}', but the optimization flag was set to '${COMPILER_OPTIMIZATION_FLAG}'.
       This may be intentional and the warning can be turned off by setting the CMake variable 'NO_BUILD_TYPE_WARNING'"
       )
   endif()
@@ -2427,6 +2447,7 @@ if(CONFIG_LLEXT_EDK)
       ${SYSCALL_LONG_REGISTERS_ARG}
       ${SYSCALL_SPLIT_TIMEOUT_ARG}
     COMMAND ${CMAKE_COMMAND}
+        -DSYSBUILD=${SYSBUILD}
         -P ${ZEPHYR_BASE}/cmake/llext-edk.cmake
     DEPENDS ${logical_target_for_zephyr_elf} ${syscalls_json} build_info_yaml_saved llext_edk_build_props
     COMMAND_EXPAND_LISTS

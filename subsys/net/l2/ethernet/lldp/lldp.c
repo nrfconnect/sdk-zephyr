@@ -20,7 +20,11 @@ LOG_MODULE_REGISTER(net_lldp, CONFIG_NET_LLDP_LOG_LEVEL);
 #include <zephyr/net/net_mgmt.h>
 #include <zephyr/net/lldp.h>
 
-static struct net_mgmt_event_callback cb;
+static void iface_event_handler(uint64_t mgmt_event, struct net_if *iface, void *info,
+				size_t info_length, void *user_data);
+
+NET_MGMT_REGISTER_EVENT_HANDLER(lldp_events, NET_EVENT_IF_UP | NET_EVENT_IF_DOWN,
+				iface_event_handler, NULL);
 
 static void lldp_tx_timeout(struct k_work *work);
 /* Have only one timer in order to save memory */
@@ -40,11 +44,13 @@ static void lldp_submit_work(k_timeout_t timeout)
 			k_work_delayable_remaining_get(&lldp_tx_timer)));
 }
 
+/* The nearest bridge group address of IEEE 802.1AB */
+static const struct net_eth_addr lldp_multicast_eth_addr = {
+	{ 0x01, 0x80, 0xc2, 0x00, 0x00, 0x0e }
+};
+
 static void lldp_send(struct ethernet_lldp *lldp)
 {
-	static const struct net_eth_addr lldp_multicast_eth_addr = {
-		{ 0x01, 0x80, 0xc2, 0x00, 0x00, 0x0e }
-	};
 	struct ethernet_context *ctx = CONTAINER_OF(lldp, struct ethernet_context, lldp);
 	int ret = 0;
 	struct net_pkt *pkt;
@@ -241,26 +247,30 @@ int net_lldp_register_callback(struct net_if *iface, net_lldp_recv_cb_t recv_cb)
 
 	ctx = net_if_l2_data(iface);
 
+	/* Received frames are only useful with a callback, so a device that
+	 * filters multicast frames in hardware is told to listen to the
+	 * group address while one is registered.
+	 */
+	if (recv_cb != NULL && ctx->lldp.cb == NULL) {
+		ret = net_eth_mcast_addr_add(iface, &lldp_multicast_eth_addr);
+		if (ret < 0) {
+			return ret;
+		}
+	} else if (recv_cb == NULL && ctx->lldp.cb != NULL) {
+		(void)net_eth_mcast_addr_rm(iface, &lldp_multicast_eth_addr);
+	} else {
+		/* No change, do not touch the multicast group */
+	}
+
 	ctx->lldp.cb = recv_cb;
 
 	return 0;
 }
 
-static void iface_event_handler(struct net_mgmt_event_callback *evt_cb,
-				uint64_t mgmt_event, struct net_if *iface)
+static void iface_event_handler(uint64_t mgmt_event, struct net_if *iface, void *info __unused,
+				size_t info_length __unused, void *user_data __unused)
 {
 	lldp_start(iface, mgmt_event);
-}
-
-static void iface_cb(struct net_if *iface, void *user_data)
-{
-	/* If the network interface is already up, then call the sender
-	 * immediately. If the interface is not ethernet one, then
-	 * lldp_start() will return immediately.
-	 */
-	if (net_if_oper_state(iface) == NET_IF_OPER_UP) {
-		lldp_start(iface, NET_EVENT_IF_UP);
-	}
 }
 
 int net_lldp_config(struct net_if *iface, const struct net_lldpdu *lldpdu)
@@ -311,13 +321,4 @@ void net_lldp_unset_lldpdu(struct net_if *iface)
 {
 	net_lldp_config(iface, NULL);
 	net_lldp_config_optional(iface, NULL, 0);
-}
-
-void net_lldp_init(void)
-{
-	net_mgmt_init_event_callback(&cb, iface_event_handler,
-				     NET_EVENT_IF_UP | NET_EVENT_IF_DOWN);
-	net_mgmt_add_event_callback(&cb);
-
-	net_if_foreach(iface_cb, NULL);
 }

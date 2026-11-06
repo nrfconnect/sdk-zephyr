@@ -44,6 +44,7 @@ static int set_iir_config(const struct sensor_value *iir, const struct device *d
 static int get_power_mode(enum bmp5_powermode *powermode, const struct device *dev);
 static int set_power_mode(enum bmp5_powermode powermode, const struct device *dev);
 
+#ifdef CONFIG_SENSOR_ASYNC_API
 #ifdef CONFIG_PM_DEVICE
 static int bmp581_pm_busy_check(const struct device *dev)
 {
@@ -55,13 +56,14 @@ static int bmp581_pm_busy_check(const struct device *dev)
 	}
 	return 0;
 }
-#else
+#else /* CONFIG_PM_DEVICE */
 static inline int bmp581_pm_busy_check(const struct device *dev)
 {
 	ARG_UNUSED(dev);
 	return 0;
 }
-#endif
+#endif /* CONFIG_PM_DEVICE */
+#endif /* CONFIG_SENSOR_ASYNC_API */
 
 static int set_power_mode(enum bmp5_powermode powermode, const struct device *dev)
 {
@@ -383,19 +385,34 @@ static int set_odr_config(const struct sensor_value *odr, const struct device *d
 
 static int soft_reset(const struct device *dev)
 {
+	CHECKIF(dev == NULL) {
+		return -EINVAL;
+	}
+
 	struct bmp581_config *conf = (struct bmp581_config *)dev->config;
 	int ret = 0;
 	const uint8_t reset_cmd = BMP5_SOFT_RESET_CMD;
 	uint8_t int_status = 0;
 
-	CHECKIF(dev == NULL) {
-		return -EINVAL;
-	}
-
 	ret = bmp581_reg_write_rtio(&conf->bus, BMP5_REG_CMD, &reset_cmd, 1);
 
 	if (ret == BMP5_OK) {
 		k_usleep(BMP5_DELAY_US_SOFT_RESET);
+
+		/*
+		 * Soft-reset returns the device to its power-up I2C/I3C mode.
+		 * Re-issue the SPI dummy read to switch the interface back to
+		 * SPI before reading the reset status.
+		 */
+		if (conf->bus.rtio.type == BMP581_BUS_TYPE_SPI) {
+			uint8_t dummy = 0;
+
+			ret = bmp581_reg_read_rtio(&conf->bus, BMP5_REG_CHIP_ID, &dummy, 1);
+			if (ret != BMP5_OK) {
+				return ret;
+			}
+		}
+
 		ret = get_interrupt_status(&int_status, dev);
 		if (ret == BMP5_OK) {
 			if ((int_status & BMP5_INT_ASSERTED_POR_SOFTRESET_COMPLETE) != 0) {
@@ -440,15 +457,12 @@ static int bmp581_sample_fetch(const struct device *dev, enum sensor_channel cha
 			((int64_t)(raw_temp_signed % 65536) * 1000000) / 65536;
 
 		if (drv->osr_odr_press_config.press_en == BMP5_ENABLE) {
-			/* convert raw sensor data to sensor_value. Shift the decimal part by
-			 * 4 decimal places to compensate for the conversion in
-			 * sensor_value_to_double()
-			 */
-			uint32_t raw_pressure = (uint32_t)((uint32_t)(data[5] << 16) |
-							   (uint16_t)(data[4] << 8) | data[3]) >>
-						6;
-			drv->last_sample.pressure.val1 = raw_pressure / 1000;
-			drv->last_sample.pressure.val2 = (raw_pressure % 1000) * 1000;
+			/* raw_pressure has 6 fractional bits (unit: 1/64 Pa) */
+			uint32_t raw_pressure = ((uint32_t)data[5] << 16) |
+						((uint32_t)data[4] << 8) | data[3];
+
+			drv->last_sample.pressure.val1 = raw_pressure / (64 * 1000);
+			drv->last_sample.pressure.val2 = (raw_pressure % (64 * 1000)) * 1000 / 64;
 		} else {
 			drv->last_sample.pressure.val1 = 0;
 			drv->last_sample.pressure.val2 = 0;
@@ -514,7 +528,7 @@ static int set_iir_config(const struct sensor_value *iir, const struct device *d
 	dsp_config[0] = BMP5_SET_BITSLICE(dsp_config[0], BMP5_SHDW_SET_IIR_PRESS, BMP5_ENABLE);
 
 	/* Configure IIR filter */
-	dsp_config[1] = iir->val1;
+	dsp_config[1] = BMP5_SET_BITSLICE(dsp_config[1], BMP5_SET_IIR_TEMP, iir->val1);
 	dsp_config[1] = BMP5_SET_BITSLICE(dsp_config[1], BMP5_SET_IIR_PRESS, iir->val2);
 
 	/* Set IIR configuration */
@@ -595,17 +609,6 @@ static int bmp581_init(const struct device *dev)
 	if (ret != BMP5_OK) {
 		LOG_ERR("Failed to perform soft-reset: %d", ret);
 		return ret;
-	}
-
-	/*
-	 * Soft-reset returns the device to its power-up I2C/I3C mode. Re-issue the
-	 * SPI dummy read to switch the interface back to SPI before subsequent
-	 * register accesses.
-	 */
-	if (conf->bus.rtio.type == BMP581_BUS_TYPE_SPI) {
-		uint8_t dummy = 0;
-
-		(void)bmp581_reg_read_rtio(&conf->bus, BMP5_REG_CHIP_ID, &dummy, 1);
 	}
 
 	ret = bmp581_reg_read_rtio(&conf->bus, BMP5_REG_CHIP_ID, &drv->chip_id, 1);
@@ -806,7 +809,7 @@ static DEVICE_API(sensor, bmp581_driver_api) = {
 };
 
 /* SPI mode 0 (CPOL=0, CPHA=0). Datasheet supports modes 0 and 3 up to 12 MHz. */
-#define BMP581_SPI_OPERATION (SPI_OP_MODE_MASTER | SPI_WORD_SET(8) | SPI_TRANSFER_MSB)
+#define BMP581_SPI_OPERATION (SPI_OP_MODE_CONTROLLER | SPI_WORD_SET(8) | SPI_TRANSFER_MSB)
 
 #define BMP581_BUS_IODEV_DEFINE(i)                                                                 \
 	COND_CODE_1(DT_INST_ON_BUS(i, i3c),                                                        \

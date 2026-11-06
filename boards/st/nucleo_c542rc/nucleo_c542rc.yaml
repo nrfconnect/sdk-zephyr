@@ -10,10 +10,12 @@ supported:
   - arduino_i2c
   - arduino_serial
   - arduino_spi
+  - crypto
   - gpio
   - i2c
   - spi
   - uart
+  - usbd
 ram: 64
 flash: 256
 vendor: st

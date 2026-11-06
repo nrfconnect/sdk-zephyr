@@ -7,7 +7,7 @@
  * from teensy4.mex
  */
 
-#include <nxp/nxp_imx/rt/mimxrt1062dvl6a-pinctrl.dtsi>
+#include <nxp/imxrt/imxrt10xx/pinctrl/mimxrt1062dvl6a-pinctrl.dtsi>
 
 &pinctrl {
 	/* Mode Straps configuration DP83825 */
@@ -17,8 +17,8 @@
 			bias-disable;
 			drive-strength = "r0-6";
 			slew-rate = "slow";
-			nxp,speed = "100-mhz";
 			input-enable;
+			nxp,speed = "100-mhz";
 		};
 
 		group1 {
@@ -58,8 +58,8 @@
 				 <&iomuxc_gpio_ad_b1_09_flexcan1_rx>;
 			drive-strength = "r0-6";
 			slew-rate = "slow";
-			nxp,speed = "100-mhz";
 			input-enable;
+			nxp,speed = "100-mhz";
 		};
 	};
 
@@ -70,8 +70,8 @@
 				 <&iomuxc_gpio_ad_b0_03_flexcan2_rx>;
 			drive-strength = "r0-6";
 			slew-rate = "slow";
-			nxp,speed = "100-mhz";
 			input-enable;
+			nxp,speed = "100-mhz";
 		};
 	};
 
@@ -82,8 +82,8 @@
 				 <&iomuxc_gpio_emc_37_flexcan3_rx>;
 			drive-strength = "r0-6";
 			slew-rate = "slow";
-			nxp,speed = "100-mhz";
 			input-enable;
+			nxp,speed = "100-mhz";
 		};
 	};
 
@@ -95,8 +95,8 @@
 			drive-strength = "r0-6";
 			drive-open-drain;
 			slew-rate = "slow";
-			nxp,speed = "100-mhz";
 			input-enable;
+			nxp,speed = "100-mhz";
 		};
 	};
 
@@ -108,8 +108,8 @@
 			drive-strength = "r0-6";
 			drive-open-drain;
 			slew-rate = "slow";
-			nxp,speed = "100-mhz";
 			input-enable;
+			nxp,speed = "100-mhz";
 		};
 	};
 
@@ -121,8 +121,8 @@
 			drive-strength = "r0-6";
 			drive-open-drain;
 			slew-rate = "slow";
-			nxp,speed = "100-mhz";
 			input-enable;
+			nxp,speed = "100-mhz";
 		};
 	};
 
@@ -134,8 +134,8 @@
 			drive-strength = "r0-6";
 			drive-open-drain;
 			slew-rate = "slow";
-			nxp,speed = "100-mhz";
 			input-enable;
+			nxp,speed = "100-mhz";
 		};
 	};
 
@@ -507,6 +507,32 @@
 			bias-pull-up-value = "47k";
 			slew-rate = "fast";
 			nxp,speed = "50-mhz";
+		};
+	};
+
+	pinmux_sai1: pinmux_sai1 {
+		group0 {
+			pinmux = <&iomuxc_gpio_b1_01_sai1_tx_data0>,   /* pin 7 */
+				 <&iomuxc_gpio_ad_b1_15_sai1_tx_sync>, /* pin 27 */
+				 <&iomuxc_gpio_ad_b1_14_sai1_tx_bclk>, /* pin 26 */
+				 <&iomuxc_gpio_b1_00_sai1_rx_data0>,   /* pin 8 */
+				 <&iomuxc_gpio_ad_b1_11_sai1_rx_bclk>, /* pin 21 */
+				 <&iomuxc_gpio_ad_b1_10_sai1_rx_sync>; /* pin 20 */
+			drive-strength = "r0-6";
+			slew-rate = "slow";
+			nxp,speed = "100-mhz";
+		};
+	};
+
+	pinmux_sai2: pinmux_sai2 {
+		group0 {
+			pinmux = <&iomuxc_gpio_emc_04_sai2_tx_data>, /* pin 2 */
+				 <&iomuxc_gpio_emc_05_sai2_tx_sync>, /* pin 3 */
+				 <&iomuxc_gpio_emc_06_sai2_tx_bclk>, /* pin 4 */
+				 <&iomuxc_gpio_emc_08_sai2_rx_data>; /* pin 5 */
+			drive-strength = "r0-6";
+			slew-rate = "slow";
+			nxp,speed = "100-mhz";
 		};
 	};
 };

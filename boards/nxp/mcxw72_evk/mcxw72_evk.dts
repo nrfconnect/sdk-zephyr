@@ -1,11 +1,11 @@
 /*
- * Copyright 2024-2025 NXP
+ * Copyright 2024-2026 NXP
  * SPDX-License-Identifier: Apache-2.0
  */
 
 /dts-v1/;
 
-#include <nxp/mcx/nxp_mcxw72.dtsi>
+#include <nxp/mcx/mcxw/nxp_mcxw72.dtsi>
 #include "mcxw72_evk-pinctrl.dtsi"
 #include <zephyr/dt-bindings/gpio/arduino-header-r3.h>
 #include <zephyr/dt-bindings/input/input-event-codes.h>
@@ -113,29 +113,31 @@
 
 &lpuart0 {
 	current-speed = <115200>;
-	status = "okay";
 	pinctrl-0 = <&pinmux_lpuart0>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &lpuart1 {
 	current-speed = <115200>;
-	status = "okay";
 	pinctrl-0 = <&pinmux_lpuart1>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &flash {
 	partitions {
-		compatible = "fixed-partitions";
+		ranges;
 		#address-cells = <1>;
 		#size-cells = <1>;
 
 		code_partition: partition@0 {
+			compatible = "zephyr,mapped-partition";
 			reg = <0x0 DT_SIZE_K(2024)>;
 		};
 
 		storage_partition: partition@1fa000 {
+			compatible = "zephyr,mapped-partition";
 			reg = <0x1fa000 DT_SIZE_K(24)>;
 		};
 	};
@@ -146,9 +148,9 @@
 };
 
 &tpm0 {
-	status = "okay";
 	pinctrl-0 = <&pinmux_tpm0>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &lptmr0 {
@@ -159,24 +161,20 @@
 	status = "okay";
 };
 
-&tstmr0 {
-	status = "okay";
-};
-
 &ieee802154 {
 	counter = <&lptmr1>;
 };
 
 &lpspi1 {
-	status = "okay";
 	pinctrl-0 = <&pinmux_lpspi1>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &flexcan0 {
-	status = "okay";
 	pinctrl-0 = <&pinmux_flexcan>;
 	pinctrl-names = "default";
+	status = "okay";
 
 	can-transceiver {
 		max-bitrate = <5000000>;
@@ -194,17 +192,17 @@
 };
 
 &lpi2c1 {
-	status = "okay";
 	pinctrl-0 = <&pinmux_lpi2c1>;
 	pinctrl-names = "default";
 	scl-gpios = <&gpiob 5 GPIO_ACTIVE_HIGH>;
 	sda-gpios = <&gpiob 4 GPIO_ACTIVE_HIGH>;
 	recover-bus-on-init;
+	status = "okay";
 
 	accelerometer: accelerometer@19 {
-		status = "okay";
 		compatible = "nxp,fxls8974";
 		reg = <0x19>;
+		status = "okay";
 	};
 };
 
@@ -213,5 +211,9 @@
 };
 
 &crc {
+	status = "okay";
+};
+
+&sema42 {
 	status = "okay";
 };

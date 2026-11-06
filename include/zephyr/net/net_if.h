@@ -16,7 +16,7 @@
  * @brief Network Interface abstraction layer
  * @defgroup net_if Network Interface abstraction layer
  * @since 1.5
- * @version 1.0.0
+ * @version 1.1.0
  * @ingroup networking
  * @{
  */
@@ -156,7 +156,7 @@ struct net_if_addr {
 	uint8_t is_mesh_local : 1;
 
 	/** Is this IP address temporary and generated for example by
-	 * IPv6 privacy extension (RFC 8981)
+	 * IPv6 privacy extension (@rfc{8981})
 	 */
 	uint8_t is_temporary : 1;
 
@@ -182,6 +182,40 @@ struct net_if_mcast_addr {
 
 	/** Rejoining multicast groups list node */
 	sys_snode_t rejoin_node;
+
+#if defined(CONFIG_NET_IPV4_IGMP)
+	/** Deadline of the pending response to an IGMP Membership Query for
+	 *  this IPv4 group, never expiring when no response is pending.
+	 */
+	k_timepoint_t igmp_resp_timeout;
+
+	/** Deadline of the next retransmission of the unsolicited IGMP report
+	 *  of a join of this IPv4 group, never expiring when none is pending.
+	 */
+	k_timepoint_t igmp_retx_timeout;
+
+	/** Retransmissions of the unsolicited IGMP report of this IPv4 group
+	 *  left.
+	 */
+	uint8_t igmp_retx_left;
+#endif
+
+#if defined(CONFIG_NET_IPV6_MLD)
+	/** Deadline of the pending response to a Multicast Listener Query for
+	 *  this IPv6 group, never expiring when no response is pending.
+	 */
+	k_timepoint_t mld_resp_timeout;
+
+	/** Deadline of the next retransmission of the unsolicited MLD report
+	 *  of a join of this IPv6 group, never expiring when none is pending.
+	 */
+	k_timepoint_t mld_retx_timeout;
+
+	/** Retransmissions of the unsolicited MLD report of this IPv6 group
+	 *  left.
+	 */
+	uint8_t mld_retx_left;
+#endif
 
 #if defined(CONFIG_NET_IPV4_IGMPV3)
 	/** Sources to filter on */
@@ -227,7 +261,10 @@ struct net_if_ipv6_prefix {
 	/** Is this prefix used or not */
 	uint8_t is_used : 1;
 
-	uint8_t _unused : 6;
+	/** Is this prefix advertised in Router Advertisements */
+	uint8_t is_advertised : 1;
+
+	uint8_t _unused : 5;
 };
 
 /**
@@ -319,7 +356,7 @@ enum net_if_flag {
 /** @endcond */
 };
 
-/** @brief Network interface operational status (RFC 2863). */
+/** @brief Network interface operational status (@rfc{2863}). */
 enum net_if_oper_state {
 	NET_IF_OPER_UNKNOWN,        /**< Initial (unknown) value */
 	NET_IF_OPER_NOTPRESENT,     /**< Hardware missing */
@@ -357,13 +394,13 @@ struct net_if_ipv6 {
 	/** Prefixes */
 	struct net_if_ipv6_prefix prefix[NET_IF_MAX_IPV6_PREFIX];
 
-	/** Default reachable time (RFC 4861, page 52) */
+	/** Default reachable time (@rfc{4861,page-52}) */
 	uint32_t base_reachable_time;
 
-	/** Reachable time (RFC 4861, page 20) */
+	/** Reachable time (@rfc{4861,page-20}) */
 	uint32_t reachable_time;
 
-	/** Retransmit timer (RFC 4861, page 52) */
+	/** Retransmit timer (@rfc{4861,page-52}) */
 	uint32_t retrans_timer;
 
 #if defined(CONFIG_NET_IPV6_IID_STABLE)
@@ -377,12 +414,29 @@ struct net_if_ipv6 {
 #endif /* CONFIG_NET_IPV6_IID_STABLE */
 
 #if defined(CONFIG_NET_IPV6_PE)
-	/** Privacy extension DESYNC_FACTOR value from RFC 8981 ch 3.4.
+	/** Privacy extension DESYNC_FACTOR value from @rfc{8981,section-3.4}.
 	 * "DESYNC_FACTOR is a random value within the range 0 - MAX_DESYNC_FACTOR.
 	 * It is computed every time a temporary address is created.
 	 */
 	uint32_t desync_factor;
 #endif /* CONFIG_NET_IPV6_PE */
+
+#if defined(CONFIG_NET_IPV6_MLD)
+	/** Deadline of the pending response to an MLDv2 General Query, never
+	 *  expiring when no response is pending.
+	 */
+	k_timepoint_t mld_general_timeout;
+
+	/** MLDv1 Older Version Querier Present timer (@rfc{3810,section-8.2.1}),
+	 *  expired when no MLDv1 querier is present.
+	 */
+	k_timepoint_t mld_v1_querier_timeout;
+
+	/** MLD version the host last operated in on this interface (1 or 2).
+	 *  0 until the first query or timer run and stands for MLDv2.
+	 */
+	uint8_t mld_version;
+#endif
 
 #if defined(CONFIG_NET_IPV6_ND) && defined(CONFIG_NET_NATIVE_IPV6)
 	/** Router solicitation timer node */
@@ -400,6 +454,23 @@ struct net_if_ipv6 {
 
 	/** IPv6 multicast hop limit */
 	uint8_t mcast_hop_limit;
+
+#if defined(CONFIG_NET_IPV6_ND_RA_TX) && defined(CONFIG_NET_NATIVE_IPV6)
+	/** Uptime (in ms) when the latest multicast Router Advertisement was
+	 * transmitted. Used to rate limit the advertisements.
+	 */
+	int64_t ra_last_sent;
+
+	/** Uptime (in ms) when a solicited Router Advertisement is due to be
+	 * transmitted, or 0 if no advertisement is pending.
+	 */
+	int64_t ra_pending_at;
+
+	/** Is this interface acting as an IPv6 router, i.e. transmitting
+	 * Router Advertisements.
+	 */
+	uint8_t is_router : 1;
+#endif
 };
 
 #if defined(CONFIG_NET_DHCPV6) && defined(CONFIG_NET_NATIVE_IPV6)
@@ -433,7 +504,7 @@ struct net_if_dhcpv6 {
 	uint64_t t2;
 
 	/** The time when the last lease expires (terminates rebinding,
-	 *  DHCPv6 RFC8415, ch. 18.2.5). Absolute time, milliseconds.
+	 *  DHCPv6 @rfc{8415,section-18.2.5}). Absolute time, milliseconds.
 	 */
 	uint64_t expire;
 
@@ -445,6 +516,17 @@ struct net_if_dhcpv6 {
 
 	/** Retransmit timeout for the current message, milliseconds. */
 	uint32_t retransmit_timeout;
+
+	/** Maximum Solicit retransmit timeout, milliseconds. */
+	uint32_t sol_max_rt;
+
+	/** Maximum Information-request retransmit timeout, milliseconds. */
+	uint32_t inf_max_rt;
+
+	/** Information-request refresh interval, milliseconds; 0 means never
+	 *  refresh (infinity).
+	 */
+	uint32_t info_refresh_time;
 
 	/** Current best server preference received. */
 	int16_t server_preference;
@@ -504,6 +586,29 @@ struct net_if_ipv4 {
 
 	/** IPv4 time-to-live for multicast packets */
 	uint8_t mcast_ttl;
+
+#if defined(CONFIG_NET_IPV4_IGMP)
+	/** Deadline of the pending response to an IGMPv3 General Query, never
+	 *  expiring when no response is pending.
+	 */
+	k_timepoint_t igmp_general_timeout;
+
+	/** IGMPv1 Querier Present timer (@rfc{3376,section-7.2.1}), expired
+	 *  when no IGMPv1 querier is present.
+	 */
+	k_timepoint_t igmp_v1_querier_timeout;
+
+	/** IGMPv2 Querier Present timer (@rfc{3376,section-7.2.1}), expired
+	 *  when no IGMPv2 querier is present.
+	 */
+	k_timepoint_t igmp_v2_querier_timeout;
+
+	/** IGMP version the host last operated in on this interface (1, 2 or
+	 *  3). 0 until the first query or timer run and stands for the newest
+	 *  version built in.
+	 */
+	uint8_t igmp_version;
+#endif
 
 #if defined(CONFIG_NET_IPV4_ACD)
 	/** IPv4 conflict count.  */
@@ -723,7 +828,7 @@ struct net_if_dev {
 	net_socket_create_t socket_offload;
 #endif /* CONFIG_NET_SOCKETS_OFFLOAD */
 
-	/** RFC 2863 operational status */
+	/** @rfc{2863} operational status */
 	enum net_if_oper_state oper_state;
 
 	/** Last time the operational state was changed.
@@ -783,7 +888,7 @@ struct net_if {
 	struct k_mutex tx_lock;
 
 	/** Network interface specific flags */
-	/** Enable IPv6 privacy extension (RFC 8981), this is enabled
+	/** Enable IPv6 privacy extension (@rfc{8981}), this is enabled
 	 * by default if PE support is enabled in configuration.
 	 */
 	uint8_t pe_enabled : 1;
@@ -856,8 +961,6 @@ static inline void net_if_flag_set(struct net_if *iface,
 		return;
 	}
 
-	NET_ASSERT(iface->if_dev != NULL);
-
 	atomic_set_bit(iface->if_dev->flags, value);
 }
 
@@ -876,8 +979,6 @@ static inline bool net_if_flag_test_and_set(struct net_if *iface,
 		return false;
 	}
 
-	NET_ASSERT(iface->if_dev != NULL);
-
 	return atomic_test_and_set_bit(iface->if_dev->flags, value);
 }
 
@@ -893,8 +994,6 @@ static inline void net_if_flag_clear(struct net_if *iface,
 	if (iface == NULL) {
 		return;
 	}
-
-	NET_ASSERT(iface->if_dev != NULL);
 
 	atomic_clear_bit(iface->if_dev->flags, value);
 }
@@ -914,8 +1013,6 @@ static inline bool net_if_flag_test_and_clear(struct net_if *iface,
 		return false;
 	}
 
-	NET_ASSERT(iface->if_dev != NULL);
-
 	return atomic_test_and_clear_bit(iface->if_dev->flags, value);
 }
 
@@ -934,8 +1031,6 @@ static inline bool net_if_flag_is_set(struct net_if *iface,
 		return false;
 	}
 
-	NET_ASSERT(iface->if_dev != NULL);
-
 	return atomic_test_bit(iface->if_dev->flags, value);
 }
 
@@ -953,8 +1048,6 @@ static inline enum net_if_oper_state net_if_oper_state_set(
 	if (iface == NULL) {
 		return NET_IF_OPER_UNKNOWN;
 	}
-
-	NET_ASSERT(iface->if_dev != NULL);
 
 	if (oper_state <= NET_IF_OPER_UP) {
 		iface->if_dev->oper_state = oper_state;
@@ -982,8 +1075,6 @@ static inline enum net_if_oper_state net_if_oper_state(struct net_if *iface)
 		return NET_IF_OPER_UNKNOWN;
 	}
 
-	NET_ASSERT(iface->if_dev != NULL);
-
 	return iface->if_dev->oper_state;
 }
 
@@ -1005,8 +1096,6 @@ static inline int net_if_oper_state_change_time(struct net_if *iface,
 	if (iface == NULL || change_time == NULL) {
 		return -EINVAL;
 	}
-
-	NET_ASSERT(iface->if_dev != NULL);
 
 	net_if_lock(iface);
 
@@ -1032,7 +1121,7 @@ enum net_verdict net_if_try_send_data(struct net_if *iface,
 /**
  * @brief Send a packet through a net iface
  *
- * This is equivalent to net_if_try_queue_tx with an infinite timeout
+ * This is equivalent to net_if_try_send_data with an infinite timeout
  * @param iface Pointer to a network interface structure
  * @param pkt Pointer to a net packet to send
  *
@@ -1058,8 +1147,6 @@ static inline const struct net_l2 *net_if_l2(struct net_if *iface)
 	if (iface == NULL) {
 		return NULL;
 	}
-
-	NET_ASSERT(iface->if_dev != NULL);
 
 	return iface->if_dev->l2;
 }
@@ -1087,8 +1174,6 @@ static inline void *net_if_l2_data(struct net_if *iface)
 		return NULL;
 	}
 
-	NET_ASSERT(iface->if_dev != NULL);
-
 	return iface->if_dev->l2_data;
 }
 
@@ -1104,8 +1189,6 @@ static inline const struct device *net_if_get_device(struct net_if *iface)
 	if (iface == NULL) {
 		return NULL;
 	}
-
-	NET_ASSERT(iface->if_dev != NULL);
 
 	return iface->if_dev->dev;
 }
@@ -1143,7 +1226,6 @@ static inline void net_if_queue_tx(struct net_if *iface, struct net_pkt *pkt)
 static inline bool net_if_is_ip_offloaded(struct net_if *iface)
 {
 #if defined(CONFIG_NET_OFFLOAD)
-	__ASSERT_NO_MSG(iface == NULL || iface->if_dev != NULL);
 	return (iface != NULL && iface->if_dev->offload != NULL);
 #else
 	ARG_UNUSED(iface);
@@ -1175,8 +1257,6 @@ static inline struct net_offload *net_if_offload(struct net_if *iface)
 		return NULL;
 	}
 
-	NET_ASSERT(iface->if_dev != NULL);
-
 	return iface->if_dev->offload;
 #else
 	ARG_UNUSED(iface);
@@ -1198,8 +1278,6 @@ static inline void net_if_offload_set(struct net_if *iface, struct net_offload *
 		return;
 	}
 
-	NET_ASSERT(iface->if_dev != NULL);
-
 	iface->if_dev->offload = offload;
 #else
 	ARG_UNUSED(iface);
@@ -1220,8 +1298,6 @@ static inline bool net_if_is_socket_offloaded(struct net_if *iface)
 	if (iface == NULL) {
 		return false;
 	}
-
-	NET_ASSERT(iface->if_dev != NULL);
 
 	return (iface->if_dev->socket_offload != NULL);
 #else
@@ -1245,8 +1321,6 @@ static inline void net_if_socket_offload_set(
 		return;
 	}
 
-	NET_ASSERT(iface->if_dev != NULL);
-
 	iface->if_dev->socket_offload = socket_offload;
 #else
 	ARG_UNUSED(iface);
@@ -1268,8 +1342,6 @@ static inline net_socket_create_t net_if_socket_offload(struct net_if *iface)
 		return NULL;
 	}
 
-	NET_ASSERT(iface->if_dev != NULL);
-
 	return iface->if_dev->socket_offload;
 #else
 	ARG_UNUSED(iface);
@@ -1290,8 +1362,6 @@ static inline struct net_linkaddr *net_if_get_link_addr(struct net_if *iface)
 	if (iface == NULL) {
 		return NULL;
 	}
-
-	NET_ASSERT(iface->if_dev != NULL);
 
 	return &iface->if_dev->link_addr;
 }
@@ -1355,7 +1425,7 @@ static inline void net_if_stop_rs(struct net_if *iface)
  * Neighbor Discovery process about an active link to a specific neighbor.
  * By signaling a recent "forward progress" event, such as the reception of
  * an ACK, this function can help reduce unnecessary ND traffic as per the
- * guidelines in RFC 4861 (section 7.3).
+ * guidelines in @rfc{4861,section-7.3}.
  *
  * @param iface A pointer to the network interface.
  * @param ipv6_addr Pointer to the IPv6 address of the neighbor node.
@@ -1368,6 +1438,50 @@ static inline void net_if_nbr_reachability_hint(struct net_if *iface,
 {
 	ARG_UNUSED(iface);
 	ARG_UNUSED(ipv6_addr);
+}
+#endif
+
+/**
+ * @brief Flush the IPv6 neighbor cache of a network interface.
+ *
+ * Remove every dynamically learned neighbor so that the link layer address
+ * of each of those peers is resolved again when it is next needed. Entries
+ * that were added statically are kept; use net_if_ipv6_nbr_rm() to remove
+ * one of those.
+ *
+ * @param iface Network interface, or NULL to flush every interface.
+ */
+#if defined(CONFIG_NET_IPV6)
+void net_if_ipv6_nbr_flush(struct net_if *iface);
+#else
+static inline void net_if_ipv6_nbr_flush(struct net_if *iface)
+{
+	ARG_UNUSED(iface);
+}
+#endif
+
+/**
+ * @brief Remove one neighbor from the IPv6 neighbor cache.
+ *
+ * Unlike net_if_ipv6_nbr_flush() this also removes a neighbor that was added
+ * statically, so it is the way to take one of those back. Any packets waiting
+ * for the address to be resolved are dropped.
+ *
+ * @param iface Network interface, or NULL to match any interface.
+ * @param addr IPv6 address of the neighbor.
+ *
+ * @return True if a neighbor was removed, false if there was none.
+ */
+#if defined(CONFIG_NET_IPV6)
+bool net_if_ipv6_nbr_rm(struct net_if *iface, const struct net_in6_addr *addr);
+#else
+static inline bool net_if_ipv6_nbr_rm(struct net_if *iface,
+				      const struct net_in6_addr *addr)
+{
+	ARG_UNUSED(iface);
+	ARG_UNUSED(addr);
+
+	return false;
 }
 #endif
 
@@ -1463,8 +1577,6 @@ static inline uint16_t net_if_get_mtu(struct net_if *iface)
 		return 0U;
 	}
 
-	NET_ASSERT(iface->if_dev != NULL);
-
 	return iface->if_dev->mtu;
 }
 
@@ -1480,8 +1592,6 @@ static inline void net_if_set_mtu(struct net_if *iface,
 	if (iface == NULL) {
 		return;
 	}
-
-	NET_ASSERT(iface->if_dev != NULL);
 
 	iface->if_dev->mtu = mtu;
 }
@@ -1967,6 +2077,47 @@ void net_if_ipv6_prefix_set_timer(struct net_if_ipv6_prefix *prefix,
 void net_if_ipv6_prefix_unset_timer(struct net_if_ipv6_prefix *prefix);
 
 /**
+ * @brief Mark (or unmark) an IPv6 prefix for advertisement in Router
+ * Advertisements sent on the interface.
+ *
+ * The interface must have been made a router with
+ * net_if_ipv6_router_start() for advertisements to be transmitted.
+ *
+ * @param iface Network interface
+ * @param prefix IPv6 prefix address
+ * @param len Prefix length
+ * @param advertise True to advertise the prefix, false to stop advertising it
+ *
+ * @return 0 on success, negative errno otherwise.
+ */
+int net_if_ipv6_prefix_set_advertise(struct net_if *iface,
+				     const struct net_in6_addr *prefix,
+				     uint8_t len, bool advertise);
+
+/**
+ * @brief Enable the IPv6 router role on the interface.
+ *
+ * When enabled the interface responds to received Router Solicitations and
+ * periodically transmits unsolicited Router Advertisements, including a Prefix
+ * Information Option for each prefix marked for advertisement (see
+ * net_if_ipv6_prefix_set_advertise()).
+ *
+ * @param iface Network interface
+ *
+ * @return 0 on success, negative errno otherwise.
+ */
+int net_if_ipv6_router_start(struct net_if *iface);
+
+/**
+ * @brief Disable the IPv6 router role on the interface.
+ *
+ * @param iface Network interface
+ *
+ * @return 0 on success, negative errno otherwise.
+ */
+int net_if_ipv6_router_stop(struct net_if *iface);
+
+/**
  * @brief Check if this IPv6 address is part of the subnet of our
  * network interface.
  *
@@ -2134,10 +2285,22 @@ static inline void net_if_ipv6_set_mcast_hop_limit(struct net_if *iface,
 #endif /* CONFIG_NET_NATIVE_IPV6 */
 
 /**
+ * @brief Maximum IPv6 base reachable time in milliseconds.
+ *
+ * Upper bound for the base reachable time, matching the AdvReachableTime limit
+ * from @rfc{4861,section-6.2.1}. Values passed to
+ * @ref net_if_ipv6_set_base_reachable_time above this are clamped. This also
+ * keeps @ref net_if_ipv6_calc_reachable_time from overflowing when it scales
+ * the value by the @rfc{4861} random factor.
+ */
+#define NET_IPV6_MAX_REACHABLE_TIME 3600000U
+
+/**
  * @brief Set IPv6 reachable time for a given interface
  *
  * @param iface Network interface
- * @param reachable_time New reachable time
+ * @param reachable_time New reachable time. Values above
+ *                       @ref NET_IPV6_MAX_REACHABLE_TIME are clamped.
  */
 static inline void net_if_ipv6_set_base_reachable_time(struct net_if *iface,
 						       uint32_t reachable_time)
@@ -2149,6 +2312,10 @@ static inline void net_if_ipv6_set_base_reachable_time(struct net_if *iface,
 
 	if (!iface->config.ip.ipv6) {
 		return;
+	}
+
+	if (reachable_time > NET_IPV6_MAX_REACHABLE_TIME) {
+		reachable_time = NET_IPV6_MAX_REACHABLE_TIME;
 	}
 
 	iface->config.ip.ipv6->base_reachable_time = reachable_time;
@@ -2320,7 +2487,7 @@ static inline const struct net_in6_addr *net_if_ipv6_select_src_addr(
  * @param iface Interface that was used when packet was received.
  * If the interface is not known, then NULL can be given.
  * @param dst IPv6 destination address
- * @param flags Hint from the related socket. See RFC 5014 for value details.
+ * @param flags Hint from the related socket. See @rfc{5014} for value details.
  *
  * @return Pointer to IPv6 address to use, NULL if no IPv6 address
  * could be found.
@@ -2690,6 +2857,51 @@ void net_if_ipv4_maddr_leave(struct net_if *iface,
 			     struct net_if_mcast_addr *addr);
 
 /**
+ * @brief Flush the IPv4 neighbor cache of a network interface.
+ *
+ * Remove every dynamically learned neighbor so that the link layer address
+ * of each of those peers is resolved again when it is next needed. Entries
+ * that were added statically are kept; use net_if_ipv4_nbr_rm() to remove
+ * one of those. On Ethernet links this cache is the ARP cache; a link layer
+ * that does not resolve IPv4 addresses has nothing to flush.
+ *
+ * @param iface Network interface, or NULL to flush every interface.
+ */
+#if defined(CONFIG_NET_IPV4)
+void net_if_ipv4_nbr_flush(struct net_if *iface);
+#else
+static inline void net_if_ipv4_nbr_flush(struct net_if *iface)
+{
+	ARG_UNUSED(iface);
+}
+#endif
+
+/**
+ * @brief Remove one neighbor from the IPv4 neighbor cache.
+ *
+ * Unlike net_if_ipv4_nbr_flush() this also removes a neighbor that was added
+ * statically, so it is the way to take one of those back. Any packets waiting
+ * for the address to be resolved are dropped.
+ *
+ * @param iface Network interface, or NULL to match any interface.
+ * @param addr IPv4 address of the neighbor.
+ *
+ * @return True if a neighbor was removed, false if there was none.
+ */
+#if defined(CONFIG_NET_IPV4)
+bool net_if_ipv4_nbr_rm(struct net_if *iface, const struct net_in_addr *addr);
+#else
+static inline bool net_if_ipv4_nbr_rm(struct net_if *iface,
+				      const struct net_in_addr *addr)
+{
+	ARG_UNUSED(iface);
+	ARG_UNUSED(addr);
+
+	return false;
+}
+#endif
+
+/**
  * @brief Get the IPv4 address of the given router
  * @param router a network router
  *
@@ -2885,12 +3097,14 @@ struct net_in_addr *net_if_ipv4_get_ll(struct net_if *iface,
 				   enum net_addr_state addr_state);
 
 /**
- * @brief Get a IPv4 global address in a given state.
+ * @brief Get an IPv4 global address in a given state.
+ *
+ * Loopback and link-local addresses are excluded.
  *
  * @param iface Interface to use. Must be a valid pointer to an interface.
  * @param addr_state IPv4 address state (preferred, tentative, deprecated)
  *
- * @return Pointer to link local IPv4 address, NULL if no proper IPv4 address
+ * @return Pointer to global IPv4 address, NULL if no proper IPv4 address
  * could be found.
  */
 struct net_in_addr *net_if_ipv4_get_global_addr(struct net_if *iface,
@@ -3639,6 +3853,7 @@ extern int net_stats_prometheus_scrape(struct prometheus_collector *collector,
  * Enables to use of `NET_IF_GET` above the instantiation macro.
  *
  * @param dev_id Device ID provided to `NET_IF_INIT` or `NET_IF_OFFLOAD_INIT`
+ * @param inst Instance identifier
  */
 #define NET_IF_DECLARE(dev_id, inst) \
 	static struct net_if NET_IF_GET_NAME(dev_id, inst)

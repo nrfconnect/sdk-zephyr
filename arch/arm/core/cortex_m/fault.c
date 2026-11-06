@@ -220,7 +220,7 @@ static uint32_t mem_manage_fault(struct arch_esf *esf, int from_hard_fault, bool
 			PR_EXC("  MMFAR Address: 0x%x", mmfar);
 			if (from_hard_fault != 0) {
 				/* clear SCB_MMAR[VALID] to reset */
-				SCB->CFSR &= ~SCB_CFSR_MMARVALID_Msk;
+				SCB->CFSR = SCB_CFSR_MMARVALID_Msk;
 			}
 		}
 	}
@@ -373,7 +373,7 @@ static int bus_fault(struct arch_esf *esf, int from_hard_fault, bool *recoverabl
 			PR_EXC("  BFAR Address: 0x%x", bfar);
 			if (from_hard_fault != 0) {
 				/* clear SCB_CFSR_BFAR[VALID] to reset */
-				SCB->CFSR &= ~SCB_CFSR_BFARVALID_Msk;
+				SCB->CFSR = SCB_CFSR_BFARVALID_Msk;
 			}
 		}
 	}
@@ -1236,9 +1236,9 @@ void z_arm_fault(uint32_t msp, uint32_t psp, uint32_t exc_return, _callee_saved_
 #if defined(CONFIG_BUILTIN_STACK_GUARD)
 	uint32_t psplim, psp2;
 
-	__asm__ volatile("mrs %0, psplim" : "=r"(psplim));
+	psplim = __get_PSPLIM();
 	psp2 = MAX(psplim + arm_m_switch_stack_buffer, psp);
-	__asm__ volatile("msr psp, %0" ::"r"(psp2));
+	__set_PSP(psp2);
 #endif
 
 	/* Prepare interrupt exit for context switch, but only if this

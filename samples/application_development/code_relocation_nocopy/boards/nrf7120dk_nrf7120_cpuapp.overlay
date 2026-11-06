@@ -27,6 +27,6 @@
 };
 
 &mx25u25645g {
+	memmap-config = <1 0 DT_SIZE_M(224) 1>;
 	status = "okay";
-	xip-config = <1 0 DT_SIZE_M(224) 1>;
 };

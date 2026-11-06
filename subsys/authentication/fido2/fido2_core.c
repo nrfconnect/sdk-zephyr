@@ -19,6 +19,7 @@
 
 #include "fido2_cbor.h"
 #include "fido2_crypto.h"
+#include "fido2_clientpin.h"
 
 LOG_MODULE_REGISTER(fido2, CONFIG_FIDO2_LOG_LEVEL);
 
@@ -39,7 +40,7 @@ static struct fido2_msg rx_enqueue_msg;
 /* Reused to minimize thread stack usage. */
 static struct fido2_msg rx_dequeue_msg;
 
-K_MSGQ_DEFINE(fido2_msgq, sizeof(struct fido2_msg), 2, 4);
+K_MSGQ_DEFINE_STATIC_TYPE(fido2_msgq, struct fido2_msg, 2);
 
 static K_THREAD_STACK_DEFINE(fido2_stack, CONFIG_FIDO2_THREAD_STACK_SIZE);
 static struct k_thread fido2_thread;
@@ -59,6 +60,8 @@ static uint8_t ga_next_rp_id_hash[FIDO2_SHA256_SIZE];
 static uint8_t ga_next_flags;
 static k_timepoint_t ga_next_deadline;
 static bool ga_next_pending;
+/* clientPIN */
+static struct fido2_client_pin_params cp_params;
 
 static uint8_t ctap_tx_frame[CONFIG_FIDO2_CBOR_MAX_SIZE];
 
@@ -70,6 +73,8 @@ static struct k_spinlock state_lock;
 static enum fido2_runtime_state runtime_state = FIDO2_RUNTIME_STATE_STOPPED;
 static fido2_state_callback_t runtime_state_cb;
 static void *runtime_state_cb_user_data;
+
+static const struct fido2_transport *active_transport;
 
 static void set_runtime_state(enum fido2_runtime_state state)
 {
@@ -321,6 +326,50 @@ handle_make_credential(uint8_t *cbor_in, size_t cbor_in_len, uint8_t *cbor_out, 
 		return FIDO2_ERR_OTHER;
 	}
 
+	if (mc_params.has_pin_uv_auth_param) {
+		if (mc_params.pin_uv_auth_param_len == 0) {
+			set_runtime_state(FIDO2_RUNTIME_STATE_WAITING_USER_PRESENCE);
+			notify_wire(transport, cid, FIDO2_WIRE_STATUS_UP_NEEDED);
+
+			ret = fido2_up_wait();
+			if (ret) {
+				return ret == -ECANCELED ? FIDO2_ERR_KEEPALIVE_CANCEL
+							 : FIDO2_ERR_OPERATION_DENIED;
+			}
+
+			set_runtime_state(FIDO2_RUNTIME_STATE_PROCESSING);
+			notify_wire(transport, cid, FIDO2_WIRE_STATUS_PROCESSING);
+
+			return fido2_clientpin_pin_is_set() ? FIDO2_ERR_PIN_INVALID
+							    : FIDO2_ERR_PIN_NOT_SET;
+		}
+		if (!mc_params.has_pin_uv_auth_protocol) {
+			return FIDO2_ERR_MISSING_PARAMETER;
+		}
+
+		ret = fido2_clientpin_pin_verify_pin_uv_auth_token(
+			mc_params.client_data_hash, FIDO2_SHA256_SIZE, mc_params.pin_uv_auth_param,
+			mc_params.pin_uv_auth_param_len, FIDO2_PIN_PERM_MC, mc_params.rp_id);
+		if (ret == -EPERM) {
+			return FIDO2_ERR_UNAUTHORIZED_PERMISSION;
+		}
+		if (ret) {
+			return FIDO2_ERR_PIN_AUTH_INVALID;
+		}
+
+		user_verified = true;
+	} else if (fido2_clientpin_pin_is_set()) { /* PIN set but no pinuvauthparam */
+		if (IS_ENABLED(CONFIG_FIDO2_ALWAYS_UV)) {
+			return FIDO2_ERR_PUAT_REQUIRED; /* override makeCredUvNotRqd */
+		}
+
+		if (mc_params.resident_key) { /* makeCredUvNotRqd only applies to non-disco */
+			return FIDO2_ERR_PUAT_REQUIRED;
+		}
+	} else if (IS_ENABLED(CONFIG_FIDO2_ALWAYS_UV)) { /* alwaysUV true, no PIN set */
+		return FIDO2_ERR_OPERATION_DENIED;
+	}
+
 	if (mc_check_exclude_list()) {
 		set_runtime_state(FIDO2_RUNTIME_STATE_WAITING_USER_PRESENCE);
 		notify_wire(transport, cid, FIDO2_WIRE_STATUS_UP_NEEDED);
@@ -519,8 +568,9 @@ static enum fido2_status handle_get_assertion(uint8_t *cbor_in, size_t cbor_in_l
 {
 	uint8_t rp_id_hash[FIDO2_SHA256_SIZE];
 	size_t found_creds_count = 0;
-	uint8_t flags = 0;
+	bool user_verified = false;
 	uint16_t num_credentials;
+	uint8_t flags = 0;
 	int ret;
 
 	ret = fido2_cbor_decode_get_assertion(cbor_in, cbor_in_len, &ga_params);
@@ -539,10 +589,6 @@ static enum fido2_status handle_get_assertion(uint8_t *cbor_in, size_t cbor_in_l
 	/* pinUvAuthParam and uv are mutually exclusive, pinUvAuthParam takes precedence. */
 	if (ga_params.has_pin_uv_auth_param) {
 		ga_params.uv = false;
-	}
-	if (ga_params.uv) {
-		LOG_WRN("Rejected GetAssertion: UV not supported");
-		return FIDO2_ERR_OPERATION_DENIED;
 	}
 	if (ga_params.has_enterprise_attestation) {
 		LOG_WRN("Rejected GetAssertion: enterprise attestation not supported");
@@ -572,6 +618,45 @@ static enum fido2_status handle_get_assertion(uint8_t *cbor_in, size_t cbor_in_l
 		return FIDO2_ERR_NO_CREDENTIALS;
 	}
 
+	if (ga_params.has_pin_uv_auth_param) {
+		if (ga_params.pin_uv_auth_param_len == 0) {
+			set_runtime_state(FIDO2_RUNTIME_STATE_WAITING_USER_PRESENCE);
+			notify_wire(transport, cid, FIDO2_WIRE_STATUS_UP_NEEDED);
+
+			ret = fido2_up_wait();
+			if (ret) {
+				return ret == -ECANCELED ? FIDO2_ERR_KEEPALIVE_CANCEL
+							 : FIDO2_ERR_OPERATION_DENIED;
+			}
+
+			set_runtime_state(FIDO2_RUNTIME_STATE_PROCESSING);
+			notify_wire(transport, cid, FIDO2_WIRE_STATUS_PROCESSING);
+
+			return fido2_clientpin_pin_is_set() ? FIDO2_ERR_PIN_INVALID
+							    : FIDO2_ERR_PIN_NOT_SET;
+		}
+		if (!ga_params.has_pin_uv_auth_protocol) {
+			return FIDO2_ERR_MISSING_PARAMETER;
+		}
+
+		ret = fido2_clientpin_pin_verify_pin_uv_auth_token(
+			ga_params.client_data_hash, FIDO2_SHA256_SIZE, ga_params.pin_uv_auth_param,
+			ga_params.pin_uv_auth_param_len, FIDO2_PIN_PERM_GA, ga_params.rp_id);
+		if (ret == -EPERM) {
+			return FIDO2_ERR_UNAUTHORIZED_PERMISSION;
+		}
+		if (ret) {
+			return FIDO2_ERR_PIN_AUTH_INVALID;
+		}
+
+		user_verified = true;
+	} else if (IS_ENABLED(CONFIG_FIDO2_ALWAYS_UV)) {
+		if (fido2_clientpin_pin_is_set()) { /* PIN set but no pinuvauthparam */
+			return FIDO2_ERR_PUAT_REQUIRED;
+		}
+		return FIDO2_ERR_OPERATION_DENIED; /* alwaysUV true, no PIN set */
+	}
+
 	if (ga_params.up) {
 		set_runtime_state(FIDO2_RUNTIME_STATE_WAITING_USER_PRESENCE);
 		notify_wire(transport, cid, FIDO2_WIRE_STATUS_UP_NEEDED);
@@ -590,6 +675,10 @@ static enum fido2_status handle_get_assertion(uint8_t *cbor_in, size_t cbor_in_l
 		flags = AUTH_DATA_FLAG_UP;
 	}
 
+	if (user_verified) {
+		flags |= AUTH_DATA_FLAG_UV;
+	}
+
 	/* Exclude numberOfCredentials when allowList is pesent or found_creds_count is exactly 1*/
 	num_credentials =
 		(ga_params.num_allow == 0 && found_creds_count > 1) ? found_creds_count : 0;
@@ -601,7 +690,7 @@ static enum fido2_status handle_get_assertion(uint8_t *cbor_in, size_t cbor_in_l
 		return FIDO2_ERR_OTHER;
 	}
 
-	/* Store sates for getNextAssertion */
+	/* Store states for getNextAssertion */
 	if (ga_params.num_allow == 0 && found_creds_count > 1) {
 		ga_next_count = found_creds_count;
 		ga_next_index = 1;
@@ -629,23 +718,27 @@ static enum fido2_status handle_get_info(uint8_t *cbor_out, size_t cbor_out_cap,
 	info.versions[0] = "FIDO_2_0";
 	info.versions[1] = "FIDO_2_1";
 	info.num_versions = 2;
-	info.num_pin_uv_auth_protocols = 0;
+	info.num_pin_uv_auth_protocols = 1;
+	info.pin_uv_auth_protocols[0] = FIDO2_PIN_PROTOCOL_V1;
 	info.max_credential_count = CONFIG_FIDO2_MAX_CREDENTIALS;
 	info.max_msg_size = CONFIG_FIDO2_CBOR_MAX_SIZE;
 	info.max_credential_id_length = FIDO2_CREDENTIAL_ID_MAX_SIZE;
-	info.transports = 0;
-
+	info.min_pin_length = CONFIG_FIDO2_MIN_PIN_LENGTH;
 	info.firmware_version = 0x00010000;
 
+	info.transports = 0;
 	if (IS_ENABLED(CONFIG_FIDO2_TRANSPORT_USB_HID)) {
 		info.transports |= FIDO2_TRANSPORT_USB;
+	}
+	if (IS_ENABLED(CONFIG_FIDO2_TRANSPORT_BLE)) {
+		info.transports |= FIDO2_TRANSPORT_BLE;
 	}
 
 	info.options.rk = !IS_ENABLED(CONFIG_FIDO2_STORAGE_NONE);
 	info.options.up = true;
 	info.options.plat = false;
-	/* These will depend on config */
-	info.options.uv = false;
+	info.options.pin_uv_auth_token = true;
+	info.options.client_pin = fido2_clientpin_pin_is_set();
 	/* Allow non-UV non-discoverable credential creation */
 	info.options.make_cred_uv_not_rqd = !IS_ENABLED(CONFIG_FIDO2_ALWAYS_UV);
 	/* Force UV even when RP sets userVerification=discouraged */
@@ -682,6 +775,82 @@ static enum fido2_status handle_get_info(uint8_t *cbor_out, size_t cbor_out_cap,
 	ret = fido2_cbor_encode_get_info(&info, cbor_out, cbor_out_cap, cbor_out_len);
 	if (ret) {
 		return FIDO2_ERR_OTHER;
+	}
+
+	return FIDO2_OK;
+}
+
+static enum fido2_status handle_client_pin(uint8_t *cbor_in, size_t cbor_in_len, uint8_t *cbor_out,
+					   size_t cbor_out_cap, size_t *cbor_out_len,
+					   const struct fido2_transport *transport, uint32_t cid)
+{
+	int ret;
+
+	ret = fido2_cbor_decode_client_pin(cbor_in, cbor_in_len, &cp_params);
+	if (ret) {
+		LOG_WRN("ClientPIN CBOR decode failed: %d", ret);
+		return FIDO2_ERR_INVALID_CBOR;
+	}
+
+	switch (cp_params.sub_command) {
+	case FIDO2_CLIENTPIN_GET_PIN_RETRIES:
+		return fido2_clientpin_cmd_get_retries(cbor_out, cbor_out_cap, cbor_out_len);
+	case FIDO2_CLIENTPIN_GET_KEY_AGREEMENT:
+		if (!cp_params.has_pin_uv_auth_protocol) {
+			return FIDO2_ERR_MISSING_PARAMETER;
+		}
+		return fido2_clientpin_cmd_get_key_agreement(cbor_out, cbor_out_cap, cbor_out_len);
+	case FIDO2_CLIENTPIN_SET_PIN:
+		if (!cp_params.has_pin_uv_auth_protocol || !cp_params.has_pin_uv_auth_param ||
+		    !cp_params.has_new_pin_enc || !cp_params.has_key_agreement) {
+			return FIDO2_ERR_MISSING_PARAMETER;
+		}
+		return fido2_clientpin_cmd_set_pin(
+			cp_params.pin_uv_auth_protocol, cp_params.key_agreement,
+			cp_params.key_agreement_len, cp_params.new_pin_enc,
+			cp_params.new_pin_enc_len, cp_params.pin_uv_auth_param);
+	case FIDO2_CLIENTPIN_CHANGE_PIN:
+		if (!cp_params.has_pin_uv_auth_protocol || !cp_params.has_pin_uv_auth_param ||
+		    !cp_params.has_new_pin_enc || !cp_params.has_pin_hash_enc ||
+		    !cp_params.has_key_agreement) {
+			return FIDO2_ERR_MISSING_PARAMETER;
+		}
+		return fido2_clientpin_cmd_change_pin(
+			cp_params.pin_uv_auth_protocol, cp_params.key_agreement,
+			cp_params.key_agreement_len, cp_params.pin_hash_enc,
+			cp_params.pin_hash_enc_len, cp_params.new_pin_enc,
+			cp_params.new_pin_enc_len, cp_params.pin_uv_auth_param);
+	case FIDO2_CLIENTPIN_GET_PIN_TOKEN: /* Backwards compatibility */
+		if (!cp_params.has_pin_uv_auth_protocol || !cp_params.has_key_agreement ||
+		    !cp_params.has_pin_hash_enc) {
+			return FIDO2_ERR_MISSING_PARAMETER;
+		}
+		if (cp_params.has_permissions || cp_params.has_rp_id) {
+			return FIDO2_ERR_INVALID_PARAMETER;
+		}
+		return fido2_clientpin_cmd_get_pin_token_pin_w_perms(
+			cp_params.pin_uv_auth_protocol, cp_params.key_agreement,
+			cp_params.key_agreement_len, cp_params.pin_hash_enc,
+			cp_params.pin_hash_enc_len, FIDO2_PIN_PERM_MC | FIDO2_PIN_PERM_GA, NULL,
+			cbor_out, cbor_out_cap, cbor_out_len);
+	case FIDO2_CLIENTPIN_GET_PIN_TOKEN_UV_W_PERMS:
+	case FIDO2_CLIENTPIN_GET_UV_RETRIES:
+		return FIDO2_ERR_INVALID_SUBCOMMAND;
+	case FIDO2_CLIENTPIN_GET_PIN_TOKEN_PIN_W_PERMS:
+		if (!cp_params.has_pin_uv_auth_protocol || !cp_params.has_key_agreement ||
+		    !cp_params.has_pin_hash_enc || !cp_params.has_permissions) {
+			return FIDO2_ERR_MISSING_PARAMETER;
+		}
+		if (cp_params.permissions == 0) {
+			return FIDO2_ERR_INVALID_PARAMETER;
+		}
+		return fido2_clientpin_cmd_get_pin_token_pin_w_perms(
+			cp_params.pin_uv_auth_protocol, cp_params.key_agreement,
+			cp_params.key_agreement_len, cp_params.pin_hash_enc,
+			cp_params.pin_hash_enc_len, cp_params.permissions, cp_params.rp_id,
+			cbor_out, cbor_out_cap, cbor_out_len);
+	default:
+		return FIDO2_ERR_INVALID_SUBCOMMAND;
 	}
 
 	return FIDO2_OK;
@@ -750,9 +919,8 @@ static enum fido2_status process_command(uint8_t cmd, uint8_t *cbor_in, size_t c
 	case FIDO2_CMD_GET_INFO:
 		return handle_get_info(cbor_out, cbor_out_cap, cbor_out_len);
 	case FIDO2_CMD_CLIENT_PIN:
-		/* TODO: clientPin */
-		*cbor_out_len = 0;
-		return FIDO2_ERR_INVALID_COMMAND;
+		return handle_client_pin(cbor_in, cbor_in_len, cbor_out, cbor_out_cap, cbor_out_len,
+					 transport, cid);
 	case FIDO2_CMD_RESET:
 		/* TODO: Reset */
 		*cbor_out_len = 0;
@@ -772,17 +940,22 @@ static enum fido2_status process_command(uint8_t cmd, uint8_t *cbor_in, size_t c
 	}
 }
 
-static void transport_recv_cb(const struct fido2_transport *transport, uint32_t cid,
-			      const uint8_t *buf, size_t len)
+static int transport_recv_cb(const struct fido2_transport *transport, uint32_t cid,
+			     const uint8_t *buf, size_t len)
 {
 	int ret;
 
-	if (len > sizeof(rx_enqueue_msg.data)) {
-		LOG_WRN("Message too large, dropping");
-		return;
+	if (len == 0 || len > sizeof(rx_enqueue_msg.data)) {
+		LOG_WRN("Invalid message length: %zu", len);
+		return -EMSGSIZE;
 	}
 
 	k_mutex_lock(&rx_enqueue_mutex, K_FOREVER);
+
+	if (active_transport != NULL && active_transport != transport) {
+		k_mutex_unlock(&rx_enqueue_mutex);
+		return -ENOBUFS;
+	}
 
 	rx_enqueue_msg.transport = transport;
 	rx_enqueue_msg.cid = cid;
@@ -790,17 +963,29 @@ static void transport_recv_cb(const struct fido2_transport *transport, uint32_t 
 	memcpy(rx_enqueue_msg.data, buf, len);
 
 	ret = k_msgq_put(&fido2_msgq, &rx_enqueue_msg, K_NO_WAIT);
+	if (ret) {
+		k_mutex_unlock(&rx_enqueue_mutex);
+
+		LOG_WRN("Message queue full, dropping cid=0x%08x", cid);
+		return -ENOBUFS;
+	}
+
+	active_transport = transport;
 
 	k_mutex_unlock(&rx_enqueue_mutex);
 
-	if (ret) {
-		LOG_WRN("Message queue full, dropping cid=0x%08x", cid);
-	}
+	return 0;
 }
 
-static inline void transport_cancel_cb(void)
+static void transport_cancel_cb(const struct fido2_transport *transport)
 {
-	fido2_up_cancel();
+	k_mutex_lock(&rx_enqueue_mutex, K_FOREVER);
+
+	if (active_transport == transport) {
+		fido2_up_cancel();
+	}
+
+	k_mutex_unlock(&rx_enqueue_mutex);
 }
 
 static void fido2_thread_fn(void *p1, void *p2, void *p3)
@@ -809,7 +994,7 @@ static void fido2_thread_fn(void *p1, void *p2, void *p3)
 	ARG_UNUSED(p2);
 	ARG_UNUSED(p3);
 
-	while (atomic_get(&fido2_running)) {
+	while (atomic_get(&fido2_running) != 0) {
 		if (k_msgq_get(&fido2_msgq, &rx_dequeue_msg, K_MSEC(100)) != 0) {
 			continue;
 		}
@@ -823,6 +1008,8 @@ static void fido2_thread_fn(void *p1, void *p2, void *p3)
 		enum fido2_status status;
 		int ret;
 
+		fido2_up_reset();
+
 		status =
 			process_command(cmd, rx_dequeue_msg.data + 1, rx_dequeue_msg.len - 1,
 					ctap_tx_frame + 1, sizeof(ctap_tx_frame) - 1, &cbor_out_len,
@@ -832,13 +1019,24 @@ static void fido2_thread_fn(void *p1, void *p2, void *p3)
 		notify_wire(rx_dequeue_msg.transport, rx_dequeue_msg.cid, FIDO2_WIRE_STATUS_DONE);
 
 		ctap_tx_frame[0] = (uint8_t)status;
-		if (rx_dequeue_msg.transport && rx_dequeue_msg.transport->api) {
+
+		if (rx_dequeue_msg.transport && rx_dequeue_msg.transport->api &&
+		    rx_dequeue_msg.transport->api->send) {
 			ret = rx_dequeue_msg.transport->api->send(rx_dequeue_msg.cid, ctap_tx_frame,
 								  cbor_out_len + 1);
 		} else {
 			LOG_ERR("No send path for cid=0x%08x", rx_dequeue_msg.cid);
 			ret = -ENODEV;
 		}
+
+		k_mutex_lock(&rx_enqueue_mutex, K_FOREVER);
+
+		if (active_transport == rx_dequeue_msg.transport &&
+		    k_msgq_num_used_get(&fido2_msgq) == 0) {
+			active_transport = NULL;
+		}
+
+		k_mutex_unlock(&rx_enqueue_mutex);
 
 		if (ret) {
 			LOG_WRN("Response send failed: %d", ret);
@@ -867,6 +1065,12 @@ int fido2_init(void)
 		return ret;
 	}
 
+	ret = fido2_clientpin_init();
+	if (ret) {
+		LOG_ERR("clientPIN init failed: %d", ret);
+		return ret;
+	}
+
 	ret = fido2_transport_init_all(transport_recv_cb, transport_cancel_cb);
 	if (ret) {
 		LOG_ERR("Transport init failed: %d", ret);
@@ -880,7 +1084,7 @@ int fido2_init(void)
 
 int fido2_start(void)
 {
-	if (atomic_get(&fido2_running)) {
+	if (atomic_get(&fido2_running) != 0) {
 		LOG_ERR("FIDO2 authenticator already started");
 		return -EALREADY;
 	}
@@ -902,7 +1106,7 @@ int fido2_stop(void)
 {
 	int ret;
 
-	if (!atomic_get(&fido2_running)) {
+	if (atomic_get(&fido2_running) == 0) {
 		LOG_ERR("FIDO2 authenticator already stopped");
 		return -EALREADY;
 	}

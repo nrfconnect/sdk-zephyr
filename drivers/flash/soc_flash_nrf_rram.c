@@ -14,7 +14,6 @@
 #include <zephyr/irq.h>
 #include <zephyr/sys/barrier.h>
 #include <hal/nrf_rramc.h>
-#include <hal/nrf_common.h>
 
 #include <zephyr/../../drivers/flash/soc_flash_nrf.h>
 #include <soc_secure.h>
@@ -110,20 +109,6 @@ static inline bool is_within_bounds(off_t addr, size_t len, off_t boundary_start
 		(len <= (boundary_start + boundary_size - addr)));
 }
 
-static inline bool is_regular_addr_valid(off_t addr, size_t len)
-{
-	return is_within_bounds(addr, len, 0, RRAM_SIZE);
-}
-
-static inline bool is_uicr_addr_valid(off_t addr, size_t len)
-{
-#ifdef CONFIG_SOC_FLASH_NRF_RRAM_UICR
-	return is_within_bounds(addr, len, (off_t)NRF_UICR, sizeof(NRF_UICR_Type));
-#else
-	return false;
-#endif /* CONFIG_SOC_FLASH_NRF_UICR */
-}
-
 #if WRITE_BUFFER_ENABLE
 static void commit_changes(off_t addr, size_t len)
 {
@@ -159,7 +144,7 @@ static void commit_changes(off_t addr, size_t len)
 	 * write-only memory, then one would have to rely on
 	 * READYNEXTTIMEOUT to eventually commit the write.
 	 */
-	volatile uint8_t dummy_read = *(volatile uint8_t *)(addr + len - 1);
+	volatile uint8_t dummy_read = *(volatile uint8_t *)(uintptr_t)(addr + len - 1);
 	ARG_UNUSED(dummy_read);
 #endif
 
@@ -174,32 +159,10 @@ static void commit_changes(off_t addr, size_t len)
  */
 static void rram_write(off_t addr, const void *data, uint8_t fill_val, size_t len)
 {
-	if (is_uicr_addr_valid(addr, len) && (len % sizeof(uint32_t) == 0)) {
-		const size_t chunk_len = sizeof(uint32_t);
-		uint32_t *uicr_mem = (uint32_t *)addr;
-		uint32_t fill_val_32 = 0;
-
-		/* The UICR memory can be written once, in 32-bit chunks.
-		 * Enforce the writes to be 32-bit long by using direct accesses
-		 * to the memory location instead of using memcpy()/memset().
-		 */
-		memset((void *)&fill_val_32, fill_val, chunk_len);
-
-		while (len > 0) {
-			if (data) {
-				*uicr_mem = *((uint32_t *)data);
-			} else {
-				*uicr_mem = fill_val_32;
-			}
-
-			uicr_mem += 1;
-			data = (const uint8_t *)data + chunk_len;
-			len -= chunk_len;
-		}
-	} else if (data) {
-		memcpy((void *)addr, data, len);
+	if (data) {
+		memcpy((void *)(uintptr_t)addr, data, len);
 	} else {
-		memset((void *)addr, fill_val, len);
+		memset((void *)(uintptr_t)addr, fill_val, len);
 	}
 
 	barrier_dmem_fence_full(); /* Barrier following our last write. */
@@ -311,12 +274,13 @@ __weak void nrf_flash_sync_set_delay(uint32_t delay_us)
 static int nrf_write(off_t addr, const void *data, uint8_t fill_val, size_t len)
 {
 	int ret = 0;
+	addr += RRAM_START;
 
 	if (!len) {
 		return 0;
 	}
 
-	LOG_DBG("Write: %p:%zu", (void *)addr, len);
+	LOG_DBG("Write: %p:%zu", (void *)(uintptr_t)addr, len);
 
 	SYNC_LOCK();
 
@@ -415,7 +379,7 @@ static int nrf_rram_fill_impl(off_t addr, uint8_t val, size_t len)
 
 	while (cur < end) {
 		while (cur < end &&
-			rram_line_holds((const uint8_t *)(cur + RRAM_START), pat)) {
+		       rram_line_holds((const uint8_t *)((uintptr_t)cur + RRAM_START), pat)) {
 			cur += WRITE_LINE_SIZE;
 		}
 		if (cur >= end) {
@@ -425,7 +389,7 @@ static int nrf_rram_fill_impl(off_t addr, uint8_t val, size_t len)
 		const off_t dirty_start = cur;
 
 		while (cur < end &&
-			!rram_line_holds((const uint8_t *)(cur + RRAM_START), pat)) {
+		       !rram_line_holds((const uint8_t *)((uintptr_t)cur + RRAM_START), pat)) {
 			cur += WRITE_LINE_SIZE;
 		}
 
@@ -445,12 +409,10 @@ static int nrf_rram_read(const struct device *dev, off_t addr, void *data, size_
 {
 	ARG_UNUSED(dev);
 
-	if (is_regular_addr_valid(addr, len)) {
-		addr += RRAM_START;
-	} else if (!is_uicr_addr_valid(addr, len)) {
-		LOG_ERR("invalid address: 0x%08lx:%zu", (unsigned long)addr, len);
+	if (!is_within_bounds(addr, len, 0, RRAM_SIZE)) {
 		return -EINVAL;
 	}
+	addr += RRAM_START;
 
 #if defined(CONFIG_TRUSTED_EXECUTION_NONSECURE) && DT_NODE_EXISTS(DT_NODELABEL(slot0_ns_partition))
 	if ((uintptr_t)addr < DT_REG_ADDR(DT_NODELABEL(slot0_ns_partition))) {
@@ -459,10 +421,10 @@ static int nrf_rram_read(const struct device *dev, off_t addr, void *data, size_
 #endif
 
 	if (soc_secure_flash_range_is_secure((uintptr_t)addr, len)) {
-		return soc_secure_mem_read(data, (void *)addr, len);
+		return soc_secure_mem_read(data, (void *)(uintptr_t)addr, len);
 	}
 
-	memcpy(data, (void *)addr, len);
+	memcpy(data, (void *)(uintptr_t)addr, len);
 	return 0;
 }
 
@@ -474,28 +436,11 @@ static int nrf_rram_write(const struct device *dev, off_t addr, const void *data
 		return -EINVAL;
 	}
 
-	if (is_regular_addr_valid(addr, len)) {
-		if ((addr % WRITE_LINE_SIZE) != 0 || (len % WRITE_LINE_SIZE) != 0) {
-			return -EINVAL;
-		}
+	if ((addr % WRITE_LINE_SIZE) != 0 || (len % WRITE_LINE_SIZE) != 0) {
+		return -EINVAL;
+	}
 
-		addr += RRAM_START;
-#ifdef CONFIG_SOC_FLASH_NRF_RRAM_UICR
-	} else if (is_uicr_addr_valid(addr, len)) {
-		/* UICR accesses must be aligned to 4 bytes. */
-		if ((addr % sizeof(uint32_t)) != 0 || (len % sizeof(uint32_t)) != 0) {
-			return -EINVAL;
-		}
-
-		/* If the UICR is not erased, return an error.
-		 * Otherwise - it will result in bus fault.
-		 */
-		if (*((uint32_t *)addr) != 0xFFFFFFFF) {
-			return -EIO;
-		}
-#endif /* CONFIG_SOC_FLASH_NRF_RRAM_UICR */
-	} else {
-		LOG_ERR("invalid address: 0x%08lx:%zu", (unsigned long)addr, len);
+	if (!is_within_bounds(addr, len, 0, RRAM_SIZE)) {
 		return -EINVAL;
 	}
 
@@ -514,11 +459,9 @@ static int nrf_rram_erase(const struct device *dev, off_t addr, size_t len)
 		return -EINVAL;
 	}
 
-	if (!is_regular_addr_valid(addr, len)) {
+	if (!is_within_bounds(addr, len, 0, RRAM_SIZE)) {
 		return -EINVAL;
 	}
-
-	addr += RRAM_START;
 
 	return nrf_rram_fill_impl(addr, ERASE_VALUE, len);
 }
@@ -536,11 +479,9 @@ static int nrf_rram_fill(const struct device *dev, uint8_t val, off_t addr, size
 		return -EINVAL;
 	}
 
-	if (!is_regular_addr_valid(addr, len)) {
+	if (!is_within_bounds(addr, len, 0, RRAM_SIZE)) {
 		return -EINVAL;
 	}
-
-	addr += RRAM_START;
 
 	return nrf_rram_fill_impl(addr, val, len);
 }

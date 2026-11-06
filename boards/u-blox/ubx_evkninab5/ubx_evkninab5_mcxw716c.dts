@@ -5,14 +5,14 @@
 
 /dts-v1/;
 
-#include <nxp/mcx/nxp_mcxw71.dtsi>
+#include <nxp/mcx/mcxw/nxp_mcxw71.dtsi>
 #include "ubx_evkninab5_mcxw716c-pinctrl.dtsi"
 #include <zephyr/dt-bindings/gpio/arduino-header-r3.h>
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 
 / {
-	model = "u-blox EVK-NINA-B5 mcxw71";
 	compatible = "u-blox,ubx_evkninab5_mcxw716c";
+	model = "u-blox EVK-NINA-B5 mcxw71";
 
 	aliases {
 		led0 = &blue_led;
@@ -94,21 +94,21 @@
 
 &lpuart0 {
 	current-speed = <115200>;
-	status = "okay";
 	pinctrl-0 = <&pinmux_lpuart0>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &lpuart1 {
 	current-speed = <115200>;
-	status = "okay";
 	pinctrl-0 = <&pinmux_lpuart1>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &flash {
 	partitions {
-		compatible = "fixed-partitions";
+		ranges;
 		#address-cells = <1>;
 		#size-cells = <1>;
 
@@ -117,18 +117,22 @@
 		 * to the flash memory sector size of 8KB.
 		 */
 		boot_partition: partition@0 {
+			compatible = "zephyr,mapped-partition";
 			reg = <0x0 DT_SIZE_K(64)>;
 		};
 
 		slot0_partition: partition@10000 {
+			compatible = "zephyr,mapped-partition";
 			reg = <0x10000 DT_SIZE_K(424)>;
 		};
 
 		slot1_partition: partition@7a000 {
+			compatible = "zephyr,mapped-partition";
 			reg = <0x7a000 DT_SIZE_K(424)>;
 		};
 
 		storage_partition: partition@e4000 {
+			compatible = "zephyr,mapped-partition";
 			reg = <0xe4000 DT_SIZE_K(112)>;
 		};
 	};
@@ -149,8 +153,8 @@
 };
 
 &nbu {
-	status = "okay";
 	wakeup-source;
+	status = "okay";
 };
 
 &rtc {

@@ -17,6 +17,7 @@
 
 #include <kernel_arch_data.h>
 #include <pmp.h>
+#include <counters.h>
 
 #include <zephyr/platform/hooks.h>
 
@@ -55,12 +56,19 @@ static ALWAYS_INLINE void arch_kernel_init(void)
 #endif
 #endif
 #ifdef CONFIG_SMP
+#ifdef CONFIG_RISCV_S_MODE_EXTERNAL_SBI
+	/* mhartid is an M-mode CSR and traps from S-mode; use the boot hart id
+	 * kconfig variable.
+	 */
+	_kernel.cpus[0].arch.hartid = CONFIG_RV_BOOT_HART;
+#else
 	_kernel.cpus[0].arch.hartid = csr_read(mhartid);
+#endif /* CONFIG_RISCV_S_MODE_EXTERNAL_SBI */
 	_kernel.cpus[0].arch.online = true;
 #endif
 #if ((CONFIG_MP_MAX_NUM_CPUS) > 1)
 	unsigned int cpu_node_list[] = {
-		DT_FOREACH_CHILD_STATUS_OKAY_SEP(DT_PATH(cpus), DT_REG_ADDR, (,))
+		DT_FOREACH_CPU_STATUS_OKAY_SEP(DT_REG_ADDR, (,))
 	};
 	unsigned int cpu_num, hart_x;
 
@@ -74,6 +82,21 @@ static ALWAYS_INLINE void arch_kernel_init(void)
 #endif
 #if defined(CONFIG_RISCV_PMP) && !defined(CONFIG_RISCV_S_MODE)
 	z_riscv_pmp_init();
+#endif
+#ifdef CONFIG_RISCV_USER_COUNTER_ACCESS
+	z_riscv_counteren_init();
+#endif
+#if defined(CONFIG_RISCV_LANDING_PADS) && !defined(CONFIG_RISCV_S_MODE)
+	csr_set(mseccfg, MSECCFG_MLPE);
+#elif defined(CONFIG_RISCV_LANDING_PADS)
+
+#if defined(CONFIG_RISCV_S_MODE_EXTERNAL_SBI)
+/* TODO: Implement SBI FWFT call once FWFT extension is supported in M-mode SBI runtime */
+#endif
+
+#if defined(CONFIG_USERSPACE)
+	csr_set(senvcfg, SENVCFG_LPE);
+#endif
 #endif
 #ifdef CONFIG_CUSTOM_STACK_GUARD
 	z_riscv_custom_stack_guard_init();
@@ -123,6 +146,7 @@ int z_irq_do_offload(void);
 #ifdef CONFIG_FPU_SHARING
 void arch_flush_local_fpu(void);
 void arch_flush_fpu_ipi(unsigned int cpu);
+void z_riscv_fpu_flush_thread(struct k_thread *thread);
 #endif
 
 #ifndef CONFIG_MULTITHREADING

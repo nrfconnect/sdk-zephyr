@@ -150,7 +150,7 @@ SECTIONS
 #if DT_NODE_HAS_STATUS(DT_CHOSEN(zephyr_itcm), okay)
 GROUP_START(ITCM)
 
-	SECTION_PROLOGUE(_ITCM_SECTION_NAME,,SUBALIGN(4))
+	SECTION_PROLOGUE(_ITCM_SECTION_NAME,,ALIGN(4))
 	{
 		__itcm_start = .;
 		*(.itcm)
@@ -209,7 +209,7 @@ GROUP_END(ITCM)
 	 * section overlap.
 	 */
 	__exidx_start = .;
-#if defined (__GCC_LINKER_CMD__) || defined (__LLD_LINKER_CMD__)
+#if defined (__GCC_LINKER_CMD__) || defined (__LLD_LINKER_CMD__) || defined(__ELD_LINKER_CMD__)
 	*(.ARM.exidx* gnu.linkonce.armexidx.*)
 #endif
 	__exidx_end = .;
@@ -381,7 +381,9 @@ GROUP_START(DTCM)
 		__dtcm_data_end = .;
 	} GROUP_LINK_IN(DTCM AT> ROMABLE_REGION)
 
+	MPU_ALIGN(__dtcm_data_end - __dtcm_start);
 	__dtcm_end = .;
+	__dtcm_size = __dtcm_end - __dtcm_start;
 
 	__dtcm_data_load_start = LOADADDR(_DTCM_DATA_SECTION_NAME);
 
@@ -395,7 +397,6 @@ GROUP_END(DTCM)
 
 #include <zephyr/linker/debug-sections.ld>
 
-    /DISCARD/ : { *(.note.GNU-stack) }
 
     SECTION_PROLOGUE(.ARM.attributes, 0,)
 	{
@@ -436,6 +437,11 @@ _flash_used = LOADADDR(.last_section) + SIZEOF(.last_section) - __rom_region_sta
         . = ALIGN(4);
 	__bss_start = .;
 	__kernel_ram_start = .;
+
+/* Located in generated directory. This file is populated by the
+ * zephyr_linker_sources() Cmake function.
+ */
+#include <snippets-bss.ld>
 
 	*(.bss)
 	*(".bss.*")

@@ -6,10 +6,11 @@
 #include <zephyr/kernel/thread_stack.h>
 #include <zephyr/kernel.h>
 #include <zephyr/arch/arm/cortex_a_r/lib_helpers.h>
+#include <zephyr/arch/cache.h>
 #include <zephyr/drivers/interrupt_controller/gic.h>
+#include <zephyr/drivers/pm_cpu_ops.h>
 #include <ipi.h>
 #include "boot.h"
-#include <zephyr/cache.h>
 #include <zephyr/kernel/thread_stack.h>
 #include <zephyr/toolchain/gcc.h>
 #include <zephyr/platform/hooks.h>
@@ -70,16 +71,21 @@ BUILD_ASSERT(offsetof(struct boot_params, voting) == BOOT_PARAM_VOTING_OFFSET);
 
 volatile struct boot_params arm_cpu_boot_params = {
 	.mpid = -1,
-	.irq_sp = (char *)(z_interrupt_stacks + CONFIG_ISR_STACK_SIZE),
-	.fiq_sp = (char *)(z_arm_fiq_stack + CONFIG_ARMV7_FIQ_STACK_SIZE),
-	.abt_sp = (char *)(z_arm_abort_stack + CONFIG_ARMV7_EXCEPTION_STACK_SIZE),
-	.udf_sp = (char *)(z_arm_undef_stack + CONFIG_ARMV7_EXCEPTION_STACK_SIZE),
-	.svc_sp = (char *)(z_arm_svc_stack + CONFIG_ARMV7_SVC_STACK_SIZE),
-	.sys_sp = (char *)(z_arm_sys_stack + CONFIG_ARMV7_SYS_STACK_SIZE),
+	.irq_sp = (char *)z_interrupt_stacks[0] + K_KERNEL_STACK_RESERVED + CONFIG_ISR_STACK_SIZE,
+	.fiq_sp =
+		(char *)z_arm_fiq_stack[0] + K_KERNEL_STACK_RESERVED + CONFIG_ARMV7_FIQ_STACK_SIZE,
+	.abt_sp = (char *)z_arm_abort_stack[0] + K_KERNEL_STACK_RESERVED +
+		  CONFIG_ARMV7_EXCEPTION_STACK_SIZE,
+	.udf_sp = (char *)z_arm_undef_stack[0] + K_KERNEL_STACK_RESERVED +
+		  CONFIG_ARMV7_EXCEPTION_STACK_SIZE,
+	.svc_sp =
+		(char *)z_arm_svc_stack[0] + K_KERNEL_STACK_RESERVED + CONFIG_ARMV7_SVC_STACK_SIZE,
+	.sys_sp =
+		(char *)z_arm_sys_stack[0] + K_KERNEL_STACK_RESERVED + CONFIG_ARMV7_SYS_STACK_SIZE,
 };
 
 const uint32_t cpu_node_list[] = {
-	DT_FOREACH_CHILD_STATUS_OKAY_SEP(DT_PATH(cpus), DT_REG_ADDR, (,))};
+	DT_FOREACH_CPU_STATUS_OKAY_SEP(DT_REG_ADDR, (,))};
 
 /* cpu_map saves the mapping of core id and mpid */
 static uint32_t cpu_map[CONFIG_MP_MAX_NUM_CPUS] = {
@@ -87,10 +93,10 @@ static uint32_t cpu_map[CONFIG_MP_MAX_NUM_CPUS] = {
 };
 
 #ifdef CONFIG_ARM_MPU
-extern void z_arm_mpu_init(void);
+extern int z_arm_mpu_init(void);
 extern void z_arm_configure_static_mpu_regions(void);
 #elif defined(CONFIG_ARM_AARCH32_MMU)
-extern int z_arm_mmu_init(void);
+extern int z_arm_mmu_init(bool is_primary_core);
 #endif
 
 /* Called from Zephyr initialization */
@@ -106,7 +112,7 @@ void arch_cpu_start(int cpu_num, k_thread_stack_t *stack, int sz, arch_cpustart_
 
 	cpu_count = ARRAY_SIZE(cpu_node_list);
 	__ASSERT(cpu_count == CONFIG_MP_MAX_NUM_CPUS,
-		"The count of CPU Cores nodes in dts is not equal to CONFIG_MP_MAX_NUM_CPUS\n");
+		 "The count of CPU Cores nodes in dts is not equal to CONFIG_MP_MAX_NUM_CPUS\n");
 
 	for (i = 0, j = 0; i < cpu_count; i++) {
 		if (cpu_node_list[i] == primary_core_mpid) {
@@ -148,13 +154,38 @@ void arch_cpu_start(int cpu_num, k_thread_stack_t *stack, int sz, arch_cpustart_
 	/* store mpid last as this is our synchronization point */
 	arm_cpu_boot_params.mpid = cpu_mpid;
 
-	sys_cache_data_invd_range(
-			(void *)&arm_cpu_boot_params,
-			sizeof(arm_cpu_boot_params));
-
-	/*! TODO: Support PSCI
-	 *  \todo Support PSCI
+#ifdef CONFIG_DCACHE
+	/*
+	 * The secondary core starts with the MMU and the data cache disabled, so
+	 * the parameters have to reach the point of coherency before it is
+	 * released. CONFIG_DCACHE=n leaves the data cache off, so no maintenance
+	 * is needed.
 	 */
+	if (arch_dcache_flush_range((void *)&arm_cpu_boot_params, sizeof(arm_cpu_boot_params)) !=
+	    0) {
+		printk("Failed to clean the boot parameters to memory\n");
+		k_panic();
+	}
+#endif
+
+	/*
+	 * Guarantees completion of the cache flush above; with the data cache
+	 * disabled it is the only thing ordering the mpid store before the
+	 * secondary core is released.
+	 */
+	barrier_dsync_fence_full();
+
+#ifdef CONFIG_PM_CPU_OPS
+	/*
+	 * Platforms that hold secondaries powered off until requested need
+	 * explicit power-on.
+	 */
+	if (pm_cpu_on(cpu_mpid, (uintptr_t)&__start)) {
+		printk("Failed to boot secondary CPU core %d (MPID:%#x)\n",
+			cpu_num, cpu_mpid);
+		k_panic();
+	}
+#endif
 
 	/* Wait secondary cores up, see arch_secondary_cpu_init */
 	while (arm_cpu_boot_params.fn) {
@@ -186,7 +217,7 @@ void arch_secondary_cpu_init(void)
 	z_arm_mpu_init();
 	z_arm_configure_static_mpu_regions();
 #elif defined(CONFIG_ARM_AARCH32_MMU)
-	z_arm_mmu_init();
+	z_arm_mmu_init(false);
 #endif
 
 #ifdef CONFIG_SMP
@@ -237,7 +268,7 @@ static void send_ipi(unsigned int ipi, uint32_t cpu_bitmap)
 		uint32_t target_mpidr = cpu_map[i];
 		uint8_t aff0;
 
-		if (mpidr == target_mpidr || mpidr == INV_MPID) {
+		if (mpidr == target_mpidr || target_mpidr == INV_MPID) {
 			continue;
 		}
 

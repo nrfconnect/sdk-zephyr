@@ -52,8 +52,11 @@ and an explanation why. This is not an exhaustive list.
     storage entry IDs (e.g., with :ref:`ZMS <zms_api>` when
     :kconfig:option:`CONFIG_SECURE_STORAGE_ITS_STORE_IMPLEMENTATION_ZMS` is enabled).
   | Zephyr defines numerical ranges to be used by different users of the API which guarantees that
-    there are no collisions and that they all fit within 30 bits.
+    there are no collisions.
     See the header files in :zephyr_file:`include/zephyr/psa` for more information.
+  | If you need the full 64-bit UID range, you can enable it with
+    :kconfig:option:`CONFIG_SECURE_STORAGE_64_BIT_UID`. However, be aware that even when it's enabled,
+    the ZMS implementation still reserves the bits 30 and 31 for the caller ID.
 
 * The data stored in the ITS is by default encrypted and authenticated (Against ``1.`` in
   `3.2. Internal Trusted Storage requirements <https://arm-software.github.io/psa-api/storage/1.0/overview/requirements.html#internal-trusted-storage-requirements>`_.)
@@ -80,6 +83,17 @@ and an explanation why. This is not an exhaustive list.
 
   It is only secured at rest. Protecting it at runtime as well
   requires specific hardware mechanisms to support this.
+
+* The ``PSA_STORAGE_FLAG_WRITE_ONCE`` flag only protects an entry against modification through
+  the API, not against modification of the storage medium itself.
+
+  | Upholding the flag requires knowing that an entry was created in the first place, which is
+    state that has to survive the storage medium being rewritten. Like replay protection, that
+    requires storage that is protected by hardware.
+  | An attacker who can write to the storage medium can therefore have a write-once entry
+    overwritten or removed: either by tampering with it, after which the subsystem treats it as
+    corrupted and allows it to be replaced, or simply by erasing it, after which it appears never
+    to have existed. Neither can be prevented by encrypting and authenticating the entry.
 
 * The ``psa_its_get*()`` functions can return ``PSA_ERROR_INVALID_SIGNATURE`` and
   ``PSA_ERROR_DATA_CORRUPT``.
