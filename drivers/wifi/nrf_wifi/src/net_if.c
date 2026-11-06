@@ -840,12 +840,6 @@ void nrf_wifi_if_init_zep(struct net_if *iface)
 		return;
 	}
 
-	/* Initialise vif_lock once, here rather than in nrf_wifi_if_start_zep():
-	 * re-initialising it while it is held drops both the ownership and any
-	 * thread already pending on it.
-	 */
-	k_mutex_init(&vif_ctx_zep->vif_lock);
-
 	rpu_ctx_zep = vif_ctx_zep->rpu_ctx_zep;
 
 	if (!rpu_ctx_zep) {
@@ -964,7 +958,7 @@ int nrf_wifi_if_start_zep(const struct device *dev, struct net_if *iface)
 			LOG_ERR("%s: nrf_wifi_fmac_dev_add_zep failed",
 				__func__);
 			ret = -EIO;
-			goto unlock;
+			goto out;
 		}
 		fmac_dev_added = true;
 		LOG_DBG("%s: FMAC device added", __func__);
@@ -993,6 +987,7 @@ int nrf_wifi_if_start_zep(const struct device *dev, struct net_if *iface)
 		goto dev_rem;
 	}
 
+	k_mutex_init(&vif_ctx_zep->vif_lock);
 	vif_ctx_zep->if_type = add_vif_info.iftype;
 
 	nrf_wifi_clear_session_state(vif_ctx_zep);
@@ -1073,7 +1068,7 @@ int nrf_wifi_if_start_zep(const struct device *dev, struct net_if *iface)
 
 	ret = 0;
 
-	goto unlock;
+	goto out;
 del_vif:
 	status = nrf_wifi_sys_fmac_del_vif(rpu_ctx_zep->rpu_ctx, vif_ctx_zep->vif_idx);
 	if (status != NRF_WIFI_STATUS_SUCCESS) {
@@ -1085,10 +1080,9 @@ dev_rem:
 	if (fmac_dev_added) {
 		nrf_wifi_fmac_dev_rem_zep(&rpu_drv_priv_zep);
 	}
-unlock:
+out:
 	k_mutex_unlock(&vif_ctx_zep->vif_lock);
 	nrf_wifi_refresh_oper_state(vif_ctx_zep);
-out:
 	return ret;
 }
 
@@ -1118,7 +1112,7 @@ int nrf_wifi_if_stop_zep(const struct device *dev, struct net_if *iface __unused
 	ret = k_mutex_lock(&vif_ctx_zep->vif_lock, K_FOREVER);
 	if (ret != 0) {
 		LOG_ERR("%s: Failed to lock vif_lock", __func__);
-		goto out;
+		goto unlock;
 	}
 
 	nrf_wifi_clear_session_state(vif_ctx_zep);
@@ -1367,7 +1361,7 @@ int nrf_wifi_if_set_config_zep(const struct device *dev,
 		    config->promisc_mode) {
 			LOG_ERR("%s: Driver promisc mode setting is same as configured setting",
 				__func__);
-			goto unlock;
+			goto out;
 		}
 
 		if (config->promisc_mode) {
@@ -1383,7 +1377,7 @@ int nrf_wifi_if_set_config_zep(const struct device *dev,
 
 		if (ret != NRF_WIFI_STATUS_SUCCESS) {
 			LOG_ERR("%s: mode set operation failed", __func__);
-			goto unlock;
+			goto out;
 		}
 	}
 #endif
