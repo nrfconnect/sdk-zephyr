@@ -193,6 +193,7 @@
 	rxd1-port-ctrl = "P2_3";
 	rmii-rx-clk-port-ctrl = "P15_8";
 	crs-rx-dv-port-ctrl = "P15_9";
+	mdi-port-ctrl = "P2_0";
 
 	phy-connection-type = "rmii";
 	phy-handle = <&phy>;
@@ -200,7 +201,6 @@
 
 &mdio {
 	status = "okay";
-	mdi-port-ctrl = "P2_0";
 	pinctrl-0 = <&eth_p2_0_mdo &eth_p2_7_mdc>;
 	pinctrl-names = "default";
 
@@ -223,4 +223,8 @@
 	input-src = "RXDC";
 	pinctrl-0 = <&can_tx_p1_12_node1 &can_rx_p1_13_node1>;
 	pinctrl-names = "default";
+};
+
+zephyr_udc0: &usb0 {
+	status = "okay";
 };
