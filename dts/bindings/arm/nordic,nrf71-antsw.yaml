@@ -22,9 +22,8 @@ compatible: "nordic,nrf71-antsw"
 include: base.yaml
 
 properties:
-  sel-gpios:
+  wlan-gpios:
     type: phandle-array
     required: true
     description: |
-      Antenna switch select line. Driving it to the GPIO flags' active level
-      selects WLAN; the inactive level selects Bluetooth LE.
+      Steers the antenna switch towards WLAN.
