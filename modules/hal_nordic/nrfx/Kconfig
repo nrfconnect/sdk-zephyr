@@ -291,7 +291,7 @@ config NRFX_USBREG
 	depends on $(dt_nodelabel_exists,usbreg)
 
 config NRFX_WDT
-	bool "WDT driver"
+	bool
 
 menu "Peripheral Resource Sharing module"
 
