@@ -67,7 +67,6 @@ struct otp_npm10xx_data {
 	struct k_mutex lock;
 };
 
-#if defined(CONFIG_OTP_PROGRAM)
 /* Poll a register until all bits in mask are set, or timeout. */
 static int npm10xx_otp_poll_set(const struct i2c_dt_spec *i2c, uint8_t reg, uint8_t mask)
 {
@@ -89,7 +88,6 @@ static int npm10xx_otp_poll_set(const struct i2c_dt_spec *i2c, uint8_t reg, uint
 
 	return -ETIMEDOUT;
 }
-#endif /* CONFIG_OTP_PROGRAM */
 
 /* Poll a register until any bit in mask is set, returning the read value in *out, or timeout. */
 static int npm10xx_otp_poll_any(const struct i2c_dt_spec *i2c, uint8_t reg, uint8_t mask,
@@ -143,18 +141,12 @@ static int npm10xx_uicr_do_read(const struct i2c_dt_spec *i2c, uint8_t *buf, uin
 				uint8_t len, uint8_t margin)
 {
 	int ret;
-	uint8_t events;
+	uint8_t events, bit_addr;
 
-	/* UICR reading sequence, ref. datasheet */
+	/* UICR reading sequence, ref. datasheet chapter 4.2.12 */
 	/* (Step 1 is outside of driver's control) */
-	/* 2. Write start address */
-	ret = i2c_reg_write_byte_dt(i2c, NPM10_OTP_ADDR0, start * 8U);
-	if (ret < 0) {
-		goto exit_read_mode;
-	}
-
-	/* 3. Optional: select margin read level
-	 * 4. Power up the OTP memory in read mode
+	/* 2. Power up the OTP memory in read mode
+	 * 3. Optional: select margin read level (same register, single write is okay)
 	 */
 	ret = i2c_reg_write_byte_dt(i2c, NPM10_OTP_REQUEST,
 				    OTP_REQUEST_USERREADMODE_Msk |
@@ -164,8 +156,16 @@ static int npm10xx_uicr_do_read(const struct i2c_dt_spec *i2c, uint8_t *buf, uin
 	}
 
 	for (uint8_t i = 0U; i < len; i++) {
-		/* 5. Clear events */
+		bit_addr = (start + i) * 8U;
+
+		/* 4. Clear events */
 		ret = i2c_reg_write_byte_dt(i2c, NPM10_OTP_EVENTS_CLR, OTP_EVENTS_ALL_Msk);
+		if (ret < 0) {
+			goto exit_read_mode;
+		}
+
+		/* 5. Write start address */
+		ret = i2c_reg_write_byte_dt(i2c, NPM10_OTP_ADDR0, bit_addr);
 		if (ret < 0) {
 			goto exit_read_mode;
 		}
@@ -181,12 +181,12 @@ static int npm10xx_uicr_do_read(const struct i2c_dt_spec *i2c, uint8_t *buf, uin
 					   OTP_EVENTS_USERREAD_Msk | OTP_EVENTS_USERREADADDRERR_Msk,
 					   &events);
 		if (ret < 0) {
-			LOG_ERR("UICR read chunk %u failed (%d)", start + i, ret);
+			LOG_ERR("UICR read chunk %u timed out (%d)", i, ret);
 			goto exit_read_mode;
 		}
 
 		if (events & OTP_EVENTS_USERREADADDRERR_Msk) {
-			LOG_ERR("UICR read address error at chunk %u", start + i);
+			LOG_ERR("UICR read address error at bit %u", bit_addr);
 			ret = -EIO;
 			goto exit_read_mode;
 		}
@@ -197,8 +197,14 @@ static int npm10xx_uicr_do_read(const struct i2c_dt_spec *i2c, uint8_t *buf, uin
 			goto exit_read_mode;
 		}
 
-		/* 9. Poll USERREADCOMPT. Addressing is guarded by this driver, skip this step */
-		/* 10. Repeat steps 5 to 9 - the address is auto-incremented */
+		/* 9. Poll USERREADCOMPT */
+		ret = npm10xx_otp_poll_set(i2c, NPM10_OTP_EVENTS_SET, OTP_EVENTS_USERREADCOMPT_Msk);
+		if (ret < 0) {
+			LOG_ERR("UICR read completion timed out at chunk %u (%d)", i, ret);
+			goto exit_read_mode;
+		}
+
+		/* 10. Repeat incrementing the start address by 8 */
 	}
 
 	/* 11. Exit reading mode */
