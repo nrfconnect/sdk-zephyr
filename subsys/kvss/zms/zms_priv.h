@@ -110,10 +110,6 @@ struct zms_ate {
 
 } __packed;
 
-/* ZMS_DATA_IN_ATE_SIZE is defined in the public header <zephyr/kvss/zms.h>.
- * Make sure it stays in sync with the actual size of the in-ATE data field.
- */
-BUILD_ASSERT(ZMS_DATA_IN_ATE_SIZE == SIZEOF_FIELD(struct zms_ate, data),
-	     "ZMS_DATA_IN_ATE_SIZE does not match the ATE data field size");
+#define ZMS_DATA_IN_ATE_SIZE SIZEOF_FIELD(struct zms_ate, data)
 
 #endif /* __ZMS_PRIV_H_ */
