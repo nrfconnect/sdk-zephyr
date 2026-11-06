@@ -95,11 +95,11 @@ static int eeprom_range_is_valid(const struct device *dev, off_t offset,
 {
 	const struct eeprom_sim_config *config = dev->config;
 
-	if ((offset < 0) || (((size_t)offset + len) > config->size)) {
-		return 0;
+	if ((offset + len) <= config->size) {
+		return 1;
 	}
 
-	return 1;
+	return 0;
 }
 
 static int eeprom_sim_read(const struct device *dev, off_t offset, void *data,
