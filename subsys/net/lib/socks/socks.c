@@ -104,19 +104,17 @@ static int socks5_tcp_connect(struct net_context *ctx,
 			       &method_rsp);
 	if (ret < 0) {
 		LOG_ERR("Could not receive negotiation response");
-		goto error;
+		return ret;
 	}
 
 	if (method_rsp.ver != SOCKS5_PKT_MAGIC) {
 		LOG_ERR("Invalid negotiation response magic");
-		ret = -EINVAL;
-		goto error;
+		return -EINVAL;
 	}
 
 	if (method_rsp.method != SOCKS5_AUTH_METHOD_NOAUTH) {
 		LOG_ERR("Invalid negotiation response");
-		ret = -ENOTSUP;
-		goto error;
+		return -ENOTSUP;
 	}
 
 	/* Negotiation complete - now connect to destination */
@@ -159,7 +157,7 @@ static int socks5_tcp_connect(struct net_context *ctx,
 				 ctx->user_data);
 	if (ret < 0) {
 		LOG_ERR("Could not send CONNECT command");
-		goto error;
+		return ret;
 	}
 
 	ret = net_context_recv(ctx, socks5_cmd_rsp_cb,
@@ -167,19 +165,17 @@ static int socks5_tcp_connect(struct net_context *ctx,
 			       &cmd_rsp);
 	if (ret < 0) {
 		LOG_ERR("Could not receive CONNECT response");
-		goto error;
+		return ret;
 	}
 
 	if (cmd_rsp.r.ver != SOCKS5_PKT_MAGIC) {
 		LOG_ERR("Invalid CONNECT response");
-		ret = -EINVAL;
-		goto error;
+		return -EINVAL;
 	}
 
 	if (cmd_rsp.r.rep != SOCKS5_CMD_RESP_SUCCESS) {
 		LOG_ERR("Unable to connect to destination");
-		ret = -EINVAL;
-		goto error;
+		return -EINVAL;
 	}
 
 	/* Verifying the rest is not required */
@@ -187,17 +183,6 @@ static int socks5_tcp_connect(struct net_context *ctx,
 	LOG_DBG("Connection through SOCKS5 proxy successful");
 
 	return 0;
-
-error:
-	/* The response callbacks above were handed pointers to this stack
-	 * frame and net_context_recv() leaves them installed. On success the
-	 * caller replaces them right away, but on error nothing does, so drop
-	 * them here. Otherwise closing the socket later makes the TCP stack
-	 * call back into a frame that is long gone.
-	 */
-	(void)net_context_recv(ctx, NULL, K_NO_WAIT, NULL);
-
-	return ret;
 }
 
 int net_socks5_connect(struct net_context *ctx, const struct net_sockaddr *addr,
