@@ -41,14 +41,12 @@ static bool irq_connected;
 
 #endif /* (IS_ENABLED(CONFIG_SOC_SERIES_NRF54H) || IS_ENABLED(CONFIG_SOC_SERIES_NRF92)) */
 
-#if CONFIG_CLOCK_CONTROL_NRF_ONOFF || CONFIG_SOC_SERIES_NRF54H || CONFIG_SOC_SERIES_NRF92
 /* Structure used for synchronous clock request. */
 struct sync_req {
 	struct onoff_client cli;
 	struct k_sem sem;
 	int res;
 };
-#endif
 
 #if (IS_ENABLED(CONFIG_SOC_SERIES_NRF54H) || IS_ENABLED(CONFIG_SOC_SERIES_NRF92))
 
@@ -327,9 +325,7 @@ int common_stop(const struct device *dev, uint32_t ctx)
 	return 0;
 }
 
-#if CONFIG_CLOCK_CONTROL_NRF_ONOFF
-
-static void common_onoff_started_callback(const struct device *dev, clock_control_subsys_t sys,
+void common_onoff_started_callback(const struct device *dev, clock_control_subsys_t sys,
 				   void *user_data)
 {
 	ARG_UNUSED(sys);
@@ -338,8 +334,6 @@ static void common_onoff_started_callback(const struct device *dev, clock_contro
 
 	notify(&((common_clock_data_t *)dev->data)->mgr, 0);
 }
-
-#endif
 
 void common_clkstarted_handle(const struct device *dev)
 {
@@ -400,8 +394,6 @@ enum clock_control_status common_api_get_status(const struct device *dev,
 	return COMMON_GET_STATUS(((common_clock_data_t *)dev->data)->flags);
 }
 
-#if CONFIG_CLOCK_CONTROL_NRF_ONOFF
-
 int common_api_request(const struct device *dev, const struct nrf_clock_spec *spec,
 		       struct onoff_client *cli)
 {
@@ -426,7 +418,7 @@ int common_api_cancel_or_release(const struct device *dev, const struct nrf_cloc
 				       cli);
 }
 
-static void common_onoff_start(struct onoff_manager *manager, onoff_notify_fn notify)
+void common_onoff_start(struct onoff_manager *manager, onoff_notify_fn notify)
 {
 	int err;
 	common_clock_data_t *dev_data = CONTAINER_OF(manager, common_clock_data_t, mgr);
@@ -438,7 +430,7 @@ static void common_onoff_start(struct onoff_manager *manager, onoff_notify_fn no
 	}
 }
 
-static void common_onoff_stop(struct onoff_manager *manager, onoff_notify_fn notify)
+void common_onoff_stop(struct onoff_manager *manager, onoff_notify_fn notify)
 {
 	int res;
 	common_clock_data_t *dev_data = CONTAINER_OF(manager, common_clock_data_t, mgr);
@@ -447,25 +439,21 @@ static void common_onoff_stop(struct onoff_manager *manager, onoff_notify_fn not
 	notify(manager, res);
 }
 
-#endif /* CONFIG_CLOCK_CONTROL_NRF_ONOFF */
-
 int common_clk_init(const struct device *dev)
 {
-#if CONFIG_CLOCK_CONTROL_NRF_ONOFF
 	int err;
 	static const struct onoff_transitions transitions = {.start = common_onoff_start,
 							     .stop = common_onoff_stop};
-#endif
+
 	((common_clock_data_t *)dev->data)->dev = dev;
 
 	common_connect_irq();
-#if CONFIG_CLOCK_CONTROL_NRF_ONOFF
+
 	err = onoff_manager_init(&((common_clock_data_t *)dev->data)->mgr,
 				 &transitions);
 	if (err < 0) {
 		return err;
 	}
-#endif
 
 	((common_clock_data_t *)dev->data)->flags = CLOCK_CONTROL_STATUS_OFF;
 
@@ -479,16 +467,12 @@ DEVICE_API(nrf_clock_control, common_clock_control_api) = {
 		.async_on = common_api_start,
 		.get_status = common_api_get_status,
 	},
-#if CONFIG_CLOCK_CONTROL_NRF_ONOFF
 	.request = common_api_request,
 	.release = common_api_release,
 	.cancel_or_release = common_api_cancel_or_release,
-#endif
 };
 
 #endif /* (IS_ENABLED(CONFIG_SOC_SERIES_NRF54H) || IS_ENABLED(CONFIG_SOC_SERIES_NRF92)) */
-
-#if CONFIG_CLOCK_CONTROL_NRF_ONOFF || CONFIG_SOC_SERIES_NRF54H || CONFIG_SOC_SERIES_NRF92
 
 static void sync_cb(struct onoff_manager *mgr, struct onoff_client *cli, uint32_t state, int res)
 {
@@ -523,5 +507,3 @@ int nrf_clock_control_request_sync(const struct device *dev, const struct nrf_cl
 
 	return req.res;
 }
-
-#endif /* CONFIG_CLOCK_CONTROL_NRF_ONOFF */
