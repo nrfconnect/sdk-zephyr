@@ -46,6 +46,7 @@ LOG_MODULE_REGISTER(soc, CONFIG_SOC_LOG_LEVEL);
 #define LFXO_NODE DT_NODELABEL(lfxo)
 
 #if !defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)
+#if !defined(CONFIG_SOC_SERIES_NRF71_SKIP_PREV_IMAGE_INIT)
 
 struct mpc_region_override {
 	nrf_mpc_override_config_t config;
@@ -149,8 +150,7 @@ static inline NRF_SPU_Type *spu_instance_from_peripheral_addr(uint32_t periphera
 
 static void oscillators_configuration(void)
 {
-	NRF_SPU_Type *spu_instance =
-		spu_instance_from_peripheral_addr(NRF_OSCILLATORS_S_BASE);
+	NRF_SPU_Type *spu_instance = spu_instance_from_peripheral_addr(NRF_OSCILLATORS_S_BASE);
 	uint16_t periph_id = NRFX_PERIPHERAL_ID_GET(NRF_OSCILLATORS_S_BASE);
 	uint16_t spu_id = NRFX_PERIPHERAL_ID_GET(spu_instance);
 	uint8_t index = (uint8_t)(periph_id - spu_id);
@@ -163,6 +163,7 @@ static void oscillators_configuration(void)
 	nrf_spu_periph_perm_secattr_set(spu_instance, index, false);
 	nrf_spu_periph_perm_lock_enable(spu_instance, index);
 }
+#endif /* !CONFIG_SOC_SERIES_NRF71_SKIP_PREV_IMAGE_INIT */
 
 static void grtc_configuration(void)
 {
@@ -244,8 +245,10 @@ int nordicsemi_nrf71_init(void)
 
 #if !defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)
 	/* Skip for tf-m, configuration exist in target_cfg_71.c */
+#if !defined(CONFIG_SOC_SERIES_NRF71_SKIP_PREV_IMAGE_INIT)
 	oscillators_configuration();
 	mpc_configuration();
+#endif
 	grtc_configuration();
 	ipct_configuration();
 #endif
@@ -300,7 +303,8 @@ int nordicsemi_nrf71_init(void)
 	nrf_gpio_port_pwrctrl_set(NRF_P4, pwrctrl);
 
 	/* Configure LFXO capacitive load if internal load capacitors are used */
-#if DT_ENUM_HAS_VALUE(LFXO_NODE, load_capacitors, internal)
+#if DT_ENUM_HAS_VALUE(LFXO_NODE, load_capacitors, internal) && \
+	!defined(CONFIG_SOC_SERIES_NRF71_SKIP_PREV_IMAGE_INIT)
 	nrf_lfxo_cload_set(NRF_LFXO,
 			(uint8_t)(DT_PROP(LFXO_NODE, load_capacitance_femtofarad) / 1000));
 #endif
