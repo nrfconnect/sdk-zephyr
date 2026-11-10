@@ -107,14 +107,19 @@ int z_vrfy_k_msgq_alloc_init(struct k_msgq *msgq, size_t msg_size,
 #include <zephyr/syscalls/k_msgq_alloc_init_mrsh.c>
 #endif /* CONFIG_USERSPACE */
 
-static int msgq_cleanup(struct k_msgq *msgq, void **mem)
+static int msgq_cleanup(struct k_msgq *msgq, void **mem, __maybe_unused bool locked)
 {
 	int ret = 0;
 
 	*mem = NULL;
 	SYS_PORT_TRACING_OBJ_FUNC_ENTER(k_msgq, cleanup, msgq);
 
-	CHECKIF(z_waitq_head(&msgq->wait_q) != NULL) {
+	CHECKIF(locked && (z_waitq_head_locked(&msgq->wait_q) != NULL)) {
+		ret = -EBUSY;
+		goto exit;
+	}
+
+	CHECKIF(!locked && (z_waitq_head(&msgq->wait_q) != NULL)) {
 		ret = -EBUSY;
 		goto exit;
 	}
@@ -132,7 +137,7 @@ exit:
 int k_msgq_cleanup(struct k_msgq *msgq)
 {
 	void *mem;
-	int ret = msgq_cleanup(msgq, &mem);
+	int ret = msgq_cleanup(msgq, &mem, false);
 
 	k_free(mem);
 	return ret;
@@ -141,7 +146,7 @@ int k_msgq_cleanup(struct k_msgq *msgq)
 int z_msgq_cleanup_sched_locked(struct k_msgq *msgq)
 {
 	void *mem;
-	int ret = msgq_cleanup(msgq, &mem);
+	int ret = msgq_cleanup(msgq, &mem, true);
 
 	k_free_sched_locked(mem);
 	return ret;
@@ -521,11 +526,14 @@ static int init_msgq_obj_core_list(void)
 	z_obj_type_init(&obj_type_msgq, K_OBJ_TYPE_MSGQ_ID,
 			offsetof(struct k_msgq, obj_core));
 
-	/* Initialize and link statically defined message queues */
+	/* Initialize statically defined message queues */
 
 	STRUCT_SECTION_FOREACH(k_msgq, msgq) {
-		k_obj_core_init_and_link(K_OBJ_CORE(msgq), &obj_type_msgq);
+		k_obj_core_init(K_OBJ_CORE(msgq), &obj_type_msgq);
 	}
+
+	k_obj_type_init_range(&obj_type_msgq, STRUCT_SECTION_START(k_msgq),
+			      STRUCT_SECTION_END(k_msgq), sizeof(struct k_msgq), false);
 
 	return 0;
 };

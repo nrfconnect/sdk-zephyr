@@ -15,10 +15,10 @@
 #include <zephyr/toolchain.h>
 #include <ksched.h>
 #include <wait_q.h>
-#include <zephyr/sys/check.h>
 #include <zephyr/init.h>
 #include <zephyr/internal/syscall_handler.h>
 #include <kernel_internal.h>
+#include <stdbool.h>
 
 #ifdef CONFIG_OBJ_CORE_STACK
 static struct k_obj_type obj_type_stack;
@@ -32,6 +32,7 @@ void k_stack_init(struct k_stack *stack, stack_data_t *buffer,
 	stack->next = buffer;
 	stack->base = buffer;
 	stack->top = stack->base + num_entries;
+	stack->flags = 0;
 
 	SYS_PORT_TRACING_OBJ_INIT(k_stack, stack);
 	k_object_init(stack);
@@ -77,15 +78,22 @@ static inline int32_t z_vrfy_k_stack_alloc_init(struct k_stack *stack,
 #include <zephyr/syscalls/k_stack_alloc_init_mrsh.c>
 #endif /* CONFIG_USERSPACE */
 
-static int stack_cleanup(struct k_stack *stack, void **mem)
+static int stack_cleanup(struct k_stack *stack, void **mem, __maybe_unused bool locked)
 {
+	int ret = 0;
+
 	*mem = NULL;
 
 	SYS_PORT_TRACING_OBJ_FUNC_ENTER(k_stack, cleanup, stack);
 
-	CHECKIF(z_waitq_head(&stack->wait_q) != NULL) {
-		SYS_PORT_TRACING_OBJ_FUNC_EXIT(k_stack, cleanup, stack, -EAGAIN);
-		return -EAGAIN;
+	if (locked && (z_waitq_head_locked(&stack->wait_q) != NULL)) {
+		ret = -EAGAIN;
+		goto exit;
+	}
+
+	if (!locked && (z_waitq_head(&stack->wait_q) != NULL)) {
+		ret = -EAGAIN;
+		goto exit;
 	}
 
 	if ((stack->flags & K_STACK_FLAG_ALLOC) != (uint8_t)0) {
@@ -94,14 +102,15 @@ static int stack_cleanup(struct k_stack *stack, void **mem)
 		stack->flags &= ~K_STACK_FLAG_ALLOC;
 	}
 
-	SYS_PORT_TRACING_OBJ_FUNC_EXIT(k_stack, cleanup, stack, 0);
-	return 0;
+exit:
+	SYS_PORT_TRACING_OBJ_FUNC_EXIT(k_stack, cleanup, stack, ret);
+	return ret;
 }
 
 int k_stack_cleanup(struct k_stack *stack)
 {
 	void *mem;
-	int ret = stack_cleanup(stack, &mem);
+	int ret = stack_cleanup(stack, &mem, false);
 
 	k_free(mem);
 	return ret;
@@ -110,7 +119,7 @@ int k_stack_cleanup(struct k_stack *stack)
 int z_stack_cleanup_sched_locked(struct k_stack *stack)
 {
 	void *mem;
-	int ret = stack_cleanup(stack, &mem);
+	int ret = stack_cleanup(stack, &mem, true);
 
 	k_free_sched_locked(mem);
 	return ret;
@@ -124,7 +133,7 @@ int z_impl_k_stack_push(struct k_stack *stack, stack_data_t data)
 
 	SYS_PORT_TRACING_OBJ_FUNC_ENTER(k_stack, push, stack);
 
-	CHECKIF(stack->next == stack->top) {
+	if (stack->next == stack->top) {
 		ret = -ENOMEM;
 		goto out;
 	}
@@ -194,10 +203,10 @@ int z_impl_k_stack_pop(struct k_stack *stack, stack_data_t *data,
 	}
 
 	result = z_pend_curr(&stack->lock, key, &stack->wait_q, timeout);
-	if (result == -EAGAIN) {
-		SYS_PORT_TRACING_OBJ_FUNC_EXIT(k_stack, pop, stack, timeout, -EAGAIN);
+	if (result != 0) {
+		SYS_PORT_TRACING_OBJ_FUNC_EXIT(k_stack, pop, stack, timeout, result);
 
-		return -EAGAIN;
+		return result;
 	}
 
 	*data = (stack_data_t)_current->base.swap_data;
@@ -226,11 +235,14 @@ static int init_stack_obj_core_list(void)
 	z_obj_type_init(&obj_type_stack, K_OBJ_TYPE_STACK_ID,
 			offsetof(struct k_stack, obj_core));
 
-	/* Initialize and link statically defined stacks */
+	/* Initialize statically defined stacks */
 
 	STRUCT_SECTION_FOREACH(k_stack, stack) {
-		k_obj_core_init_and_link(K_OBJ_CORE(stack), &obj_type_stack);
+		k_obj_core_init(K_OBJ_CORE(stack), &obj_type_stack);
 	}
+
+	k_obj_type_init_range(&obj_type_stack, STRUCT_SECTION_START(k_stack),
+			      STRUCT_SECTION_END(k_stack), sizeof(struct k_stack), false);
 
 	return 0;
 }

@@ -94,6 +94,9 @@ const char *otype_to_str(enum k_objects otype)
 	case K_OBJ_ANY:
 		ret = "generic";
 		break;
+	case K_OBJ_DRIVER_ANY:
+		ret = "generic driver";
+		break;
 #include <zephyr/otype-to-str.h>
 	default:
 		ret = "?";
@@ -362,6 +365,14 @@ static struct k_object *dynamic_object_create(enum k_objects otype, size_t align
 		}
 
 		adjusted_size = STACK_ELEMENT_DATA_SIZE(size);
+		if (adjusted_size < size) {
+			/* The size adjustment above overflowed, which would
+			 * hand out an allocation smaller than requested.
+			 */
+			k_free(dyn);
+			return NULL;
+		}
+
 		dyn->data = z_thread_aligned_alloc(DYN_OBJ_DATA_ALIGN_K_THREAD_STACK,
 						     adjusted_size);
 		if (dyn->data == NULL) {
@@ -399,7 +410,14 @@ static struct k_object *dynamic_object_create(enum k_objects otype, size_t align
 		dyn->kobj.data.stack_size = adjusted_size;
 #endif /* CONFIG_GEN_PRIV_STACKS */
 	} else {
-		dyn->data = z_thread_aligned_alloc(align, obj_size_get(otype) + size);
+		size_t total_size = obj_size_get(otype) + size;
+
+		if (total_size < size) {
+			k_free(dyn);
+			return NULL;
+		}
+
+		dyn->data = z_thread_aligned_alloc(align, total_size);
 		if (dyn->data == NULL) {
 			k_free(dyn);
 			return NULL;
@@ -690,7 +708,11 @@ static void unref_check(struct k_object *ko, uintptr_t index, bool sched_locked)
 			/* k_timer_cleanup() does not check if timer has been
 			 * initialized. So we need to do it here before calling.
 			 */
-			k_timer_cleanup((struct k_timer *)ko->name);
+			if (sched_locked) {
+				z_timer_cleanup_sched_locked((struct k_timer *)ko->name);
+			} else {
+				k_timer_cleanup((struct k_timer *)ko->name);
+			}
 		}
 		break;
 	default:
@@ -876,9 +898,16 @@ void k_object_access_all_grant(const void *object)
 int k_object_validate(struct k_object *ko, enum k_objects otype,
 		       enum _obj_init_check init)
 {
-	if (unlikely((ko == NULL) ||
-		((otype != K_OBJ_ANY) && (ko->type != otype)))) {
+	if (unlikely(ko == NULL)) {
 		return -EBADF;
+	}
+
+	if (unlikely((otype != K_OBJ_ANY) && (otype != ko->type))) {
+		if ((otype != K_OBJ_DRIVER_ANY) ||
+		    (ko->type < K_OBJ_DRIVER_FIRST) ||
+		    (ko->type > K_OBJ_DRIVER_LAST)) {
+			return -EBADF;
+		}
 	}
 
 	/* Manipulation of any kernel objects by a user thread requires that
