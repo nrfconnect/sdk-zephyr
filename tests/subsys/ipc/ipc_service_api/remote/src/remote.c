@@ -112,13 +112,12 @@ static void ep_received(const void *data, size_t len, void *priv)
 	}
 }
 
-static int register_endpoint(struct test_context *ctx, const char *name, int priority)
+static int register_endpoint(struct test_context *ctx, const char *name, bool with_unbound)
 {
 	ctx->ep_cfg.name = name;
 	ctx->ep_cfg.priv = ctx;
-	ctx->ep_cfg.prio = priority;
 	ctx->ep_cfg.cb.bound = ep_bound;
-	ctx->ep_cfg.cb.unbound = ep_unbound;
+	ctx->ep_cfg.cb.unbound = with_unbound ? ep_unbound : NULL;
 	ctx->ep_cfg.cb.received = ep_received;
 	ctx->ep_cfg.cb.error = ep_error;
 
@@ -143,7 +142,7 @@ int main(void)
 	}
 
 	for (size_t i = 0; i < ep_cnt; i++) {
-		ret = register_endpoint(&test_ctx[i], ep_name[i], i);
+		ret = register_endpoint(&test_ctx[i], ep_name[i], i == TEST_EP0);
 		if (ret < 0) {
 			LOG_ERR("ipc_service_register_endpoint() failed: %d", ret);
 			return ret;
