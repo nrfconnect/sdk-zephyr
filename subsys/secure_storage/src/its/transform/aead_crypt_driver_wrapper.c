@@ -3,7 +3,6 @@
  */
 #include <psa_crypto_driver_wrappers.h>
 #include <zephyr/secure_storage/its/transform/aead.h>
-#include <mbedtls/platform_util.h>
 
 BUILD_ASSERT(SECURE_STORAGE_ITS_TRANSFORM_AEAD_TAG_SIZE == 16);
 
@@ -40,7 +39,7 @@ psa_status_t secure_storage_its_transform_aead_crypt(
 	aead_crypt = (operation == PSA_KEY_USAGE_ENCRYPT) ?
 		      psa_driver_wrapper_aead_encrypt : psa_driver_wrapper_aead_decrypt;
 
-	ret = secure_storage_its_transform_aead_get_key(uid, key);
+	ret = secure_storage_its_transform_aead_get_key_material(uid, key);
 	if (ret != PSA_SUCCESS) {
 		goto exit;
 	}
@@ -50,6 +49,6 @@ psa_status_t secure_storage_its_transform_aead_crypt(
 			 add_data_len, input, input_len, output, output_size, output_len);
 
 exit:
-	mbedtls_platform_zeroize(key, sizeof(key));
+	secure_storage_zeroize(key, sizeof(key));
 	return ret;
 }

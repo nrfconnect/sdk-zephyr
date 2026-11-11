@@ -32,7 +32,7 @@ static psa_status_t hash_data_into_key(
 
 	if (ret == PSA_SUCCESS) {
 		memcpy(key, hash_output, CONFIG_SECURE_STORAGE_ITS_TRANSFORM_AEAD_KEY_SIZE);
-		mbedtls_platform_zeroize(hash_output, sizeof(hash_output));
+		secure_storage_zeroize(hash_output, sizeof(hash_output));
 	}
 	return ret;
 #endif
@@ -40,9 +40,7 @@ static psa_status_t hash_data_into_key(
 
 #ifdef CONFIG_SECURE_STORAGE_ITS_TRANSFORM_AEAD_KEY_PROVIDER_DEVICE_ID_HASH
 
-#define WARNING "Using a potentially insecure PSA ITS encryption key provider."
-
-psa_status_t secure_storage_its_transform_aead_get_key(
+psa_status_t secure_storage_its_transform_aead_get_key_material(
 		secure_storage_its_uid_t uid,
 		uint8_t key[static CONFIG_SECURE_STORAGE_ITS_TRANSFORM_AEAD_KEY_SIZE])
 {
@@ -67,15 +65,13 @@ psa_status_t secure_storage_its_transform_aead_get_key(
 	data.uid = uid;
 	ret = hash_data_into_key(sizeof(data), &data, key);
 
-	mbedtls_platform_zeroize(data.device_id, sizeof(data.device_id));
+	secure_storage_zeroize(data.device_id, sizeof(data.device_id));
 	return ret;
 }
 
 #elif defined(CONFIG_SECURE_STORAGE_ITS_TRANSFORM_AEAD_KEY_PROVIDER_ENTRY_UID_HASH)
 
-#define WARNING "Using an insecure PSA ITS encryption key provider."
-
-psa_status_t secure_storage_its_transform_aead_get_key(
+psa_status_t secure_storage_its_transform_aead_get_key_material(
 		secure_storage_its_uid_t uid,
 		uint8_t key[static CONFIG_SECURE_STORAGE_ITS_TRANSFORM_AEAD_KEY_SIZE])
 {
@@ -88,8 +84,10 @@ psa_status_t secure_storage_its_transform_aead_get_key(
 
 static int warn_insecure_key(void)
 {
-	printk("WARNING: %s\n", WARNING);
-	LOG_WRN("%s", WARNING);
+	const char *warning = "Using an insecure PSA ITS encryption key provider.";
+
+	printk("WARNING: %s\n", warning);
+	LOG_WRN("%s", warning);
 	return 0;
 }
 SYS_INIT(warn_insecure_key, APPLICATION, CONFIG_SECURE_STORAGE_INIT_PRIORITY);

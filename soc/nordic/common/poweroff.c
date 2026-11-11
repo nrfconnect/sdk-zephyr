@@ -7,7 +7,9 @@
 #include <zephyr/toolchain.h>
 #include <zephyr/drivers/retained_mem/nrf_retained_mem.h>
 
-#if defined(CONFIG_TFM_NRF_SYSTEM_OFF_SERVICE)
+#if defined(CONFIG_IRONSIDE_TE_CLIENT)
+#include <ironside_client/services/platform.h>
+#elif defined(CONFIG_TFM_NRF_SYSTEM_OFF_SERVICE)
 #include "tfm_platform_api.h"
 #elif defined(CONFIG_SOC_SERIES_NRF51) || defined(CONFIG_SOC_SERIES_NRF52)
 #include <hal/nrf_power.h>
@@ -25,6 +27,15 @@
 #include <helpers/nrfx_ram_ctrl.h>
 #endif
 
+#if defined(CONFIG_IRONSIDE_TE_CLIENT) && defined(CONFIG_RETAINED_MEM_NRF_RAM_CTRL)
+/* Refused at build time because, unlike the TF-M service that a board can
+ * simply leave disabled, this branch has no second implementation to fall
+ * back to.
+ */
+#error "CONFIG_RETAINED_MEM_NRF_RAM_CTRL cannot be honored on an IronSide TE target: \
+IronSide TE clears RAM retention for all blocks when entering System OFF."
+#endif
+
 #if defined(CONFIG_SOC_SERIES_NRF54L)
 #define VPR_POWER_IDX 1
 #define VPR_RET_BIT   MEMCONF_POWER_RET_MEM0_Pos
@@ -32,7 +43,14 @@
 
 void z_sys_poweroff(void)
 {
-#if defined(CONFIG_TFM_NRF_SYSTEM_OFF_SERVICE)
+#if defined(CONFIG_IRONSIDE_TE_CLIENT)
+	/* MEMCONF and REGULATORS are secure-only here: a non-secure store to
+	 * either of them takes a SecureFault that IronSide TE turns into a reset.
+	 * IronSide TE runs the whole sequence itself, RAM retention included.
+	 */
+	(void)ironside_platform_system_off();
+
+#elif defined(CONFIG_TFM_NRF_SYSTEM_OFF_SERVICE)
 	tfm_platform_system_off();
 #else
 
@@ -69,7 +87,7 @@ void z_sys_poweroff(void)
 	nrf_regulators_system_off(NRF_REGULATORS);
 #endif
 
-#endif /* CONFIG_TFM_NRF_SYSTEM_OFF_SERVICE */
+#endif
 
 	CODE_UNREACHABLE;
 }

@@ -1,0 +1,107 @@
+# Copyright (c) 2026 Nordic Semiconductor ASA
+# SPDX-License-Identifier: Apache-2.0
+
+menuconfig IRONSIDE_TE_CLIENT
+	bool "IronSide TE client"
+	depends on ZEPHYR_IRONSIDE_INTEGRATION_KIT_MODULE
+	depends on TRUSTED_EXECUTION_NONSECURE
+	select ARM_NONSECURE_PREEMPTIBLE_SECURE_CALLS
+	help
+	  Client for the IronSide TE secure services: PSA Crypto, PSA Initial
+	  Attestation, device management, the boot report and the platform
+	  services.
+
+if IRONSIDE_TE_CLIENT
+
+config IRONSIDE_TE_FAULT_LOGGING
+	bool "Log NS faults on reset"
+	depends on LOG
+	default y
+	help
+	  Read the boot report on boot and log the fault IronSide TE recorded, if any.
+	  When a fault is caught, IronSide TE takes it and resets the device.
+
+config IRONSIDE_TE_BOOT_LAYOUT_CHECK
+	bool "Check the layout against the boot report"
+	depends on LOG
+	default y
+	help
+	  Compare the partitions and non-secure RAM the boot report says are in
+	  effect with the devicetree this image was built from, and log every
+	  difference.
+
+if IRONSIDE_TE_FAULT_LOGGING || IRONSIDE_TE_BOOT_LAYOUT_CHECK
+
+module = IRONSIDE_TE
+module-str = IronSide TE
+source "subsys/logging/Kconfig.template.log_config"
+
+endif # IRONSIDE_TE_FAULT_LOGGING || IRONSIDE_TE_BOOT_LAYOUT_CHECK
+
+config IRONSIDE_TE_KEYSET
+	string "Key source holding the application signing key"
+	default "keyring:dev"
+	help
+	  Passed as --keyset to ironsdk/scripts/sign.py: keyring:<keyset> or
+	  dir:<path>. Sysbuild sets it from SB_CONFIG_IRONSIDE_TE_KEYSET.
+
+config IRONSIDE_TE_SIGN_VERSION
+	string "Application image version, MAJOR.MINOR.PATCH[.TWEAK]"
+	default "0.0.0.1"
+	help
+	  Passed as --version to ironsdk/scripts/sign.py. Sysbuild sets it from
+	  SB_CONFIG_IRONSIDE_TE_SIGN_VERSION.
+
+endif # IRONSIDE_TE_CLIENT
+
+choice PSA_CRYPTO_PROVIDER
+	default PSA_CRYPTO_PROVIDER_IRONSIDE_TE
+
+# IronSide TE is precompiled, so its PSA Crypto capabilities are fixed.
+config PSA_CRYPTO_PROVIDER_IRONSIDE_TE
+	bool "Use IronSide TE"
+	depends on IRONSIDE_TE_CLIENT
+	select PSA_PROMPTLESS
+	select PSA_WANT_ALG_SHA_256
+	select PSA_WANT_ALG_SHA_384
+	select PSA_WANT_ALG_SHA_512
+	select PSA_WANT_ALG_SHA3_224
+	select PSA_WANT_ALG_SHA3_256
+	select PSA_WANT_ALG_SHA3_384
+	select PSA_WANT_ALG_SHA3_512
+	select PSA_WANT_ALG_HMAC
+	select PSA_WANT_ALG_CMAC
+	select PSA_WANT_ALG_SP800_108_COUNTER_CMAC
+	select PSA_WANT_ALG_CBC_NO_PADDING
+	select PSA_WANT_ALG_CBC_PKCS7
+	select PSA_WANT_ALG_CTR
+	select PSA_WANT_ALG_ECB_NO_PADDING
+	select PSA_WANT_ALG_CCM
+	select PSA_WANT_ALG_GCM
+	select PSA_WANT_ALG_CHACHA20_POLY1305
+	select PSA_WANT_ALG_ECDSA
+	select PSA_WANT_ALG_ECDH
+	select PSA_WANT_ALG_JPAKE
+	select PSA_WANT_KEY_TYPE_AES
+	select PSA_WANT_KEY_TYPE_CHACHA20
+	select PSA_WANT_KEY_TYPE_HMAC
+	select PSA_WANT_KEY_TYPE_DERIVE
+	select PSA_WANT_KEY_TYPE_ECC_PUBLIC_KEY
+	select PSA_WANT_KEY_TYPE_ECC_KEY_PAIR_IMPORT
+	select PSA_WANT_KEY_TYPE_ECC_KEY_PAIR_EXPORT
+	select PSA_WANT_KEY_TYPE_ECC_KEY_PAIR_GENERATE
+	select PSA_WANT_ECC_SECP_R1_256
+	select PSA_WANT_ECC_SECP_R1_384
+	select PSA_WANT_ECC_MONTGOMERY_255
+
+endchoice # PSA_CRYPTO_PROVIDER
+
+if PSA_CRYPTO_PROVIDER_IRONSIDE_TE && SECURE_STORAGE_ITS_TRANSFORM_IMPLEMENTATION_AEAD
+
+# The keys live in IronSide TE, so derive the entries' encryption key from its
+# Master External Storage Key rather than handle key material here.
+choice SECURE_STORAGE_ITS_TRANSFORM_AEAD_CRYPT
+	default SECURE_STORAGE_ITS_TRANSFORM_AEAD_CRYPT_DERIVED_KEY
+endchoice
+
+endif # PSA_CRYPTO_PROVIDER_IRONSIDE_TE && SECURE_STORAGE_ITS_TRANSFORM_IMPLEMENTATION_AEAD
