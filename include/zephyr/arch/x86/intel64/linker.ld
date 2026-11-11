@@ -93,6 +93,7 @@ SECTIONS
 	__text_region_start = .;
 	z_mapped_start = .;
 	*(.text)
+	KEEP (*(.text*personality*))
 	*(.text.*)
 
 	#include <snippets-text-sections.ld>
@@ -165,6 +166,12 @@ SECTIONS
 #endif
 	__kernel_ram_start = .;
 	__bss_start = .;
+
+/* Located in generated directory. This file is populated by the
+ * zephyr_linker_sources() Cmake function.
+ */
+#include <snippets-bss.ld>
+
 	*(.bss)
 	*(.bss.*)
 	*(COMMON)
@@ -246,7 +253,6 @@ SECTION_PROLOGUE(.x86shadowstack.arr,,)
 	*(.igot.plt)
 	*(.iplt)
 	*(.plt)
-	*(.note.GNU-stack)
 	*(.rel.*)
 	*(.rela.*)
 	}

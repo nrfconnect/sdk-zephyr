@@ -14,7 +14,7 @@
 #ifndef ZEPHYR_INCLUDE_TRACING_TRACING_H_
 #define ZEPHYR_INCLUDE_TRACING_TRACING_H_
 
-#include "tracking.h"
+#include <zephyr/kernel.h>
 
 #if defined CONFIG_SEGGER_SYSTEMVIEW
 #include "tracing_sysview.h"
@@ -56,6 +56,8 @@
  * running on a host to visualize the inner-working of the kernel and various other subsystems.
  *
  * @defgroup subsys_tracing Tracing
+ * @since 1.13
+ * @version 0.8.0
  * @ingroup os_services
  * @{
  */

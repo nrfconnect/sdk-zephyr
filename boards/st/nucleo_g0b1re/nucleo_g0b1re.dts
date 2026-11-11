@@ -12,8 +12,8 @@
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 
 / {
-	model = "STMicroelectronics STM32G0B1RE-NUCLEO board";
 	compatible = "st,stm32g0b1re-nucleo";
+	model = "STMicroelectronics STM32G0B1RE-NUCLEO board";
 
 	chosen {
 		zephyr,console = &usart2;
@@ -23,6 +23,7 @@
 		zephyr,flash = &flash0;
 		zephyr,code-partition = &slot0_partition;
 		zephyr,canbus = &fdcan1;
+		zephyr,system-timer = &lptim1;
 	};
 
 	leds: leds {
@@ -63,8 +64,8 @@
 };
 
 &clk_hsi48 {
-	status = "okay";
 	crs-usb-sof;
+	status = "okay";
 };
 
 &pll {
@@ -119,9 +120,9 @@ zephyr_udc0: &usb {
 	status = "okay";
 
 	pwm3: pwm {
-		status = "okay";
 		pinctrl-0 = <&tim3_ch1_pb4>;
 		pinctrl-names = "default";
+		status = "okay";
 	};
 };
 
@@ -130,9 +131,9 @@ zephyr_udc0: &usb {
 	status = "okay";
 
 	pwm15: pwm {
-		status = "okay";
 		pinctrl-0 = <&tim15_ch1_pb14>;
 		pinctrl-names = "default";
+		status = "okay";
 	};
 };
 
@@ -141,8 +142,8 @@ zephyr_udc0: &usb {
 	pinctrl-names = "default";
 	scl-gpios = <&gpiob 8 GPIO_ACTIVE_HIGH>;
 	sda-gpios = <&gpiob 9 GPIO_ACTIVE_HIGH>;
-	status = "okay";
 	clock-frequency = <I2C_BITRATE_FAST>;
+	status = "okay";
 };
 
 &i2c2 {
@@ -150,8 +151,8 @@ zephyr_udc0: &usb {
 	pinctrl-names = "default";
 	scl-gpios = <&gpioa 11 GPIO_ACTIVE_HIGH>;
 	sda-gpios = <&gpioa 12 GPIO_ACTIVE_HIGH>;
-	status = "okay";
 	clock-frequency = <I2C_BITRATE_FAST>;
+	status = "okay";
 };
 
 &spi1 {
@@ -168,11 +169,15 @@ zephyr_udc0: &usb {
 	status = "okay";
 };
 
+&adc1_common {
+	st,adc-clock-source = "SYNC";
+	st,adc-prescaler = <4>;
+	status = "okay";
+};
+
 &adc1 {
 	pinctrl-0 = <&adc1_in0_pa0 &adc1_in1_pa1>;
 	pinctrl-names = "default";
-	st,adc-clock-source = "SYNC";
-	st,adc-prescaler = <4>;
 	status = "okay";
 };
 
@@ -181,9 +186,9 @@ zephyr_udc0: &usb {
 };
 
 &dac1 {
-	status = "okay";
 	pinctrl-0 = <&dac1_out1_pa4>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &fdcan1 {
@@ -204,39 +209,39 @@ zephyr_udc0: &usb {
 
 &flash0 {
 	partitions {
+		ranges;
 		#address-cells = <1>;
 		#size-cells = <1>;
-		ranges;
 
 		boot_partition: partition@0 {
 			compatible = "zephyr,mapped-partition";
-			label = "mcuboot";
 			reg = <0x00000000 DT_SIZE_K(48)>;
+			label = "mcuboot";
 			read-only;
 		};
 
 		slot0_partition: partition@c000 {
 			compatible = "zephyr,mapped-partition";
-			label = "image-0";
 			reg = <0x0000c000 DT_SIZE_K(200)>;
+			label = "image-0";
 		};
 
 		slot1_partition: partition@3e000 {
 			compatible = "zephyr,mapped-partition";
-			label = "image-1";
 			reg = <0x0003e000 DT_SIZE_K(200)>;
+			label = "image-1";
 		};
 
 		/* final 64KiB reserved for app storage partition */
 		storage_partition: partition@70000 {
 			compatible = "zephyr,mapped-partition";
-			label = "storage";
 			reg = <0x00070000 DT_SIZE_K(64)>;
+			label = "storage";
 		};
 	};
 };
 
-stm32_lp_tick_source: &lptim1 {
+&lptim1 {
 	clocks = <&rcc STM32_CLOCK(APB1, 31)>,
 		 <&rcc STM32_SRC_LSI LPTIM1_SEL(1)>;
 	status = "okay";

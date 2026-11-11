@@ -268,6 +268,19 @@ Relevant devicetree node labels:
 - ``st_morpho_flash_spi``
 
 
+ST Zio
+------
+
+STM32 Nucleo-144 development boards from ST Microelectronics expose the ST Zio
+connector, an extension of the Arduino Uno V3 connector that gives access to
+more of the STM32 I/Os through four headers (CN7, CN8, CN9 and CN10).
+
+Relevant devicetree node labels:
+
+- ``st_zio_header``  See :dtcompatible:`st-zio-header` for details on GPIO pin definitions
+  and includes for use in devicetree files.
+
+
 STMod+
 ------
 
@@ -286,6 +299,38 @@ Relevant devicetree node labels:
 
 Boards may expose additional interface labels when a peripheral is wired to the
 STMod+ connector and enabled in the board devicetree.
+
+
+WisBlock
+--------
+
+This is a modular interface standard for add-on boards, developed by RAKwireless.
+It defines Core, Sensor, I/O and Power Slots, each accepting a module of the
+matching class through a 24-pin or 40-pin WisConnector.
+
+.. figure:: ../../../boards/shields/rakwireless_rak19007/doc/img/rakwireless_rak19007.webp
+   :align: center
+   :alt: RAK19007 Base Board
+   :width: 300px
+
+   RAK19007, an example of a WisBlock Base Board (Credit: RAKwireless)
+
+Relevant devicetree node labels:
+
+- ``wisblock_io`` See :dtcompatible:`wisblock-io-slot` for GPIO pin definitions.
+- ``wisblock_sensor_a`` See :dtcompatible:`wisblock-sensor-slot` for GPIO pin definitions.
+- ``wisblock_adc``
+- ``wisblock_pwm``
+- ``wisblock_i2c1``
+- ``wisblock_i2c2``
+- ``wisblock_i2s``
+- ``wisblock_pdm``
+- ``wisblock_spi``
+- ``wisblock_uart0``
+- ``wisblock_uart1``
+
+Note that Sensor Slots are labeled ``wisblock_sensor_a`` through
+``wisblock_sensor_f`` after the Slot they implement.
 
 
 Xiao
@@ -308,6 +353,21 @@ Relevant devicetree node labels:
 - ``xiao_serial``
 - ``xiao_adc``
 - ``xiao_dac``
+
+
+Xiao Plus
+---------
+
+This is the form factor of the Seeed Studio XIAO Plus boards. It extends the Xiao form factor with
+nine pads on the bottom side of the board, placed between the castellated pins. Shields for this
+form factor, typically carrier boards on which the module is soldered, can use the Xiao node labels
+listed above as well as the following ones.
+
+Relevant devicetree node labels:
+
+- ``xiao_plus_d`` See :dtcompatible:`seeed,xiao-plus-gpio` for GPIO pin definitions.
+- ``xiao_plus_spi``
+- ``xiao_plus_serial``
 
 
 zephyr_i2c / Stemma QT / Quiic

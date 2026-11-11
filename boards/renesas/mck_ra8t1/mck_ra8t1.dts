@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024-2025 Renesas Electronics Corporation
+ * Copyright (c) 2024-2026 Renesas Electronics Corporation
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -11,16 +11,16 @@
 #include "mck_ra8t1-pinctrl.dtsi"
 
 / {
-	model = "Renesas MCK-RA8T1";
 	compatible = "renesas,ra8t1", "renesas,ra8";
+	model = "Renesas MCK-RA8T1";
 
 	chosen {
 		zephyr,sram = &sram0;
-		zephyr,flash = &flash0;
+		zephyr,flash = &code_flash;
 		zephyr,console = &uart3;
 		zephyr,shell-uart = &uart3;
 		zephyr,entropy = &trng;
-		zephyr,flash-controller = &flash1;
+		zephyr,flash-controller = &code_flash_ctrl;
 		zephyr,canbus = &canfd1;
 		zephyr,crc = &crc;
 	};
@@ -53,6 +53,7 @@
 		led0 = &led1;
 		sdhc0 = &sdhc0;
 		watchdog0 = &wdt;
+		i2c-0 = &iic1;
 	};
 };
 
@@ -159,15 +160,16 @@
 	status = "okay";
 };
 
-&flash1 {
+&data_flash {
 	partitions {
-		compatible = "fixed-partitions";
+		ranges;
 		#address-cells = <1>;
 		#size-cells = <1>;
 
 		storage_partition: partition@0 {
-			label = "storage";
+			compatible = "zephyr,mapped-partition";
 			reg = <0x0 DT_SIZE_K(12)>;
+			label = "storage";
 		};
 	};
 };
@@ -197,16 +199,19 @@
 	clock-frequency = <I2C_BITRATE_FAST_PLUS>;
 	pinctrl-0 = <&iic1_default>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &eth {
 	local-mac-address = [74 90 50 6d 81 75];
-	status = "okay";
 	phy-handle = <&phy>;
+	pinctrl-0 = <&ether_default>;
+	pinctrl-names = "default";
+	status = "okay";
 };
 
 &mdio {
-	pinctrl-0 = <&ether_default>;
+	pinctrl-0 = <&mdio_default>;
 	pinctrl-names = "default";
 	status = "okay";
 
@@ -218,10 +223,10 @@
 };
 
 &adc0 {
-	status = "okay";
 	pinctrl-0 = <&adc0_default>;
 	pinctrl-names = "default";
 	average-count = <4>;
+	status = "okay";
 };
 
 &dac0 {

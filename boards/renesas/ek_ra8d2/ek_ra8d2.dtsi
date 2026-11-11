@@ -4,10 +4,12 @@
  */
 
 #include <zephyr/dt-bindings/gpio/gpio.h>
+#include <zephyr/dt-bindings/gpio/mikro-bus.h>
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 #include <zephyr/dt-bindings/memory-attr/memory-attr-arm.h>
 #include <zephyr/dt-bindings/memory-controller/renesas,ra-sdram.h>
 #include <zephyr/dt-bindings/gpio/arducam-ffc-40pin-connector.h>
+#include <zephyr/dt-bindings/flash_controller/ospi.h>
 #include "ek_ra8d2-pinctrl.dtsi"
 
 / {
@@ -53,20 +55,20 @@
 		#gpio-cells = <2>;
 		gpio-map-mask = <0xffffffff 0xffffffc0>;
 		gpio-map-pass-thru = <0 0x3f>;
-		gpio-map = <0 0 &ioport0 4 0>,	/* AN  */
-			   <1 0 &ioport2 1 0>,	/* RST */
-			   <2 0 &ioport1 3 0>,	/* CS   */
-			   <3 0 &ioport1 2 0>,	/* SCK  */
-			   <4 0 &ioport1 0 0>,	/* MISO */
-			   <5 0 &ioport1 1 0>,	/* MOSI */
+		gpio-map = <MIKROBUS_AN 0 &ioport0 4 0>,
+			   <MIKROBUS_RST 0 &ioport2 1 0>,
+			   <MIKROBUS_CS 0 &ioport1 3 0>,
+			   <MIKROBUS_SCK 0 &ioport1 2 0>,
+			   <MIKROBUS_MISO 0 &ioport1 0 0>,
+			   <MIKROBUS_MOSI 0 &ioport1 1 0>,
 			   /* +3.3V */
 			   /* GND */
-			   <6 0 &ioport8 10 0>,	/* PWM  */
-			   <7 0 &ioportd 1 0>,	/* INT  */
-			   <8 0 &ioport8 8 0>,	/* RX   */
-			   <9 0 &ioport8 9 0>,	/* TX   */
-			   <10 0 &ioport5 12 0>, /* SCL  */
-			   <11 0 &ioport5 11 0>; /* SDA  */
+			   <MIKROBUS_PWM 0 &ioport8 10 0>,
+			   <MIKROBUS_INT 0 &ioportd 1 0>,
+			   <MIKROBUS_RX 0 &ioport8 8 0>,
+			   <MIKROBUS_TX 0 &ioport8 9 0>,
+			   <MIKROBUS_SCL 0 &ioport5 12 0>,
+			   <MIKROBUS_SDA 0 &ioport5 11 0>;
 		/* +5V */
 		/* GND */
 	};
@@ -81,8 +83,8 @@
 
 	sdram1: sdram@68000000 {
 		compatible = "zephyr,memory-region", "mmio-sram";
-		device_type = "memory";
 		reg = <0x68000000 DT_SIZE_M(64)>;
+		device_type = "memory";
 		zephyr,memory-region = "SDRAM";
 		status = "okay";
 	};
@@ -177,6 +179,12 @@
 	status = "okay";
 };
 
+&octaspiclk {
+	clocks = <&pll2r>;
+	div = <2>;
+	status = "okay";
+};
+
 &ioport0 {
 	status = "okay";
 };
@@ -232,7 +240,6 @@
 &sdram {
 	pinctrl-0 = <&sdram_default>;
 	pinctrl-names = "default";
-	status = "okay";
 	auto-refresh-interval = <SDRAM_AUTO_REFRESH_INTERVAL_10CYCLES>;
 	auto-refresh-count = <SDRAM_AUTO_REFRESH_COUNT_8TIMES>;
 	precharge-cycle-count = <SDRAM_AUTO_PRECHARGE_CYCLE_3CYCLES>;
@@ -240,6 +247,7 @@
 	endian-mode = "little-endian";
 	continuous-access;
 	bus-width = "32-bit";
+	status = "okay";
 
 	bank@0 {
 		reg = <0>;
@@ -250,5 +258,35 @@
 					   SDRAM_TCL_3CYCLES
 					   937
 					   SDRAM_TREFW_8CYCLES>;
+	};
+};
+
+&ospi0 {
+	pinctrl-0 = <&ospi0_default>;
+	pinctrl-names = "default";
+	ddr-sampling-extension = <7>;
+	status = "okay";
+
+	ext_flash_ctrl: flash-controller@1 {
+		compatible = "renesas,ra-ospi-b-nor";
+		reg = <1>;
+		ranges = <0x0 0x90000000 DT_SIZE_M(256)>;
+		protocol-mode = <OSPI_OPI_MODE>;
+		nor-max-frequency = <DT_FREQ_M(133)>;
+		jedec-id = [9d 5a 1a];
+		default-8d-dummy-cycles = <16>;
+		#address-cells = <1>;
+		#size-cells = <1>;
+		status = "disabled";
+
+		ext_flash: is25lx512m: nor-flash@0 {
+			compatible = "soc-nv-flash";
+			reg = <0x0 DT_SIZE_M(64)>;
+			ranges = <0x0 0x0 DT_SIZE_M(64)>;
+			write-block-size = <16>;
+			erase-block-size = <DT_SIZE_K(4)>;
+			#address-cells = <1>;
+			#size-cells = <1>;
+		};
 	};
 };

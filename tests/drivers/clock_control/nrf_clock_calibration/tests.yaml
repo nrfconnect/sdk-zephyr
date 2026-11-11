@@ -40,6 +40,7 @@ tests:
       - CONFIG_CLOCK_CONTROL_NRF_USES_TEMP_SENSOR=n
     platform_allow:
       - nrf7120dk/nrf7120/cpuapp
+      - nrf7120dk/nrf7120e/cpuapp
       - nrf7120dk/nrf7120/cpuapp/ns
     extra_args:
       - EXTRA_DTC_OVERLAY_FILE="boards/lfrc.overlay"
@@ -70,7 +71,7 @@ tests:
       - clock_control
     extra_configs:
       - CONFIG_CLOCK_CONTROL_NRF=y
-      - CONFIG_DEPRECATION_TEST=y
+      - CONFIG_WARN_DEPRECATED=n
       - CONFIG_CLOCK_CONTROL_NRF_K32SRC_RC=y
       - CONFIG_CLOCK_CONTROL_NRF_CALIBRATION_MAX_SKIP=1
       - CONFIG_CLOCK_CONTROL_NRF_CALIBRATION_TEMP_DIFF=2
@@ -99,7 +100,7 @@ tests:
       - clock_control
     extra_configs:
       - CONFIG_CLOCK_CONTROL_NRF=y
-      - CONFIG_DEPRECATION_TEST=y
+      - CONFIG_WARN_DEPRECATED=n
       - CONFIG_CLOCK_CONTROL_NRF_K32SRC_RC=y
       - CONFIG_CLOCK_CONTROL_NRF_CALIBRATION_MAX_SKIP=1
       - CONFIG_CLOCK_CONTROL_NRF_CALIBRATION_TEMP_DIFF=2

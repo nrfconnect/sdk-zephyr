@@ -14,8 +14,11 @@ static ZTEST_DMEM int case_type;
 
 static K_THREAD_STACK_DEFINE(tstack, STACK_SIZE);
 static K_THREAD_STACK_DEFINE(test_stack, STACK_SIZE);
+static K_THREAD_STACK_DEFINE(reuse_stack1, STACK_SIZE);
+static K_THREAD_STACK_DEFINE(reuse_stack2, STACK_SIZE);
 static struct k_thread tdata;
 static struct k_thread test_tdata;
+static struct k_thread reuse_tdata;
 
 /* identifiers for each negative test scenario */
 enum {
@@ -32,12 +35,19 @@ enum {
 	THREAD_PRIORITY_GET_NULL,
 	THREAD_WAKEUP_NULL,
 	THREAD_CREATE_SUPERVISOR,
-	THREAD_CREATE_ESSENTIAL
+	THREAD_CREATE_ESSENTIAL,
+	THREAD_REUSE_ACTIVE_THREAD_ID
 } neg_case;
 
 static void test_thread(void *p1, void *p2, void *p3)
 {
 	/* intentionally empty target thread */
+}
+
+static void long_running_thread(void *p1, void *p2, void *p3)
+{
+	/* Sleep for a long time to keep thread active */
+	k_sleep(K_FOREVER);
 }
 
 static void tThread_entry_negative(void *p1, void *p2, void *p3)
@@ -149,6 +159,16 @@ static void tThread_entry_negative(void *p1, void *p2, void *p3)
 			K_PRIO_PREEMPT(THREAD_TEST_PRIORITY),
 			K_USER | K_ESSENTIAL, K_NO_WAIT);
 		break;
+	case THREAD_REUSE_ACTIVE_THREAD_ID:
+		ztest_set_fault_valid(true);
+		/* Create first thread that will run for a while */
+		k_thread_create(&reuse_tdata, reuse_stack1, STACK_SIZE, long_running_thread, NULL,
+				NULL, NULL, K_PRIO_PREEMPT(THREAD_TEST_PRIORITY + 1), perm,
+				K_NO_WAIT);
+		/* Try to reuse the same thread structure while it's still active */
+		k_thread_create(&reuse_tdata, reuse_stack2, STACK_SIZE, test_thread, NULL, NULL,
+				NULL, K_PRIO_PREEMPT(THREAD_TEST_PRIORITY), perm, K_NO_WAIT);
+		break;
 	default:
 		TC_PRINT("should not be here!\n");
 		break;
@@ -178,123 +198,263 @@ static void create_negative_test_thread(int choice)
 }
 
 /**
- * @brief Test that k_thread_start() rejects a NULL thread pointer
- *
- * Verifies that passing a NULL pointer to k_thread_start() triggers
- * the expected fatal error in the syscall validation layer.
+ * @brief Verify that k_thread_start() rejects a NULL thread pointer.
  *
  * @ingroup kernel_thread_tests
  *
+ * @details
+ * The syscall verification layer must reject a NULL thread object before it
+ * reaches the kernel, where it would be dereferenced.
+ *
+ * All cases in this suite share one mechanism: a worker thread, running in
+ * user mode when the test case does, arms the ztest fatal-error hook and then
+ * makes the offending call. The call must not return -- reaching the code
+ * after it fails the test -- so a pass means the error really was caught.
+ *
+ * Test steps:
+ * - Spawn a worker thread and arm the ztest fatal-error hook.
+ * - Make the offending call from that thread.
+ * - Join the worker thread.
+ *
+ * Expected result:
+ * - The call raises the expected fatal error and never returns.
+ *
  * @see k_thread_start()
  */
-ZTEST_USER(thread_error_case, test_thread_start)
+ZTEST_USER(thread_error_case, test_thread_start_null)
 {
 	create_negative_test_thread(THREAD_START);
 }
 
 /**
- * @brief Test that k_float_disable() rejects a NULL thread pointer
- *
- * Verifies that passing a NULL pointer to k_float_disable() triggers
- * the expected fatal error in the syscall validation layer.
+ * @brief Verify that k_float_disable() rejects a NULL thread pointer.
  *
  * @ingroup kernel_thread_tests
  *
+ * @details
+ * The syscall verification layer must reject a NULL thread object before it
+ * reaches the kernel, where it would be dereferenced.
+ *
+ * All cases in this suite share one mechanism: a worker thread, running in
+ * user mode when the test case does, arms the ztest fatal-error hook and then
+ * makes the offending call. The call must not return -- reaching the code
+ * after it fails the test -- so a pass means the error really was caught.
+ *
+ * Test steps:
+ * - Spawn a worker thread and arm the ztest fatal-error hook.
+ * - Make the offending call from that thread.
+ * - Join the worker thread.
+ *
+ * Expected result:
+ * - The call raises the expected fatal error and never returns.
+ *
  * @see k_float_disable()
  */
-ZTEST_USER(thread_error_case, test_float_disable)
+ZTEST_USER(thread_error_case, test_thread_float_disable_null)
 {
 	create_negative_test_thread(FLOAT_DISABLE);
 }
 
 /**
- * @brief Test that k_thread_timeout_remaining_ticks() rejects a NULL pointer
- *
- * Verifies that passing a NULL thread pointer to
- * k_thread_timeout_remaining_ticks() triggers the expected fatal error
- * in the syscall validation layer.
+ * @brief Verify that k_thread_timeout_remaining_ticks() rejects a NULL thread
+ *        pointer.
  *
  * @ingroup kernel_thread_tests
  *
+ * @details
+ * The syscall verification layer must reject a NULL thread object before it
+ * reaches the kernel, where it would be dereferenced.
+ *
+ * All cases in this suite share one mechanism: a worker thread, running in
+ * user mode when the test case does, arms the ztest fatal-error hook and then
+ * makes the offending call. The call must not return -- reaching the code
+ * after it fails the test -- so a pass means the error really was caught.
+ *
+ * Test steps:
+ * - Spawn a worker thread and arm the ztest fatal-error hook.
+ * - Make the offending call from that thread.
+ * - Join the worker thread.
+ *
+ * Expected result:
+ * - The call raises the expected fatal error and never returns.
+ *
  * @see k_thread_timeout_remaining_ticks()
  */
-ZTEST_USER(thread_error_case, test_timeout_remaining_ticks)
+ZTEST_USER(thread_error_case, test_thread_timeout_remaining_ticks_null)
 {
 	create_negative_test_thread(TIMEOUT_REMAINING_TICKS);
 }
 
 /**
- * @brief Test that k_thread_timeout_expires_ticks() rejects a NULL pointer
- *
- * Verifies that passing a NULL thread pointer to
- * k_thread_timeout_expires_ticks() triggers the expected fatal error
- * in the syscall validation layer.
+ * @brief Verify that k_thread_timeout_expires_ticks() rejects a NULL thread pointer.
  *
  * @ingroup kernel_thread_tests
  *
+ * @details
+ * The syscall verification layer must reject a NULL thread object before it
+ * reaches the kernel, where it would be dereferenced.
+ *
+ * All cases in this suite share one mechanism: a worker thread, running in
+ * user mode when the test case does, arms the ztest fatal-error hook and then
+ * makes the offending call. The call must not return -- reaching the code
+ * after it fails the test -- so a pass means the error really was caught.
+ *
+ * Test steps:
+ * - Spawn a worker thread and arm the ztest fatal-error hook.
+ * - Make the offending call from that thread.
+ * - Join the worker thread.
+ *
+ * Expected result:
+ * - The call raises the expected fatal error and never returns.
+ *
  * @see k_thread_timeout_expires_ticks()
  */
-ZTEST_USER(thread_error_case, test_timeout_expires_ticks)
+ZTEST_USER(thread_error_case, test_thread_timeout_expires_ticks_null)
 {
 	create_negative_test_thread(TIMEOUT_EXPIRES_TICKS);
 }
 
 /**
- * @brief Test that k_thread_create() rejects a NULL new-thread pointer
- *
- * Verifies that passing NULL as the new thread object to k_thread_create()
- * triggers the expected fatal error. The syscall verifier requires the
- * thread object to be a valid, uninitialized kernel object.
+ * @brief Verify that k_thread_create() rejects a NULL new-thread object.
  *
  * @ingroup kernel_thread_tests
  *
+ * @details
+ * The verifier requires the new thread to be a valid, uninitialized kernel
+ * object, so a NULL pointer must be refused rather than initialized.
+ *
+ * All cases in this suite share one mechanism: a worker thread, running in
+ * user mode when the test case does, arms the ztest fatal-error hook and then
+ * makes the offending call. The call must not return -- reaching the code
+ * after it fails the test -- so a pass means the error really was caught.
+ *
+ * Test steps:
+ * - Spawn a worker thread and arm the ztest fatal-error hook.
+ * - Make the offending call from that thread.
+ * - Join the worker thread.
+ *
+ * Expected result:
+ * - The call raises the expected fatal error and never returns.
+ *
  * @see k_thread_create()
  */
-ZTEST_USER(thread_error_case, test_thread_create_uninit)
+ZTEST_USER(thread_error_case, test_thread_create_null_thread)
 {
 	create_negative_test_thread(THREAD_CREATE_NEWTHREAD_NULL);
 }
 
 /**
- * @brief Test that k_thread_create() rejects a NULL stack pointer
- *
- * Verifies that passing NULL as the stack argument to k_thread_create()
- * triggers the expected fatal error. The syscall verifier requires the
- * stack to be a valid, uninitialized kernel stack object.
+ * @brief Verify that k_thread_create() rejects a NULL stack object.
  *
  * @ingroup kernel_thread_tests
  *
+ * @details
+ * The verifier requires the stack to be a valid, uninitialized kernel stack
+ * object, so a NULL pointer must be refused rather than used as a stack.
+ *
+ * All cases in this suite share one mechanism: a worker thread, running in
+ * user mode when the test case does, arms the ztest fatal-error hook and then
+ * makes the offending call. The call must not return -- reaching the code
+ * after it fails the test -- so a pass means the error really was caught.
+ *
+ * Test steps:
+ * - Spawn a worker thread and arm the ztest fatal-error hook.
+ * - Make the offending call from that thread.
+ * - Join the worker thread.
+ *
+ * Expected result:
+ * - The call raises the expected fatal error and never returns.
+ *
  * @see k_thread_create()
  */
-ZTEST_USER(thread_error_case, test_thread_create_stack_null)
+ZTEST_USER(thread_error_case, test_thread_create_null_stack)
 {
 	create_negative_test_thread(THREAD_CREATE_STACK_NULL);
 }
 
 /**
- * @brief Test that k_thread_create() rejects an overflowing stack size
- *
- * Verifies that passing SIZE_MAX (-1 cast to size_t) as the stack size
- * to k_thread_create() triggers the expected fatal error. The syscall
- * verifier detects the overflow when computing
- * K_THREAD_STACK_RESERVED + stack_size.
+ * @brief Verify that k_thread_create() rejects a stack size that overflows.
  *
  * @ingroup kernel_thread_tests
  *
+ * @details
+ * The verifier adds K_THREAD_STACK_RESERVED to the requested size, so a size
+ * of SIZE_MAX wraps around; the overflow has to be detected instead of
+ * yielding a small, bogus stack.
+ *
+ * All cases in this suite share one mechanism: a worker thread, running in
+ * user mode when the test case does, arms the ztest fatal-error hook and then
+ * makes the offending call. The call must not return -- reaching the code
+ * after it fails the test -- so a pass means the error really was caught.
+ *
+ * Test steps:
+ * - Spawn a worker thread and arm the ztest fatal-error hook.
+ * - Make the offending call from that thread.
+ * - Join the worker thread.
+ *
+ * Expected result:
+ * - The call raises the expected fatal error and never returns.
+ *
  * @see k_thread_create()
  */
-ZTEST_USER(thread_error_case, test_thread_create_stack_overflow)
+ZTEST_USER(thread_error_case, test_thread_create_stack_size_overflow)
 {
 	create_negative_test_thread(THREAD_CREATE_STACK_SIZE_OVERFLOW);
 }
 
 /**
- * @brief Test that k_thread_suspend() rejects a NULL thread pointer
- *
- * Verifies that passing a NULL pointer to k_thread_suspend() triggers
- * the expected fatal error in the syscall validation layer.
+ * @brief Verify that k_thread_create() asserts if a thread pointer is
+ *        reused while the thread pointer is in use.
  *
  * @ingroup kernel_thread_tests
+ *
+ * @details
+ * A thread structure must not be reused for a new thread while the
+ * thread it currently backs is still active, so this must be detected
+ * instead of silently corrupting the running thread's state.
+ *
+ * This test runs in kernel mode, a worker thread arms the ztest
+ * fatal-error hook and then makes the offending call. The call must
+ * not return -- reaching the code after it fails the test -- so a pass
+ * means the error really was caught.
+ *
+ * Test steps:
+ * - Spawn a worker thread and arm the ztest fatal-error hook.
+ * - Create a first thread that keeps running, then try to reuse its thread
+ *   structure to create a second thread from the same worker thread.
+ * - Join the worker thread.
+ *
+ * Expected result:
+ * - The call raises the expected fatal error and never returns.
+ *
+ * @see k_thread_create()
+ */
+ZTEST(thread_error_case, test_thread_reuse_active_thread_id)
+{
+	create_negative_test_thread(THREAD_REUSE_ACTIVE_THREAD_ID);
+}
+
+/**
+ * @brief Verify that k_thread_suspend() rejects a NULL thread pointer.
+ *
+ * @ingroup kernel_thread_tests
+ *
+ * @details
+ * The syscall verification layer must reject a NULL thread object before it
+ * reaches the kernel, where it would be dereferenced.
+ *
+ * All cases in this suite share one mechanism: a worker thread, running in
+ * user mode when the test case does, arms the ztest fatal-error hook and then
+ * makes the offending call. The call must not return -- reaching the code
+ * after it fails the test -- so a pass means the error really was caught.
+ *
+ * Test steps:
+ * - Spawn a worker thread and arm the ztest fatal-error hook.
+ * - Make the offending call from that thread.
+ * - Join the worker thread.
+ *
+ * Expected result:
+ * - The call raises the expected fatal error and never returns.
  *
  * @see k_thread_suspend()
  */
@@ -304,12 +464,26 @@ ZTEST_USER(thread_error_case, test_thread_suspend_null)
 }
 
 /**
- * @brief Test that k_thread_resume() rejects a NULL thread pointer
- *
- * Verifies that passing a NULL pointer to k_thread_resume() triggers
- * the expected fatal error in the syscall validation layer.
+ * @brief Verify that k_thread_resume() rejects a NULL thread pointer.
  *
  * @ingroup kernel_thread_tests
+ *
+ * @details
+ * The syscall verification layer must reject a NULL thread object before it
+ * reaches the kernel, where it would be dereferenced.
+ *
+ * All cases in this suite share one mechanism: a worker thread, running in
+ * user mode when the test case does, arms the ztest fatal-error hook and then
+ * makes the offending call. The call must not return -- reaching the code
+ * after it fails the test -- so a pass means the error really was caught.
+ *
+ * Test steps:
+ * - Spawn a worker thread and arm the ztest fatal-error hook.
+ * - Make the offending call from that thread.
+ * - Join the worker thread.
+ *
+ * Expected result:
+ * - The call raises the expected fatal error and never returns.
  *
  * @see k_thread_resume()
  */
@@ -319,12 +493,26 @@ ZTEST_USER(thread_error_case, test_thread_resume_null)
 }
 
 /**
- * @brief Test that k_thread_priority_set() rejects a NULL thread pointer
- *
- * Verifies that passing a NULL pointer to k_thread_priority_set() triggers
- * the expected fatal error in the syscall validation layer.
+ * @brief Verify that k_thread_priority_set() rejects a NULL thread pointer.
  *
  * @ingroup kernel_thread_tests
+ *
+ * @details
+ * The syscall verification layer must reject a NULL thread object before it
+ * reaches the kernel, where it would be dereferenced.
+ *
+ * All cases in this suite share one mechanism: a worker thread, running in
+ * user mode when the test case does, arms the ztest fatal-error hook and then
+ * makes the offending call. The call must not return -- reaching the code
+ * after it fails the test -- so a pass means the error really was caught.
+ *
+ * Test steps:
+ * - Spawn a worker thread and arm the ztest fatal-error hook.
+ * - Make the offending call from that thread.
+ * - Join the worker thread.
+ *
+ * Expected result:
+ * - The call raises the expected fatal error and never returns.
  *
  * @see k_thread_priority_set()
  */
@@ -334,12 +522,26 @@ ZTEST_USER(thread_error_case, test_thread_priority_set_null)
 }
 
 /**
- * @brief Test that k_thread_priority_get() rejects a NULL thread pointer
- *
- * Verifies that passing a NULL pointer to k_thread_priority_get() triggers
- * the expected fatal error in the syscall validation layer.
+ * @brief Verify that k_thread_priority_get() rejects a NULL thread pointer.
  *
  * @ingroup kernel_thread_tests
+ *
+ * @details
+ * The syscall verification layer must reject a NULL thread object before it
+ * reaches the kernel, where it would be dereferenced.
+ *
+ * All cases in this suite share one mechanism: a worker thread, running in
+ * user mode when the test case does, arms the ztest fatal-error hook and then
+ * makes the offending call. The call must not return -- reaching the code
+ * after it fails the test -- so a pass means the error really was caught.
+ *
+ * Test steps:
+ * - Spawn a worker thread and arm the ztest fatal-error hook.
+ * - Make the offending call from that thread.
+ * - Join the worker thread.
+ *
+ * Expected result:
+ * - The call raises the expected fatal error and never returns.
  *
  * @see k_thread_priority_get()
  */
@@ -349,12 +551,26 @@ ZTEST_USER(thread_error_case, test_thread_priority_get_null)
 }
 
 /**
- * @brief Test that k_wakeup() rejects a NULL thread pointer
- *
- * Verifies that passing a NULL pointer to k_wakeup() triggers the
- * expected fatal error in the syscall validation layer.
+ * @brief Verify that k_wakeup() rejects a NULL thread pointer.
  *
  * @ingroup kernel_thread_tests
+ *
+ * @details
+ * The syscall verification layer must reject a NULL thread object before it
+ * reaches the kernel, where it would be dereferenced.
+ *
+ * All cases in this suite share one mechanism: a worker thread, running in
+ * user mode when the test case does, arms the ztest fatal-error hook and then
+ * makes the offending call. The call must not return -- reaching the code
+ * after it fails the test -- so a pass means the error really was caught.
+ *
+ * Test steps:
+ * - Spawn a worker thread and arm the ztest fatal-error hook.
+ * - Make the offending call from that thread.
+ * - Join the worker thread.
+ *
+ * Expected result:
+ * - The call raises the expected fatal error and never returns.
  *
  * @see k_wakeup()
  */
@@ -364,37 +580,60 @@ ZTEST_USER(thread_error_case, test_thread_wakeup_null)
 }
 
 /**
- * @brief Test that k_thread_create() forbids creating supervisor threads
- *        from user context
- *
- * Verifies that a user thread cannot create a supervisor thread by omitting
- * the K_USER option flag. The syscall verifier in z_vrfy_k_thread_create()
- * enforces that the K_USER flag must be set for all threads spawned from
- * user context.
+ * @brief Verify that a user thread cannot create a supervisor thread.
  *
  * @ingroup kernel_thread_tests
  *
+ * @details
+ * Omitting K_USER from a thread created in user context would hand
+ * unprivileged code a privileged thread, so the verifier must require the
+ * flag on every thread spawned from user mode.
+ *
+ * All cases in this suite share one mechanism: a worker thread, running in
+ * user mode when the test case does, arms the ztest fatal-error hook and then
+ * makes the offending call. The call must not return -- reaching the code
+ * after it fails the test -- so a pass means the error really was caught.
+ *
+ * Test steps:
+ * - Spawn a worker thread and arm the ztest fatal-error hook.
+ * - Make the offending call from that thread.
+ * - Join the worker thread.
+ *
+ * Expected result:
+ * - The call raises the expected fatal error and never returns.
+ *
  * @see k_thread_create()
  */
-ZTEST_USER(thread_error_case, test_thread_create_supervisor)
+ZTEST_USER(thread_error_case, test_thread_create_supervisor_denied)
 {
 	create_negative_test_thread(THREAD_CREATE_SUPERVISOR);
 }
 
 /**
- * @brief Test that k_thread_create() forbids creating essential threads
- *        from user context
- *
- * Verifies that a user thread cannot create an essential thread by setting
- * the K_ESSENTIAL option flag. The syscall verifier in
- * z_vrfy_k_thread_create() rejects this to prevent unprivileged code from
- * creating threads whose abort would trigger a kernel panic.
+ * @brief Verify that a user thread cannot create an essential thread.
  *
  * @ingroup kernel_thread_tests
  *
+ * @details
+ * Aborting an essential thread panics the kernel, so unprivileged code must
+ * not be able to set K_ESSENTIAL on a thread it creates.
+ *
+ * All cases in this suite share one mechanism: a worker thread, running in
+ * user mode when the test case does, arms the ztest fatal-error hook and then
+ * makes the offending call. The call must not return -- reaching the code
+ * after it fails the test -- so a pass means the error really was caught.
+ *
+ * Test steps:
+ * - Spawn a worker thread and arm the ztest fatal-error hook.
+ * - Make the offending call from that thread.
+ * - Join the worker thread.
+ *
+ * Expected result:
+ * - The call raises the expected fatal error and never returns.
+ *
  * @see k_thread_create()
  */
-ZTEST_USER(thread_error_case, test_thread_create_essential)
+ZTEST_USER(thread_error_case, test_thread_create_essential_denied)
 {
 	create_negative_test_thread(THREAD_CREATE_ESSENTIAL);
 }

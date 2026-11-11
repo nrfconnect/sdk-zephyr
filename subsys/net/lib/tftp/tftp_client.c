@@ -17,7 +17,7 @@ LOG_MODULE_REGISTER(tftp_client, CONFIG_TFTP_LOG_LEVEL);
 #include "net_private.h"
 
 #define ADDRLEN(sa) \
-	(sa.sa_family == NET_AF_INET ? \
+	(sa->sa_family == NET_AF_INET ? \
 		sizeof(struct net_sockaddr_in) : sizeof(struct net_sockaddr_in6))
 
 static char *error_msg(struct tftpc *client, int rcv_size)
@@ -300,13 +300,14 @@ static int send_request(int sock, struct tftpc *client, int request, const char 
 		req_size = make_request(client->tftp_buf, request, remote_file, mode);
 
 		/* Send the request to the server */
-		ret = zsock_sendto(sock, client->tftp_buf, req_size, 0, &client->server,
-				   ADDRLEN(client->server));
+		ret = zsock_sendto(sock, client->tftp_buf, req_size, 0,
+				   net_sad(&client->server_addr),
+				   ADDRLEN(net_sad(&client->server_addr)));
 		if (ret < 0) {
 			break;
 		}
 
-		ret = recv_from_peer(sock, client, &client->server, false, peer);
+		ret = recv_from_peer(sock, client, net_sad(&client->server_addr), false, peer);
 		if (ret == -EAGAIN) {
 			LOG_DBG("Failed to get data from the TFTP Server"
 				", req. no. %d", tx_count);
@@ -320,7 +321,7 @@ static int send_request(int sock, struct tftpc *client, int request, const char 
 		}
 
 		/* Limit communication to the specific address:port */
-		if (zsock_connect(sock, net_sad(peer), ADDRLEN(client->server)) < 0) {
+		if (zsock_connect(sock, net_sad(peer), ADDRLEN(net_sad(peer))) < 0) {
 			ret = -errno;
 			LOG_ERR("connect failed, err %d", ret);
 			break;
@@ -351,7 +352,7 @@ int tftp_get(struct tftpc *client, const char *remote_file, const char *mode)
 		return -EINVAL;
 	}
 
-	sock = zsock_socket(client->server.sa_family, NET_SOCK_DGRAM, NET_IPPROTO_UDP);
+	sock = zsock_socket(client->server_addr.ss_family, NET_SOCK_DGRAM, NET_IPPROTO_UDP);
 	if (sock < 0) {
 		LOG_ERR("Failed to create UDP socket: %d", errno);
 		return -errno;
@@ -473,7 +474,7 @@ int tftp_put(struct tftpc *client, const char *remote_file, const char *mode,
 		return -EINVAL;
 	}
 
-	sock = zsock_socket(client->server.sa_family, NET_SOCK_DGRAM, NET_IPPROTO_UDP);
+	sock = zsock_socket(client->server_addr.ss_family, NET_SOCK_DGRAM, NET_IPPROTO_UDP);
 	if (sock < 0) {
 		LOG_ERR("Failed to create UDP socket: %d", errno);
 		return -errno;

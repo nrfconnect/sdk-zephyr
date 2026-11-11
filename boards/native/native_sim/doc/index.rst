@@ -178,9 +178,21 @@ When building with either :ref:`minimal <c_library_minimal>` or :ref:`Picolibc<c
 you will build your code in a more similar way as when building for the embedded target,
 you will be able to test your code interacting with that C library,
 and there will be no conflicts with the :ref:`POSIX OS abstraction<posix_support>` shim,
-but, accessing the host for test purposes from your embedded code will be more
-difficult, and you will have a limited choice of
-:ref:`drivers and backends to chose from<native_sim_peripherals_c_compat>`.
+but, accessing the host for test purposes from your embedded code will be more difficult.
+
+.. _native_sim_peripherals_c_compat:
+
+Peripherals and backends C library compatibility
+================================================
+
+While most native_sim drivers and backends support any C library, the drivers listed below have
+limited compatibility:
+
+.. csv-table:: Drivers/backends limited to some libCs
+   :header: "Driver class", "Driver name", "Driver Kconfig", "libC choices"
+
+   "Bluetooth", ":ref:`Userchan <nsim_bt_host_cont>`", ":kconfig:option:`CONFIG_BT_USERCHAN`", "Host and pico libC"
+   "USB", ":ref:`USB native posix <nsim_per_usb>`", ":kconfig:option:`CONFIG_USB_NATIVE_POSIX`", "Host libC"
 
 Cross-compiling native_sim
 **************************
@@ -410,6 +422,70 @@ Here are more details on the peripherals that are currently provided with this b
 
 .. _`net-tools`: https://github.com/zephyrproject-rtos/net-tools
 
+.. _nsim_per_wifi:
+
+**Wi-Fi driver**
+  A native_sim Wi-Fi driver is provided which presents a Wi-Fi station
+  interface in Zephyr backed by a Linux host radio. It runs the Zephyr
+  wpa_supplicant and drives a simulated Linux ``mac80211_hwsim`` radio through
+  the host ``nl80211`` interface. The radio is simulated by the Linux kernel,
+  but the ``nl80211``/``mac80211`` stack driving it is the normal Linux one, so
+  the scan / connect (open and WPA2-PSK) / disconnect flow can be exercised
+  entirely on the host.
+
+  .. figure:: native_sim_wifi.svg
+     :align: center
+
+     native_sim Wi-Fi driver: components, control/data paths and threads.
+
+  The driver is built when a node with the ``zephyr,native-sim-wifi`` compatible
+  is present in the devicetree (add one through a devicetree overlay). The
+  ``host-interface`` property selects the Linux interface the driver binds to,
+  and the MAC address is taken from the standard ``local-mac-address`` /
+  ``zephyr,random-mac-address`` properties:
+
+  .. code-block:: devicetree
+
+     / {
+             wifi0: wifi {
+                     compatible = "zephyr,native-sim-wifi";
+                     host-interface = "zwifi";
+                     zephyr,random-mac-address;
+             };
+     };
+
+  Both can also be overridden from the command line with the ``--wifi-if=<name>``
+  and ``--wifi-mac-addr=<mac>`` options.
+
+  64-bit ``native_sim`` (``native_sim/native/64``) is not supported yet, as the
+  hostap sources the driver pulls in do not build cleanly for 64-bit, so the
+  driver can only be built for a 32-bit ``native_sim`` image on a Linux host.
+  The build links the host ``libnl``, which has to match the word size of the
+  image, so it requires the 32-bit ``libnl`` development libraries; on a
+  Debian/Ubuntu host:
+
+  .. code-block:: console
+
+     $ sudo dpkg --add-architecture i386
+     $ sudo apt update
+     $ sudo apt install gcc-multilib pkg-config libnl-3-dev:i386 libnl-genl-3-dev:i386
+     $ export PKG_CONFIG_PATH=/usr/lib/i386-linux-gnu/pkgconfig
+
+  The simulated radio and the access points it connects to are created on the
+  host with the ``net-setup.sh`` script and the ``zwifi`` configuration from the
+  `net-tools`_ repository. That setup loads the ``mac80211_hwsim`` kernel
+  module, creates the ``zwifi`` station interface, and starts ``hostapd`` and
+  ``dnsmasq`` access points, so ``iw``, ``hostapd`` and ``dnsmasq`` must also be
+  installed. As the binary opens ``AF_PACKET`` and ``nl80211`` sockets,
+  ``zephyr.exe`` must be granted the ``cap_net_raw`` and ``cap_net_admin``
+  capabilities (e.g. ``sudo setcap cap_net_raw,cap_net_admin+ep zephyr.exe``) or
+  be run as root.
+
+  A complete, runnable example including the host setup (and an optional Docker
+  wrapper) is provided by the :zephyr_file:`tests/net/wifi/interop` test.
+
+  Note that this driver can only be used with Linux hosts.
+
 .. _nsim_per_offloaded_sockets:
 
 **Offloaded sockets driver**
@@ -476,6 +552,89 @@ Here are more details on the peripherals that are currently provided with this b
 .. _SDL2:
    https://www.libsdl.org
 
+.. _nsim_per_video_fifo:
+
+**Video capture driver**
+  A video capture driver is provided that reads raw frames from a named pipe
+  (FIFO) on the host, and presents them through the :ref:`video_api` as an
+  ordinary ``zephyr,camera`` device. This makes it possible to feed an
+  application with frames coming from a real webcam, a video file, or a
+  generated test pattern, without any camera hardware.
+
+  The device can be instantiated using the :ref:`snippet-video-native-fifo`
+  snippet, or by adding a devicetree node with the
+  ``zephyr,native-sim-video-fifo`` compatible. The application selects the
+  pixel format and the frame size, up to 1920x1080, with
+  :c:func:`video_set_format`. The default is 320x240 RGB565. The host writer
+  must produce frames of that format, as the driver does no scaling or
+  conversion. In ``ffmpeg``, RGB565, YUYV and GREY are ``rgb565le``,
+  ``yuyv422`` and ``gray``.
+
+  The FIFO path is taken from the ``fifo-path`` devicetree property, and
+  defaults to ``/tmp/zephyr-<device>-<pid>.fifo``. Each instance exposes its own
+  command line override in the form ``--<device>=<path>``. For a node named
+  ``video-fifo`` this is ``--video-fifo=<path>``. A FIFO created by the driver
+  is removed when the simulator exits.
+
+  The FIFO is created by the driver when the application starts streaming. A
+  writer must therefore either create the FIFO itself, for instance with
+  ``mkfifo``, or be started afterwards. For example:
+
+  .. code-block:: console
+
+     $ mkfifo /tmp/zephyr-cam.fifo
+     $ zephyr.exe --video-fifo=/tmp/zephyr-cam.fifo
+
+  Then, from another terminal, feed it a test pattern in the default format:
+
+  .. code-block:: console
+
+     $ ffmpeg -re -f lavfi -i testsrc2=size=320x240:rate=10 \
+         -pix_fmt rgb565le -f rawvideo -y /tmp/zephyr-cam.fifo
+
+  To capture from a webcam instead:
+
+  .. code-block:: console
+
+     $ ffmpeg -f v4l2 -i /dev/video0 \
+         -vf "scale=320:240:force_original_aspect_ratio=increase,crop=320:240,fps=10" \
+         -pix_fmt rgb565le -f rawvideo -y /tmp/zephyr-cam.fifo
+
+  If the path exists but is not a FIFO, the driver prints an error and refuses
+  to start streaming. The FIFO is opened non-blocking and polled from a
+  dedicated thread, so the simulation is never blocked: while no host writer is
+  attached, no frame is delivered. If a writer disconnects in the middle of a
+  frame, the incomplete frame is discarded so that the next writer resumes on a
+  frame boundary.
+
+  Frames are handed to the application as soon as they arrive, without any
+  pacing of its own: the frame rate is entirely the one the host writer
+  produces. When the host has more data pending and the application still has a
+  free buffer, the driver keeps reading without waiting; ``poll-interval-ms``
+  only applies once the host has nothing more to offer.
+
+  The driver enlarges the host pipe to hold two frames. Unprivileged processes
+  are limited by ``/proc/sys/fs/pipe-max-size`` for each pipe (1 MiB by
+  default), and by ``/proc/sys/fs/pipe-user-pages-soft`` for all their pipes
+  together. When the pipe cannot hold two frames, the driver logs a warning, as
+  the frame rate may be limited: the host writer then waits for the driver to
+  make room, which it does every ``poll-interval-ms``. To avoid this, run
+  ``zephyr.exe`` with root privileges (or the CAP_SYS_RESOURCE POSIX
+  capability, to be exact), or raise the limit beforehand. 16 MiB fits two
+  frames of any supported format:
+
+  .. code-block:: console
+
+     $ sudo sysctl fs.pipe-max-size=16777216
+
+  A shorter ``poll-interval-ms`` also helps, down to one system tick, see
+  :kconfig:option:`CONFIG_SYS_CLOCK_TICKS_PER_SEC`.
+
+  When the application holds every buffer, the driver stops reading and the
+  host writer blocks once the pipe is full, so the driver drops nothing. Use a
+  rate-limited writer such as ``ffmpeg -re``: an unpaced one is read as fast as
+  the application returns buffers.
+
 .. _nsim_per_flash_simu:
 
 **EEPROM simulator**
@@ -486,8 +645,8 @@ Here are more details on the peripherals that are currently provided with this b
   Some more information can be found in :ref:`the emulators page <emul_eeprom_simu_brief>`.
 
 **Flash simulator**
-  The flash simulator can also be used in the native targets. In this you have the option to keep
-  the flash content in a binary file on the host file system or in RAM. The behavior of the flash
+  The flash simulator can also be used in the native targets. In these, you have the option to keep
+  the flash content in a binary file on the host filesystem or in RAM. The behavior of the flash
   device can be configured through the native_sim board devicetree or Kconfig settings under
   :kconfig:option:`CONFIG_FLASH_SIMULATOR`.
 
@@ -495,8 +654,8 @@ Here are more details on the peripherals that are currently provided with this b
   working directory. The location of this file can be changed through the
   command line parameter ``--flash``. The flash data will be stored in raw format
   and the file will be truncated to match the size specified in the devicetree
-  configuration. In case the file does not exists the driver will take care of
-  creating the file, else the existing file is used.
+  configuration. If the file does not exist, the driver creates it; otherwise, the existing file is
+  used.
 
   Some more information can be found in :ref:`the emulators page <emul_flash_simu_brief>`.
 
@@ -543,6 +702,28 @@ Here are more details on the peripherals that are currently provided with this b
 
   SocketCAN support can be enabled by using the :ref:`snippet-socketcan-native-sim`.
 
+**Fuel gauge**
+
+  A fuel gauge driver is available for reading battery properties from a Linux
+  power_supply sysfs device on the host through the Zephyr fuel gauge API. It can
+  be enabled with :kconfig:option:`CONFIG_NATIVE_LINUX_FUEL_GAUGE` and
+  configured with the devicetree binding :dtcompatible:`zephyr,native-linux-fuel-gauge`.
+  A property whose sysfs attribute the battery does not provide is reported as unsupported.
+
+  The ``fuel_gauge0`` node of the board is disabled by default, as the name of the battery depends
+  on the host. For example, for ``/sys/class/power_supply/BAT0/`` you can configure:
+
+  .. code-block:: dts
+
+      &fuel_gauge0 {
+        path = "/sys/class/power_supply/BAT0";
+        status = "okay";
+      };
+
+  The ``--fuel-gauge-path=<path>`` command line option overrides the devicetree path, for
+  example to read a directory holding the attribute files of a fake power supply on a host
+  without a battery. The directory must contain a ``type`` file reading ``Battery``.
+
 **LED device**
   Implements a Zephyr LED device backed by a Linux LED. You configure which
   Linux LED to use by setting the DT ``path`` property to the name of the LED
@@ -562,6 +743,24 @@ Here are more details on the peripherals that are currently provided with this b
           path = "tpacpi::power";
         };
       };
+
+.. _native_linux_temp_sensor:
+
+**Temperature sensor**
+  A sensor driver is available for reading a temperature value from a file on
+  the Linux host through the Zephyr sensor API. It can be enabled with
+  :kconfig:option:`CONFIG_NATIVE_LINUX_TEMP` and configured with the devicetree
+  binding :dtcompatible:`zephyr,native-linux-temp`.
+
+  Linux hwmon temperature files typically expose values in millidegrees Celsius,
+  for example ``/sys/class/hwmon/hwmon0/temp1_input``.
+
+  .. code-block:: dts
+
+     temp_sensor: host_temp {
+       compatible = "zephyr,native-linux-temp";
+       path = "/sys/class/hwmon/hwmon0/temp1_input";
+     };
 
 .. _native_ptty_uart:
 
@@ -660,7 +859,9 @@ driver.
 
 This driver only supports poll mode and interrupt mode. Async mode is not
 supported.
-It has runtime configuration support, but no line control support.
+It has runtime configuration support. With
+:kconfig:option:`CONFIG_UART_LINE_CTRL`, :c:func:`uart_line_ctrl_set` drives the
+port's DTR and RTS lines.
 
 .. _native_sim_backends:
 
@@ -772,42 +973,3 @@ To mount a host directory, pass the ``-volume`` option to the executable on the 
 The option follows Docker volume mount syntax: ``HOST-DIR:ZEPHYR-DIR[:ro]``. An optional ``:ro``
 suffix mounts the volume as read-only. The option can be provided multiple times to mount several
 host directories.
-
-.. _native_sim_peripherals_c_compat:
-
-Peripherals and backends C library compatibility
-************************************************
-
-Today, some native_sim peripherals and backends are, so far, only available when compiling with the
-host libC (:kconfig:option:`CONFIG_EXTERNAL_LIBC`):
-
-.. csv-table:: Drivers/backends vs libC choice
-   :header: Driver class, driver name, driver kconfig, libC choices
-
-     ADC, ADC emul, :kconfig:option:`CONFIG_ADC_EMUL`, All
-     Bluetooth, :ref:`Userchan <nsim_bt_host_cont>`, :kconfig:option:`CONFIG_BT_USERCHAN`, Host and pico libC
-     CAN, CAN native Linux, :kconfig:option:`CONFIG_CAN_NATIVE_LINUX`, All
-     Console backend, :ref:`POSIX arch console <nsim_back_console>`, :kconfig:option:`CONFIG_POSIX_ARCH_CONSOLE`, All
-     Display, :ref:`Display SDL <nsim_per_disp_sdl>`, :kconfig:option:`CONFIG_SDL_DISPLAY`, All
-     Entropy, :ref:`Native simulator entropy <nsim_per_entr>`, :kconfig:option:`CONFIG_FAKE_ENTROPY_NATIVE_SIM`, All
-     EEPROM, EEPROM simulator, :kconfig:option:`CONFIG_EEPROM_SIMULATOR`, All
-     EEPROM, EEPROM emulator, :kconfig:option:`CONFIG_EEPROM_EMULATOR`, All
-     Ethernet, :ref:`Eth native_tap <nsim_per_ethe>`, :kconfig:option:`CONFIG_ETH_NATIVE_TAP`, All
-     Flash, :ref:`Flash simulator <nsim_per_flash_simu>`, :kconfig:option:`CONFIG_FLASH_SIMULATOR`, All
-     File System, :ref:`Host filesystem mount <native_mount_fs>`, :kconfig:option:`CONFIG_FILE_SYSTEM_NATIVE_MOUNT`, All
-     FUSE, :ref:`Host based filesystem access <native_fuse_flash>`, :kconfig:option:`CONFIG_FUSE_FS_ACCESS`, All
-     GPIO, GPIO emulator, :kconfig:option:`CONFIG_GPIO_EMUL`, All
-     GPIO, SDL GPIO emulator, :kconfig:option:`CONFIG_GPIO_EMUL_SDL`, All
-     HWINFO, HWINFO native, :kconfig:option:`CONFIG_HWINFO_NATIVE`, All
-     I2C, I2C emulator, :kconfig:option:`CONFIG_I2C_EMUL`, All
-     Input, Input SDL touch, :kconfig:option:`CONFIG_INPUT_SDL_TOUCH`, All
-     Input, Linux evdev, :kconfig:option:`CONFIG_NATIVE_LINUX_EVDEV`, All
-     Logger backend, :ref:`Native backend <nsim_back_logger>`, :kconfig:option:`CONFIG_LOG_BACKEND_NATIVE_POSIX`, All
-     Offloaded sockets, :ref:`nsim_per_offloaded_sockets`, :kconfig:option:`CONFIG_NET_NATIVE_OFFLOADED_SOCKETS`, All
-     RTC, RTC emul, :kconfig:option:`CONFIG_RTC_EMUL`, All
-     Serial, :ref:`UART native PTY <native_ptty_uart>`, :kconfig:option:`CONFIG_UART_NATIVE_PTY`, All
-     Serial, :ref:`UART native TTY <native_tty_uart>`, :kconfig:option:`CONFIG_UART_NATIVE_TTY`, All
-     SPI, SPI emul, :kconfig:option:`CONFIG_SPI_EMUL`, All
-     System tick, Native_sim timer, :kconfig:option:`CONFIG_NATIVE_SIM_TIMER`, All
-     Tracing, :ref:`Posix tracing backend <nsim_back_trace>`, :kconfig:option:`CONFIG_TRACING_BACKEND_POSIX`, All
-     USB, :ref:`USB native posix <nsim_per_usb>`, :kconfig:option:`CONFIG_USB_NATIVE_POSIX`, Host libC

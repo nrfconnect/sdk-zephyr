@@ -29,6 +29,7 @@ except ImportError:
 
 # Populated in do_add_parser()
 DEFAULT_JLINK_EXE = None
+DEFAULT_JLINK_GDB_SERVER = None
 DEFAULT_JLINK_GDB_PORT = 2331
 DEFAULT_JLINK_RTT_PORT = 19021
 
@@ -52,13 +53,13 @@ class JLinkBinaryRunner(ZephyrBinaryRunner):
                  dt_flash=True, erase=True, reset=False, reset_type=None,
                  iface='swd', speed='auto',
                  flash_script = None, loader=None, flash_sram=False,
-                 gdbserver='JLinkGDBServer',
+                 gdbserver=DEFAULT_JLINK_GDB_SERVER,
                  gdb_host='',
                  gdb_port=DEFAULT_JLINK_GDB_PORT,
                  rtt_port=DEFAULT_JLINK_RTT_PORT,
                  rtt_channel=None,
                  tui=False, tool_opt=None, dev_id_type=None, batch=False,
-                 pre_script_cmds=None):
+                 pre_script_cmds=None, gdb_init=None):
         super().__init__(cfg)
         self.file = cfg.file
         self.file_type = cfg.file_type
@@ -88,6 +89,7 @@ class JLinkBinaryRunner(ZephyrBinaryRunner):
         self.dev_id_type = dev_id_type
         self.is_batch = batch
         self.pre_script_cmds = pre_script_cmds
+        self.gdb_init = gdb_init or []
 
         self.tool_opt = []
         if tool_opt is not None:
@@ -127,7 +129,7 @@ class JLinkBinaryRunner(ZephyrBinaryRunner):
     def capabilities(cls):
         return RunnerCaps(commands={'flash', 'debug', 'debugserver', 'attach', 'rtt', 'reset'},
                           dev_id=True, flash_addr=True, erase=True, reset=True, reset_types=True,
-                          tool_opt=True, file=True, rtt=True, batch_debug=True)
+                          tool_opt=True, file=True, rtt=True, batch_debug=True, gdb_init=True)
 
     @classmethod
     def dev_id_help(cls) -> str:
@@ -142,7 +144,7 @@ class JLinkBinaryRunner(ZephyrBinaryRunner):
 
     @staticmethod
     def default_jlink():
-        global DEFAULT_JLINK_EXE
+        global DEFAULT_JLINK_EXE, DEFAULT_JLINK_GDB_SERVER
 
         if sys.platform == 'win32':
             # JLink.exe can collide with the JDK executable of the same name
@@ -155,14 +157,17 @@ class JLinkBinaryRunner(ZephyrBinaryRunner):
                 # last, and not to the latest version.
                 key = winreg.OpenKeyEx(
                     winreg.HKEY_CURRENT_USER, r"Software\SEGGER\J-Link")
-                DEFAULT_JLINK_EXE = (
-                    Path(winreg.QueryValueEx(key, "InstallPath")[0])
-                    / "JLink.exe")
+                path = Path(winreg.QueryValueEx(key, "InstallPath")[0])
+                DEFAULT_JLINK_EXE = path / "JLink.exe"
+                DEFAULT_JLINK_GDB_SERVER = path / "JLinkGDBServer.exe"
+
             except Exception:
                 # Not found via the registry, hope that $PATH is correct
                 DEFAULT_JLINK_EXE = "JLink.exe"
+                DEFAULT_JLINK_GDB_SERVER = "JLinkGDBServer.exe"
         else:
             DEFAULT_JLINK_EXE = "JLinkExe"
+            DEFAULT_JLINK_GDB_SERVER = "JLinkGDBServer"
 
     @classmethod
     def do_add_parser(cls, parser):
@@ -186,8 +191,9 @@ class JLinkBinaryRunner(ZephyrBinaryRunner):
                             help='Custom flashing script, default is None')
         parser.add_argument('--tui', default=False, action='store_true',
                             help='if given, GDB uses -tui')
-        parser.add_argument('--gdbserver', default='JLinkGDBServer',
-                            help='GDB server, default is JLinkGDBServer')
+        parser.add_argument('--gdbserver', default=DEFAULT_JLINK_GDB_SERVER,
+                            help=f'''GDB server, default is
+                            {DEFAULT_JLINK_GDB_SERVER}''')
         parser.add_argument('--gdb-host', default='',
                             help='custom gdb host, defaults to the empty string '
                             'and runs a gdb server')
@@ -198,8 +204,6 @@ class JLinkBinaryRunner(ZephyrBinaryRunner):
                             {DEFAULT_JLINK_EXE}''')
         parser.add_argument('--reset-after-load', action=argparse.BooleanOptionalAction,
                             dest='reset', help='obsolete synonym for --reset/--no-reset')
-        parser.add_argument('--rtt-client', default='JLinkRTTClient',
-                            help='RTT client, default is JLinkRTTClient')
         parser.add_argument('--rtt-port', default=DEFAULT_JLINK_RTT_PORT,
                             help=f'jlink rtt port, defaults to {DEFAULT_JLINK_RTT_PORT}')
         parser.add_argument('--rtt-channel', type=int, default=None,
@@ -237,7 +241,8 @@ class JLinkBinaryRunner(ZephyrBinaryRunner):
                                  tui=args.tui, tool_opt=args.tool_opt,
                                  dev_id_type=args.dev_id_type,
                                  batch=args.batch,
-                                 pre_script_cmds=args.pre_script_cmds)
+                                 pre_script_cmds=args.pre_script_cmds,
+                                 gdb_init=args.gdb_init)
 
     def print_gdbserver_message(self):
         if not self.thread_info_enabled:
@@ -360,7 +365,7 @@ class JLinkBinaryRunner(ZephyrBinaryRunner):
             device_select = 'usb'
 
         server_cmd = (
-            [self.gdbserver]
+            [str(self.gdbserver)]
             + ['-select', device_select]
             + ['-port', str(self.gdb_port)]
             + ['-if', self.iface]
@@ -455,11 +460,16 @@ class JLinkBinaryRunner(ZephyrBinaryRunner):
                 client_cmd += ['-ex', 'monitor halt',
                                '-ex', 'monitor reset',
                                '-ex', 'load']
+            if command in ('debug', 'attach'):
+                if self.reset and not self.is_batch:
+                    client_cmd += ['-ex', 'monitor reset']
+                # Run the user's commands after the last reset, so that nothing
+                # discards their effect, and while the target is still halted.
+                client_cmd += self.gdb_ex_args(self.gdb_init)
                 if self.is_batch:
                     client_cmd += ['-ex', 'monitor go', '-ex', 'disconnect', '-ex', 'quit']
-                elif self.reset:
-                    client_cmd += ['-ex', 'monitor reset']
             if command == 'reset':
+                # A fixed sequence with no user session, so no gdb_init here.
                 client_cmd += [
                     '-ex', 'monitor halt',
                     '-ex', 'monitor reset',

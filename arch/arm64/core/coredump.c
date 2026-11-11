@@ -5,7 +5,9 @@
  */
 
 #include <string.h>
+#include <zephyr/kernel.h>
 #include <zephyr/debug/coredump.h>
+#include <kernel_arch_func.h>
 
 /*
  * v1: 22 registers (x0-x18, lr, spsr, elr)
@@ -48,6 +50,10 @@ struct arm64_arch_block {
  * if defined within function. So define it here.
  */
 static struct arm64_arch_block arch_blk;
+
+#if defined(CONFIG_DEBUG_COREDUMP_THREAD_STACK_TOP)
+static uintptr_t arm64_coredump_fault_sp;
+#endif
 
 void arch_coredump_info_dump(const struct arch_esf *esf)
 {
@@ -113,6 +119,9 @@ void arch_coredump_info_dump(const struct arch_esf *esf)
 		arch_blk.r.sp = esf->sp;
 	}
 #endif
+#if defined(CONFIG_DEBUG_COREDUMP_THREAD_STACK_TOP)
+	arm64_coredump_fault_sp = arch_blk.r.sp;
+#endif
 
 	/* Send for output */
 	coredump_buffer_output((uint8_t *)&hdr, sizeof(hdr));
@@ -123,3 +132,115 @@ uint16_t arch_coredump_tgt_code_get(void)
 {
 	return COREDUMP_TGT_ARM64;
 }
+
+/*
+ * Return the saved stack pointer for a thread so the coredump THREADS mode
+ * can determine how much of the stack was in use at crash time and avoid
+ * dumping the idle lower portion (CONFIG_DEBUG_COREDUMP_THREAD_STACK_TOP).
+ *
+ * For sleeping/suspended threads the scheduler saves sp_elx (EL1 SP) in
+ * callee_saved before context-switching away.  For the currently faulting
+ * thread callee_saved is stale; return the SP captured from the ESF in
+ * arch_coredump_info_dump() (same approach as Cortex-M and RISC-V).
+ */
+uintptr_t arch_coredump_stack_ptr_get(const struct k_thread *thread)
+{
+#if defined(CONFIG_DEBUG_COREDUMP_THREAD_STACK_TOP)
+	if (thread == _current) {
+		return arm64_coredump_fault_sp;
+	}
+#endif
+
+	return thread->callee_saved.sp_elx;
+}
+
+#ifdef CONFIG_DEBUG_COREDUMP_SMP_FREEZE_CPUS
+/*
+ * Register block takes up too much stack space if defined within the
+ * function, same reasoning as arch_blk above.
+ */
+static struct arm64_arch_block cpu_snapshot_blk;
+
+/*
+ * Emit a live register snapshot for a CPU frozen by
+ * arch_coredump_freeze_other_cpus(), in the same on-wire layout as the
+ * panicking thread's own arch block (arm64_arch_block / ARCH_HDR_VER 2) so
+ * existing tooling can decode it without a separate format. cpu snapshots
+ * use their own section ID (COREDUMP_CPU_SNAPSHOT_HDR_ID) rather than
+ * COREDUMP_ARCH_HDR_ID because there is one per frozen CPU, tagged with
+ * which CPU and which thread it came from -- not a single, implicit block.
+ *
+ * No-op if the given CPU was never successfully frozen (self, never
+ * booted, or timed out waiting for it to respond).
+ */
+void arch_coredump_cpu_snapshot_dump(unsigned int cpu)
+{
+	const struct arch_esf *esf;
+	const uint64_t *x19_x29;
+	uintptr_t sp;
+	struct k_thread *thread;
+	struct coredump_cpu_snapshot_hdr_t hdr = {
+		.id = COREDUMP_CPU_SNAPSHOT_HDR_ID,
+		.hdr_version = COREDUMP_CPU_SNAPSHOT_HDR_VER,
+		.num_bytes = sizeof(cpu_snapshot_blk),
+		.cpu_id = cpu,
+	};
+
+	if (cpu == arch_curr_cpu()->id) {
+		/*
+		 * This is the panicking CPU itself: it was never frozen
+		 * (freeze only ever targets *other* CPUs), so there is no
+		 * live snapshot for it -- its real register state is
+		 * already the arch info block emitted separately. Emit a
+		 * zero-payload marker recording which thread was actually
+		 * panicking here, so tooling can identify the panicking
+		 * thread directly (this entry's thread_ptr) instead of
+		 * inferring it by "whichever CPU's current thread has no
+		 * snapshot" -- a heuristic that breaks if some *other* CPU's
+		 * freeze also happens to time out for an unrelated reason,
+		 * confirmed on hardware (hs3_smp_baseline: cpu 0's freeze
+		 * timed out even though cpu 0 was not the panicking CPU).
+		 */
+		hdr.num_bytes = 0;
+		hdr.thread_ptr = (uintptr_t)arch_curr_cpu()->current;
+		coredump_buffer_output((uint8_t *)&hdr, sizeof(hdr));
+		return;
+	}
+
+	if (!arm64_coredump_freeze_get_snapshot(cpu, &esf, &x19_x29, &sp, &thread)) {
+		return;
+	}
+
+	hdr.thread_ptr = (uintptr_t)thread;
+
+	(void)memset(&cpu_snapshot_blk, 0, sizeof(cpu_snapshot_blk));
+
+	cpu_snapshot_blk.r.x0 = esf->x0;
+	cpu_snapshot_blk.r.x1 = esf->x1;
+	cpu_snapshot_blk.r.x2 = esf->x2;
+	cpu_snapshot_blk.r.x3 = esf->x3;
+	cpu_snapshot_blk.r.x4 = esf->x4;
+	cpu_snapshot_blk.r.x5 = esf->x5;
+	cpu_snapshot_blk.r.x6 = esf->x6;
+	cpu_snapshot_blk.r.x7 = esf->x7;
+	cpu_snapshot_blk.r.x8 = esf->x8;
+	cpu_snapshot_blk.r.x9 = esf->x9;
+	cpu_snapshot_blk.r.x10 = esf->x10;
+	cpu_snapshot_blk.r.x11 = esf->x11;
+	cpu_snapshot_blk.r.x12 = esf->x12;
+	cpu_snapshot_blk.r.x13 = esf->x13;
+	cpu_snapshot_blk.r.x14 = esf->x14;
+	cpu_snapshot_blk.r.x15 = esf->x15;
+	cpu_snapshot_blk.r.x16 = esf->x16;
+	cpu_snapshot_blk.r.x17 = esf->x17;
+	cpu_snapshot_blk.r.x18 = esf->x18;
+	cpu_snapshot_blk.r.lr = esf->lr;
+	cpu_snapshot_blk.r.spsr = esf->spsr;
+	cpu_snapshot_blk.r.elr = esf->elr;
+	cpu_snapshot_blk.r.fp = x19_x29[10]; /* x29 */
+	cpu_snapshot_blk.r.sp = sp;
+
+	coredump_buffer_output((uint8_t *)&hdr, sizeof(hdr));
+	coredump_buffer_output((uint8_t *)&cpu_snapshot_blk, sizeof(cpu_snapshot_blk));
+}
+#endif /* CONFIG_DEBUG_COREDUMP_SMP_FREEZE_CPUS */

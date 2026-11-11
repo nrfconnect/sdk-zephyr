@@ -6,7 +6,7 @@
  * from mimxrt1060_evk.mex
  */
 
-#include <nxp/nxp_imx/rt/mimxrt1062dvl6a-pinctrl.dtsi>
+#include <nxp/imxrt/imxrt10xx/pinctrl/mimxrt1062dvl6a-pinctrl.dtsi>
 
 &pinctrl {
 	/* ADC1 inputs 0 and 15 */
@@ -57,8 +57,8 @@
 			bias-disable;
 			drive-strength = "r0-6";
 			slew-rate = "fast";
-			nxp,speed = "50-mhz";
 			input-enable;
+			nxp,speed = "50-mhz";
 		};
 
 		group1 {
@@ -154,8 +154,8 @@
 			bias-pull-down;
 			bias-pull-down-value = "100k";
 			slew-rate = "fast";
-			nxp,speed = "200-mhz";
 			input-enable;
+			nxp,speed = "200-mhz";
 		};
 
 		group1 {
@@ -172,8 +172,8 @@
 				 <&iomuxc_gpio_sd_b1_11_flexspi_a_data3>;
 			drive-strength = "r0-6";
 			slew-rate = "fast";
-			nxp,speed = "200-mhz";
 			input-enable;
+			nxp,speed = "200-mhz";
 		};
 	};
 
@@ -224,8 +224,8 @@
 			drive-strength = "r0-6";
 			drive-open-drain;
 			slew-rate = "slow";
-			nxp,speed = "100-mhz";
 			input-enable;
+			nxp,speed = "100-mhz";
 		};
 	};
 
@@ -361,6 +361,21 @@
 				 <&iomuxc_gpio_ad_b1_15_sai1_tx_sync>;
 			drive-strength = "r0-6";
 			slew-rate = "slow";
+			input-enable;
+			nxp,speed = "100-mhz";
+		};
+	};
+
+	pinmux_sai2: pinmux_sai2 {
+		group0 {
+			pinmux = <&iomuxc_gpio_ad_b0_10_sai2_mclk>,
+				 <&iomuxc_gpio_ad_b0_04_sai2_tx_sync>,
+				 <&iomuxc_gpio_ad_b0_05_sai2_tx_bclk>,
+				 <&iomuxc_gpio_ad_b0_09_sai2_tx_data>,
+				 <&iomuxc_gpio_ad_b0_08_sai2_rx_data>;
+			drive-strength = "r0-6";
+			slew-rate = "fast";
+			input-enable;
 			nxp,speed = "100-mhz";
 		};
 	};

@@ -79,7 +79,7 @@ static inline int fls_z(unsigned int x)
 	return 0;
 }
 
-/* wait 500ms & wakeup every millisecond */
+/* Poll for up to 500ms. */
 #define WAIT_QUIESCENT 500
 
 static int its_force_quiescent(struct gicv3_its_data *data)
@@ -103,7 +103,7 @@ static int its_force_quiescent(struct gicv3_its_data *data)
 			return -EBUSY;
 		}
 
-		k_msleep(1);
+		k_busy_wait(USEC_PER_MSEC);
 		reg = sys_read32(data->base + GITS_CTLR);
 	}
 
@@ -194,7 +194,7 @@ static int its_alloc_tables(struct gicv3_its_data *data)
 				 * entry size.
 				 */
 				lvl2_width = fls_z(page_size / entry_size) - 1;
-				device_ids -= lvl2_width + 1;
+				device_ids -= lvl2_width;
 
 				entry_size = GITS_LVL1_ENTRY_SIZE;
 
@@ -209,6 +209,11 @@ static int its_alloc_tables(struct gicv3_its_data *data)
 			break;
 		default:
 			continue;
+		}
+
+		if (page_cnt > GITS_BASER_SIZE_MASK + 1UL) {
+			LOG_ERR("ITS table requires too many pages: %zu", page_cnt);
+			return -EINVAL;
 		}
 
 		LOG_INF("Allocating %s table of %ldx%ldK pages (%ld bytes entry)",
@@ -446,7 +451,7 @@ static void its_setup_cmd_queue(const struct device *dev)
 	/* Zero out cmd table */
 	memset(cfg->cmd_queue, 0, cfg->cmd_queue_size);
 
-	reg |= MASK_SET(cfg->cmd_queue_size / SIZE_4K, GITS_CBASER_SIZE);
+	reg |= MASK_SET((cfg->cmd_queue_size / SIZE_4K) - 1, GITS_CBASER_SIZE);
 	reg |= MASK_SET(GIC_BASER_SHARE_INNER, GITS_CBASER_SHAREABILITY);
 	reg |= MASK_SET((uintptr_t)cfg->cmd_queue >> GITS_CBASER_ADDR_SHIFT, GITS_CBASER_ADDR);
 	reg |= MASK_SET(GIC_BASER_CACHE_RAWAWB, GITS_CBASER_OUTER_CACHE);
@@ -532,7 +537,7 @@ static int gicv3_its_init_device_id(const struct device *dev, uint32_t device_id
 		size_t offset = device_id >> data->indirect_dev_lvl2_width;
 
 		/* Check if DeviceID can fit in the Level 1 table */
-		if (offset > (1 << data->indirect_dev_lvl1_width)) {
+		if (offset >= (1 << data->indirect_dev_lvl1_width)) {
 			return -EINVAL;
 		}
 
@@ -567,8 +572,9 @@ static int gicv3_its_init_device_id(const struct device *dev, uint32_t device_id
 		}
 	}
 
-	/* ITT must be of power of 2 */
+	/* ITT must be power of 2 — round up to next power-of-2 */
 	nr_ites = MAX(2, nites);
+	nr_ites = 1 << fls_z(nr_ites - 1);
 	alloc_size = ROUND_UP(nr_ites * entry_size, 256);
 
 	LOG_INF("Allocating ITT for DeviceID %x and %d vectors (%ld bytes entry)",

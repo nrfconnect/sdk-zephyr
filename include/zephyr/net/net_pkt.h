@@ -143,6 +143,7 @@ struct net_pkt {
 
 	/** @cond ignore */
 
+#if defined(CONFIG_NET_TCP) || defined(CONFIG_NET_UDP_OPTIONS)
 	/* TCP or UDP are mutually exclusive so they can share the same memory */
 	union {
 #if defined(CONFIG_NET_TCP)
@@ -154,6 +155,7 @@ struct net_pkt {
 		uint16_t udp_opt_surplus_len;
 #endif
 	};
+#endif /* CONFIG_NET_TCP || CONFIG_NET_UDP_OPTIONS */
 
 #if defined(CONFIG_NET_PKT_ORIG_IFACE)
 	struct net_if *orig_iface; /* Original network interface */
@@ -260,8 +262,9 @@ struct net_pkt {
 	uint8_t l2_processed : 1; /* Set to 1 if this packet has already been
 				   * processed by the L2
 				   */
-	uint8_t chksum_done : 1; /* Checksum has already been computed for
-				  * the packet.
+	uint8_t chksum_done : 1; /* The transport layer checksum is already
+				  * in the packet, see
+				  * net_pkt_is_chksum_done().
 				  */
 	uint8_t loopback : 1; /* Packet is a loop back packet. */
 #if defined(CONFIG_NET_IP_FRAGMENT)
@@ -430,17 +433,17 @@ static inline struct net_if *net_pkt_iface(struct net_pkt *pkt)
 
 static inline void net_pkt_set_iface(struct net_pkt *pkt, struct net_if *iface)
 {
+	struct net_linkaddr *lladdr = net_if_get_link_addr(iface);
+
 	pkt->iface = iface;
 
 	/* If the network interface is set in pkt, then also set the type of
 	 * the network address that is stored in pkt. This is done here so
 	 * that the address type is properly set and is not forgotten.
 	 */
-	if (iface) {
-		uint8_t type = net_if_get_link_addr(iface)->type;
-
-		pkt->lladdr_src.type = type;
-		pkt->lladdr_dst.type = type;
+	if (lladdr != NULL) {
+		pkt->lladdr_src.type = lladdr->type;
+		pkt->lladdr_dst.type = lladdr->type;
 	}
 }
 
@@ -524,6 +527,8 @@ static inline void net_pkt_set_udp_opt_surplus_len(struct net_pkt *pkt,
 #else
 static inline uint16_t net_pkt_udp_opt_surplus_len(struct net_pkt *pkt)
 {
+	ARG_UNUSED(pkt);
+
 	return 0;
 }
 
@@ -615,6 +620,23 @@ static inline void net_pkt_set_l2_processed(struct net_pkt *pkt,
 	pkt->l2_processed = is_l2_processed;
 }
 
+/**
+ * @brief Check whether the transport layer checksum is already in the packet
+ *
+ * True when the stack computed the TCP, UDP or ICMP checksum in software,
+ * or when the packet is forwarded, by IP forwarding or by an Ethernet
+ * bridge, with the checksum its sender put in. The IPv4 header checksum is
+ * not covered.
+ *
+ * A driver that requests checksum insertion per frame then requests the
+ * IPv4 header checksum only. Some hardware computes over the checksum field
+ * as it is and expects it to be zero, so inserting into a field that already
+ * holds the checksum gives a wrong one.
+ *
+ * @param pkt Network packet
+ *
+ * @return true if the transport layer checksum is in the packet.
+ */
 static inline bool net_pkt_is_chksum_done(struct net_pkt *pkt)
 {
 	return !!(pkt->chksum_done);
@@ -1926,7 +1948,10 @@ void net_pkt_frag_insert(struct net_pkt *pkt, struct net_buf *frag);
 /**
  * @brief Compact the fragment list of a packet.
  *
- * @details After this there is no more any free space in individual fragments.
+ * @details Move data from later fragments into available tailroom in earlier
+ *          fragments and remove empty fragments. This does not reclaim
+ *          headroom or guarantee that the packet becomes a single fragment.
+ *
  * @param pkt Network packet.
  */
 void net_pkt_compact(struct net_pkt *pkt);
@@ -2682,12 +2707,17 @@ static inline size_t net_pkt_get_len(struct net_pkt *pkt)
 int net_pkt_update_length(struct net_pkt *pkt, size_t length);
 
 /**
- * @brief Remove data from the start of the packet.
+ * @brief Remove data from the packet at the current cursor position.
  *
- * @details net_pkt's cursor should be properly initialized.
- *          Note that net_pkt's cursor is reset by this function.
- *          This functions works in similar way as net_buf_pull(),
- *          but it can handle multiple net_buf fragments.
+ * @details The packet cursor should be properly initialized and positioned.
+ *          The cursor is reset by this function. This function works in a
+ *          similar way to net_buf_pull(), but it can handle multiple net_buf
+ *          fragments.
+ *
+ *          The underlying fragment layout is not preserved: remaining data
+ *          may be moved or a fragment's data pointer may be advanced. Callers
+ *          must not rely on fragment data pointers, headroom, or tailroom
+ *          remaining unchanged.
  *
  * @param pkt    Network packet
  * @param length Number of bytes to be removed

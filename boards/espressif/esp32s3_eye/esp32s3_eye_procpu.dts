@@ -5,7 +5,7 @@
  */
 /dts-v1/;
 
-#include "espressif/esp32s3/esp32s3_wroom_n8r8.dtsi"
+#include <espressif/esp32s3/esp32s3.dtsi>
 #include "esp32s3_eye-pinctrl.dtsi"
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 #include <zephyr/dt-bindings/input/esp32-touch-sensor-input.h>
@@ -14,8 +14,8 @@
 #include <zephyr/dt-bindings/display/panel.h>
 
 / {
-	model = "Espressif ESP32S3-EYE PROCPU";
 	compatible = "espressif,esp32s3";
+	model = "Espressif ESP32S3-EYE PROCPU";
 
 	aliases {
 		i2c-0 = &i2c0;
@@ -34,7 +34,6 @@
 		zephyr,bt-hci = &esp32_bt_hci;
 		zephyr,display = &st7789v;
 		zephyr,camera = &lcd_cam_dvp;
-		zephyr,sdhc = &sdhc0;
 	};
 
 	buttons {
@@ -93,8 +92,8 @@
 
 		st7789v: st7789v@0 {
 			compatible = "sitronix,st7789v";
-			mipi-max-frequency = <20000000>;
 			reg = <0>;
+			mipi-max-frequency = <20000000>;
 			width = <240>;
 			height = <240>;
 			x-offset = <0>;
@@ -119,21 +118,30 @@
 	};
 };
 
+&flash0 {
+	reg = <0x0 DT_SIZE_M(8)>;
+	ranges = <0x0 0x0 DT_SIZE_M(8)>;
+};
+
+&psram0 {
+	size = <DT_SIZE_M(8)>;
+};
+
 &dma {
 	status = "okay";
 };
 
 &i2c1 {
-	status = "okay";
 	clock-frequency = <I2C_BITRATE_STANDARD>;
 	pinctrl-0 = <&i2c1_default>;
 	pinctrl-names = "default";
+	status = "okay";
 
 	ov2640: ov2640@30 {
 		compatible = "ovti,ov2640";
 		reg = <0x30>;
-		status = "okay";
 		clock-rate-control = <0x80>;
+		status = "okay";
 
 		port {
 			ov2640_ep_out: endpoint {
@@ -144,15 +152,15 @@
 };
 
 &lcd_cam {
-	status = "okay";
 	pinctrl-0 = <&lcd_cam_default>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &lcd_cam_dvp {
-	status = "okay";
 	cam-clk = <10000000>;
 	source = <&ov2640>;
+	status = "okay";
 
 	port {
 		dvp_ep_in: endpoint {
@@ -182,9 +190,9 @@
 };
 
 &adc0 {
-	status = "okay";
 	#address-cells = <1>;
 	#size-cells = <0>;
+	status = "okay";
 
 	channel@0 {
 		reg = <0>;
@@ -198,9 +206,9 @@
 &spi3 {
 	#address-cells = <1>;
 	#size-cells = <0>;
-	status = "okay";
 	pinctrl-0 = <&spim3_default>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &wdt0 {
@@ -221,12 +229,12 @@
 
 &sdhc {
 	sdhc0: sdhc@0 {
-		status = "okay";
 
 		pinctrl-0 = <&sdhc0_default>;
 		pinctrl-names = "default";
 		max-bus-freq = <52000000>;
 		bus-width = <1>;
+		status = "okay";
 
 		mmc {
 			compatible = "zephyr,sdmmc-disk";

@@ -4,9 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-&enet_mac {
+&enet {
 	status = "okay";
+};
+
+&enet_mac {
 	phy-handle = <&phy>;
+	status = "okay";
 };
 
 &enet_mdio {
@@ -17,4 +21,8 @@
 		reg = <0>;
 		status = "okay";
 	};
+};
+
+&enet_ptp_clock {
+	status = "okay";
 };

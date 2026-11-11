@@ -78,6 +78,7 @@ struct service_handles {
 		uint16_t obj_id;
 		uint16_t oacp;
 		uint16_t olcp;
+		uint16_t obj_changed;
 	} ots_handles;
 };
 
@@ -143,6 +144,7 @@ static void btp_send_mcp_found_ev(struct bt_conn *conn, uint8_t status,
 	ev.ots_handles.obj_id = sys_cpu_to_le16(svc_chrc_handles.ots_handles.obj_id);
 	ev.ots_handles.oacp = sys_cpu_to_le16(svc_chrc_handles.ots_handles.oacp);
 	ev.ots_handles.olcp = sys_cpu_to_le16(svc_chrc_handles.ots_handles.olcp);
+	ev.ots_handles.obj_changed = sys_cpu_to_le16(svc_chrc_handles.ots_handles.obj_changed);
 
 	tester_event(BTP_SERVICE_ID_MCP, BTP_MCP_DISCOVERED_EV, &ev, sizeof(ev));
 }
@@ -437,12 +439,13 @@ static void mcc_discover_cb(struct bt_conn *conn, int err)
 	svc_chrc_handles.ots_handles.obj_name = mcc_inst->otc.obj_name_handle;
 	svc_chrc_handles.ots_handles.obj_type = mcc_inst->otc.obj_type_handle;
 	svc_chrc_handles.ots_handles.obj_size = mcc_inst->otc.obj_size_handle;
-	svc_chrc_handles.ots_handles.obj_id = mcc_inst->otc.obj_id_handle;
 	svc_chrc_handles.ots_handles.obj_properties = mcc_inst->otc.obj_properties_handle;
 	svc_chrc_handles.ots_handles.obj_created = mcc_inst->otc.obj_created_handle;
 	svc_chrc_handles.ots_handles.obj_modified = mcc_inst->otc.obj_modified_handle;
+	svc_chrc_handles.ots_handles.obj_id = mcc_inst->otc.obj_id_handle;
 	svc_chrc_handles.ots_handles.oacp = mcc_inst->otc.oacp_handle;
 	svc_chrc_handles.ots_handles.olcp = mcc_inst->otc.olcp_handle;
+	svc_chrc_handles.ots_handles.obj_changed = mcc_inst->ots_obj_changed_handle;
 
 	btp_send_mcp_found_ev(conn, err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS, svc_chrc_handles);
 }
@@ -1659,6 +1662,32 @@ static uint8_t mcs_inactive_state_set(const void *cmd, uint16_t cmd_len, void *r
 	return BTP_STATUS_SUCCESS;
 }
 
+static uint8_t mcs_player_name_set(const void *cmd, uint16_t cmd_len, void *rsp, uint16_t *rsp_len)
+{
+	const struct btp_mcs_player_name_set_cmd *cp = cmd;
+	char name[CONFIG_BT_MPL_MEDIA_PLAYER_NAME_MAX];
+	int err;
+
+	ARG_UNUSED(rsp);
+	ARG_UNUSED(rsp_len);
+
+	if (cmd_len < sizeof(*cp) || cmd_len != sizeof(*cp) + cp->name_len ||
+	    cp->name_len >= sizeof(name)) {
+		return BTP_STATUS_FAILED;
+	}
+
+	(void)memcpy(name, cp->name, cp->name_len);
+	name[cp->name_len] = '\0';
+
+	LOG_DBG("MCS Set Media Player Name");
+	err = media_proxy_ctrl_set_player_name(mcs_media_player, name);
+	if (err != 0) {
+		return BTP_STATUS_FAILED;
+	}
+
+	return BTP_STATUS_SUCCESS;
+}
+
 static void mcs_player_instance_cb(struct media_player *plr, int err)
 {
 	ARG_UNUSED(err);
@@ -1768,6 +1797,11 @@ static const struct btp_handler mcs_handlers[] = {
 		.opcode = BTP_MCS_PARENT_GROUP_SET,
 		.expect_len = 0,
 		.func = mcs_parent_group_set,
+	},
+	{
+		.opcode = BTP_MCS_PLAYER_NAME_SET,
+		.expect_len = BTP_HANDLER_LENGTH_VARIABLE,
+		.func = mcs_player_name_set,
 	},
 };
 

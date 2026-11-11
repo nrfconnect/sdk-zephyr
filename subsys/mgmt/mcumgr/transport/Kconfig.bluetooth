@@ -17,6 +17,12 @@ menuconfig MCUMGR_TRANSPORT_BT
 
 if MCUMGR_TRANSPORT_BT
 
+config MCUMGR_TRANSPORT_BT_CLIENT
+	bool "Bluetooth MCUmgr SMP client transport"
+	depends on BT_CENTRAL && BT_GATT_CLIENT && MCUMGR_GRP_TRANSPORT
+	help
+	  Enables connecting to and issuing commands to a remote Bluetooth MCUmgr server.
+
 config MCUMGR_TRANSPORT_BT_REASSEMBLY
 	bool "Reassemble packets in Bluetooth SMP transport"
 	select MCUMGR_TRANSPORT_REASSEMBLY
@@ -99,7 +105,7 @@ config MCUMGR_TRANSPORT_BT_CONN_PARAM_CONTROL_RETRY_TIME
 	  In case connection parameters update fails due to an error, this option specifies the
 	  time of the next update attempt.
 
-endif # MCUMGR_TRASNPORT_BT_CONN_PARAM_CONTROL
+endif # MCUMGR_TRANSPORT_BT_CONN_PARAM_CONTROL
 
 config MCUMGR_TRANSPORT_BT_DYNAMIC_SVC_REGISTRATION
 	bool "Register SMP service at runtime"

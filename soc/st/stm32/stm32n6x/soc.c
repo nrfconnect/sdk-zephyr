@@ -61,6 +61,9 @@ static void soc_rif_config(void)
 	/* DMA2D */
 	RIF_MASTER_CID1_SEC_PRIV(DMA2D);
 	RIF_SLAVE_SEC_PRIV(DMA2D);
+	/* GPU2D */
+	RIF_MASTER_CID1_SEC_PRIV(GPU2D);
+	RIF_SLAVE_SEC_PRIV(GPU2D);
 	/* ETH */
 	RIF_MASTER_CID1_SEC_PRIV(ETH1);
 	RIF_SLAVE_SEC_PRIV(ETH1);
@@ -112,5 +115,16 @@ void soc_early_init_hook(void)
 	/* RIF configuration */
 	if (IS_ENABLED(CONFIG_STM32N6_RIF_OPEN)) {
 		soc_rif_config();
+	}
+
+	if (IS_ENABLED(CONFIG_STM32N6_BRANCH_CACHE)) {
+		/*
+		 * Enable the Cortex-M55's branch cache.
+		 * CCR.BP is banked between Security states
+		 * so this must be done in every environment.
+		 */
+		SCB->CCR |= SCB_CCR_LOB_Msk;
+		__DSB();
+		__ISB();
 	}
 }

@@ -1354,6 +1354,10 @@ static void disconnected_cb(struct bt_conn *conn, uint8_t reason)
 
 	ARG_UNUSED(reason);
 
+	if (!bt_conn_is_type(conn, BT_CONN_TYPE_LE)) {
+		return;
+	}
+
 	mcs_inst = lookup_inst_by_conn(conn);
 	if (mcs_inst != NULL) {
 		(void)reset_mcs_inst(mcs_inst);
@@ -1426,6 +1430,15 @@ static uint8_t discover_otc_char_func(struct bt_conn *conn,
 		} else if (!bt_uuid_cmp(chrc->uuid, BT_UUID_OTS_PROPERTIES)) {
 			LOG_DBG("Object properties %d", chrc->value_handle);
 			mcs_inst->otc.obj_properties_handle = chrc->value_handle;
+		} else if (!bt_uuid_cmp(chrc->uuid, BT_UUID_OTS_FIRST_CREATED)) {
+			LOG_DBG("Object First-Created");
+			mcs_inst->otc.obj_created_handle = chrc->value_handle;
+		} else if (!bt_uuid_cmp(chrc->uuid, BT_UUID_OTS_LAST_MODIFIED)) {
+			LOG_DBG("Object Last-Modified");
+			mcs_inst->otc.obj_modified_handle = chrc->value_handle;
+		} else if (!bt_uuid_cmp(chrc->uuid, BT_UUID_OTS_CHANGED)) {
+			LOG_DBG("Object Changed");
+			mcs_inst->ots_obj_changed_handle = chrc->value_handle;
 		} else if (!bt_uuid_cmp(chrc->uuid, BT_UUID_OTS_ACTION_CP)) {
 			LOG_DBG("Object Action Control Point");
 			mcs_inst->otc.oacp_handle = chrc->value_handle;

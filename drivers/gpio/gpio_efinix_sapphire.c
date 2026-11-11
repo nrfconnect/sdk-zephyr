@@ -36,9 +36,8 @@ LOG_MODULE_REGISTER(gpio_efinix_sapphire);
 
 /* efinix sapphire specific gpio config struct */
 struct gpio_efinix_sapphire_cfg {
-	uint32_t base_addr;
-	int n_gpios;
 	struct gpio_driver_config common;
+	uint32_t base_addr;
 };
 
 /* efinix sapphire specific gpio data struct */
@@ -119,9 +118,7 @@ static int gpio_efinix_sapphire_config(const struct device *dev, gpio_pin_t pin,
 
 static inline uint32_t get_port(const struct gpio_efinix_sapphire_cfg *config)
 {
-	uint32_t c_reg_val = sys_read32(GPIO_OUTPUT_ADDR);
-
-	return (c_reg_val & BIT_MASK(config->n_gpios));
+	return sys_read32(GPIO_OUTPUT_ADDR);
 }
 
 static inline void set_port(const struct gpio_efinix_sapphire_cfg *config, uint32_t value)
@@ -133,7 +130,7 @@ static int gpio_efinix_sapphire_port_get_raw(const struct device *dev, gpio_port
 {
 	const struct gpio_efinix_sapphire_cfg *config = DEV_GPIO_CFG(dev);
 
-	*value = get_port(config);
+	*value = sys_read32(config->base_addr + BSP_GPIO_INPUT) & config->common.port_pin_mask;
 	return 0;
 }
 
@@ -195,16 +192,6 @@ static int gpio_efinix_sapphire_port_toggle_bits(const struct device *dev, gpio_
 	return 0;
 }
 
-static int gpio_efinix_sapphire_init(const struct device *dev)
-{
-	const struct gpio_efinix_sapphire_cfg *config = DEV_GPIO_CFG(dev);
-
-	if (config->n_gpios > 4) {
-		return -EINVAL;
-	}
-	return 0;
-}
-
 /* API map */
 static DEVICE_API(gpio, gpio_efinix_sapphire_api) = {
 	.pin_configure = gpio_efinix_sapphire_config,
@@ -217,12 +204,12 @@ static DEVICE_API(gpio, gpio_efinix_sapphire_api) = {
 
 #define GPIO_EFINIX_SAPPHIRE_INIT(n) \
 	static struct gpio_efinix_sapphire_cfg gpio_efinix_sapphire_cfg_##n = { \
+		.common = GPIO_COMMON_CONFIG_FROM_DT_INST(n), \
 		.base_addr = DT_INST_REG_ADDR(n), \
-		.n_gpios = DT_INST_PROP(n, ngpios), \
 }; \
 static struct gpio_efinix_sapphire_data gpio_efinix_sapphire_data_##n; \
 	DEVICE_DT_INST_DEFINE(n, \
-			    gpio_efinix_sapphire_init, \
+			    NULL, \
 			    NULL, \
 			    &gpio_efinix_sapphire_data_##n, \
 			    &gpio_efinix_sapphire_cfg_##n, \

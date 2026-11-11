@@ -4,6 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * @file
+ * @brief Header file for the VIRTIO virtqueue API.
+ * @ingroup virtqueue_interface
+ */
+
 #ifndef ZEPHYR_VIRTIO_VIRTQUEUE_H_
 #define ZEPHYR_VIRTIO_VIRTQUEUE_H_
 #include <stdint.h>
@@ -234,7 +240,7 @@ struct virtq_buf {
  * @param v virtqueue it operates on
  * @param bufs array of buffers to be added to the virtqueue
  * @param bufs_size amount of buffers
- * @param device_readable_count amount of bufferes readable by the device, the first
+ * @param device_readable_count amount of buffers readable by the device, the first
  * device_readable_count buffers will be set as device readable
  * @param cb callback to be invoked after device returns the buffer chain, can be NULL
  * @param cb_opaque opaque value that will be passed to the cb

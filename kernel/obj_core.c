@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <string.h>
 #include <zephyr/kernel.h>
 #include <zephyr/kernel/obj_core.h>
 #include <kernel_internal.h>
@@ -48,12 +49,52 @@ static bool range_contains(const struct k_obj_range *range, const void *ptr)
 	return (ptr >= range->start) && (ptr < range->end);
 }
 
-/* Object core of the range element */
-static struct k_obj_core *range_core(const struct k_obj_type *type, const void *elem)
+static bool type_ranges_contain(const struct k_obj_type *type, const void *ptr)
 {
-	const uint8_t *obj = type->statics.indirect ? *(const uint8_t *const *)elem : elem;
+	for (size_t i = 0; i < ARRAY_SIZE(type->statics); i++) {
+		const struct k_obj_range *range = &type->statics[i];
+
+		if (range->stride == 0U) {
+			break;
+		}
+		if (range_contains(range, ptr)) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+/* Object core of the range element */
+static struct k_obj_core *range_core(const struct k_obj_type *type,
+				     const struct k_obj_range *range, const void *elem)
+{
+	const uint8_t *obj = range->indirect ? *(const uint8_t *const *)elem : elem;
 
 	return (struct k_obj_core *)(obj + type->obj_core_offset);
+}
+
+/* Objects in the running thread's stack or in the interrupt stack are
+ * transient by construction. Called with the registry lock held, which pins
+ * the current CPU. There is no current thread before the kernel has set one
+ * up, and never with CONFIG_MULTITHREADING=n.
+ */
+static bool in_stack_storage(const void *ptr)
+{
+	uintptr_t addr = (uintptr_t)ptr;
+	const struct k_thread *thread = _current;
+	uintptr_t irq_stack = (uintptr_t)K_KERNEL_STACK_BUFFER(
+		z_interrupt_stacks[_current_cpu->id]);
+	uintptr_t irq_stack_end =
+		irq_stack + K_KERNEL_STACK_SIZEOF(z_interrupt_stacks[0]);
+
+	if ((thread != NULL) && (thread->stack_info.size != 0U) &&
+	    (addr >= thread->stack_info.start) &&
+	    (addr < thread->stack_info.start + thread->stack_info.size)) {
+		return true;
+	}
+
+	return (addr >= irq_stack) && (addr < irq_stack_end);
 }
 
 static struct obj_core_slot *slot_find(const struct k_obj_core *core)
@@ -104,7 +145,7 @@ struct k_obj_type *z_obj_type_init(struct k_obj_type *type,
 	sys_slist_append(&z_obj_type_list, &type->node);
 	type->id = id;
 	type->obj_core_offset = off;
-	type->statics = (struct k_obj_range){ 0 };
+	memset(type->statics, 0, sizeof(type->statics));
 	type->dropped = 0;
 	type->skipped = 0;
 
@@ -114,10 +155,10 @@ struct k_obj_type *z_obj_type_init(struct k_obj_type *type,
 void k_obj_type_init_range(struct k_obj_type *type, const void *start,
 			   const void *end, size_t stride, bool indirect)
 {
-	type->statics.start = start;
-	type->statics.end = end;
-	type->statics.stride = stride;
-	type->statics.indirect = indirect;
+	type->statics[0].start = start;
+	type->statics[0].end = end;
+	type->statics[0].stride = stride;
+	type->statics[0].indirect = indirect;
 }
 
 void k_obj_core_init(struct k_obj_core *obj_core, struct k_obj_type *type)
@@ -133,12 +174,17 @@ void k_obj_core_link(struct k_obj_core *obj_core)
 	struct k_obj_type *type = obj_core->type;
 	struct obj_core_slot *slot;
 
-	if (range_contains(&type->statics,
-			   (const uint8_t *)obj_core - type->obj_core_offset)) {
+	if (type_ranges_contain(type, (const uint8_t *)obj_core - type->obj_core_offset)) {
 		return;
 	}
 
 	k_spinlock_key_t key = k_spin_lock(&obj_core_lock);
+
+	if (in_stack_storage(obj_core)) {
+		type->skipped++;
+		k_spin_unlock(&obj_core_lock, key);
+		return;
+	}
 
 	slot = slot_find(obj_core);
 	if (slot == NULL) {
@@ -186,38 +232,51 @@ void k_obj_core_evict_range(const void *addr, size_t len)
 	}
 }
 
+#ifdef CONFIG_OBJ_CORE_EVICT_ON_FREE
+void sys_heap_release_hook(void *mem, size_t bytes)
+{
+	/* The registry is kernel data; user mode releases never hold
+	 * registered objects.
+	 */
+	if (k_is_user_context()) {
+		return;
+	}
+
+	k_obj_core_evict_range(mem, bytes);
+}
+#endif /* CONFIG_OBJ_CORE_EVICT_ON_FREE */
+
+/* Add the object types defined at build time to the type list and initialize
+ * the object cores of their permanent objects.
+ */
 static void obj_core_init_all(void)
 {
-	STRUCT_SECTION_FOREACH(k_obj_core_desc, desc) {
-		struct k_obj_type *type = desc->type;
+	STRUCT_SECTION_FOREACH(k_obj_type, type) {
+		sys_slist_append(&z_obj_type_list, &type->node);
 
-		z_obj_type_init(type, desc->type_id, desc->obj_core_offset);
-		k_obj_type_init_range(type, desc->objs_start, desc->objs_end,
-				      desc->obj_size, false);
-#ifdef CONFIG_OBJ_CORE_STATS
-		if (desc->stats_desc != NULL) {
-			k_obj_type_stats_init(type, desc->stats_desc);
-		}
-#endif /* CONFIG_OBJ_CORE_STATS */
+		for (size_t r = 0; r < ARRAY_SIZE(type->statics); r++) {
+			const struct k_obj_range *range = &type->statics[r];
 
-		/* Initialize every statically defined object */
-
-		for (const uint8_t *obj = desc->objs_start;
-		     obj < (const uint8_t *)desc->objs_end;
-		     obj += desc->obj_size) {
-			struct k_obj_core *obj_core =
-				(struct k_obj_core *)(obj + desc->obj_core_offset);
-
-			k_obj_core_init(obj_core, type);
-#ifdef CONFIG_OBJ_CORE_STATS
-			if ((desc->stats_desc != NULL) &&
-			    (desc->stats_size != 0)) {
-				k_obj_core_stats_register(
-					obj_core,
-					(void *)(obj + desc->stats_offset),
-					desc->stats_size);
+			if (range->stride == 0U) {
+				break;
 			}
+
+			for (const uint8_t *elem = range->start;
+			     elem < (const uint8_t *)range->end; elem += range->stride) {
+				struct k_obj_core *obj_core = range_core(type, range, elem);
+
+				k_obj_core_init(obj_core, type);
+#ifdef CONFIG_OBJ_CORE_STATS
+				if ((type->stats_desc != NULL) && (type->stats_size != 0)) {
+					k_obj_core_stats_register(
+						obj_core,
+						(void *)((uint8_t *)obj_core -
+							 type->obj_core_offset +
+							 type->stats_offset),
+						type->stats_size);
+				}
 #endif /* CONFIG_OBJ_CORE_STATS */
+			}
 		}
 	}
 }
@@ -226,14 +285,22 @@ K_KERNEL_INIT_PRE(obj_core_init_all);
 
 struct k_obj_type *k_obj_type_find(uint32_t type_id)
 {
-	struct k_obj_type *type;
 	struct k_obj_type *rv = NULL;
 	sys_snode_t *node;
+
+	/* Types defined at build time are valid before the type list is */
+
+	STRUCT_SECTION_FOREACH(k_obj_type, type) {
+		if (type->id == type_id) {
+			return type;
+		}
+	}
 
 	k_spinlock_key_t  key = k_spin_lock(&obj_core_lock);
 
 	SYS_SLIST_FOR_EACH_NODE(&z_obj_type_list, node) {
-		type = CONTAINER_OF(node, struct k_obj_type, node);
+		struct k_obj_type *type = CONTAINER_OF(node, struct k_obj_type, node);
+
 		if (type->id == type_id) {
 			rv = type;
 			break;
@@ -253,20 +320,27 @@ static int walk_statics(struct k_obj_type *type,
 			int (*func)(struct k_obj_core *obj_core, void *data),
 			void *data)
 {
-	const struct k_obj_range *range = &type->statics;
 	int status = 0;
 
-	for (const uint8_t *elem = range->start; elem < (const uint8_t *)range->end;
-	     elem += range->stride) {
-		struct k_obj_core *obj_core = range_core(type, elem);
+	for (size_t r = 0; (status == 0) && (r < ARRAY_SIZE(type->statics)); r++) {
+		const struct k_obj_range *range = &type->statics[r];
 
-		if (obj_core->type != type) {
-			continue;
+		if (range->stride == 0U) {
+			break;
 		}
 
-		status = func(obj_core, data);
-		if (status != 0) {
-			break;
+		for (const uint8_t *elem = range->start; elem < (const uint8_t *)range->end;
+		     elem += range->stride) {
+			struct k_obj_core *obj_core = range_core(type, range, elem);
+
+			if (obj_core->type != type) {
+				continue;
+			}
+
+			status = func(obj_core, data);
+			if (status != 0) {
+				break;
+			}
 		}
 	}
 

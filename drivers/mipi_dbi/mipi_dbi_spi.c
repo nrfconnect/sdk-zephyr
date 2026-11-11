@@ -23,7 +23,6 @@ LOG_MODULE_REGISTER(mipi_dbi_spi, CONFIG_MIPI_DBI_LOG_LEVEL);
  * command_read function to be optimized out when it is not needed.
  */
 #define MIPI_DBI_SPI_READ_REQUIRED DT_INST_FOREACH_STATUS_OKAY(MIPI_DBI_SPI_WRITE_ONLY_ABSENT) 0
-uint32_t var = MIPI_DBI_SPI_READ_REQUIRED;
 
 /* Expands to 1 if the node configures a gpio in the `te-gpios` property */
 #define MIPI_DBI_SPI_TE_GPIOS_PRESENT(n) DT_INST_NODE_HAS_PROP(n, te_gpios) |
@@ -77,6 +76,7 @@ struct mipi_dbi_spi_data {
 	k_timeout_t te_delay;
 	atomic_t in_active_area;
 	struct gpio_callback te_cb_data;
+	bool te_enabled;
 #endif
 	/* Used for 3 wire mode */
 	uint16_t spi_byte;
@@ -369,7 +369,7 @@ static int mipi_dbi_spi_write_display(const struct device *dev,
 	struct mipi_dbi_spi_data *data = dev->data;
 
 	/* Wait for TE signal, otherwise transferring can begin */
-	if (!atomic_get(&data->in_active_area)) {
+	if (data->te_enabled && !atomic_get(&data->in_active_area)) {
 		ret = k_sem_take(&data->te_signal, K_FOREVER);
 		if (ret < 0) {
 			return ret;
@@ -582,7 +582,21 @@ static int mipi_dbi_spi_configure_te(const struct device *dev,
 	int ret = 0;
 
 	if (edge == MIPI_DBI_TE_NO_EDGE) {
-		/* No configuration */
+		if (!data->te_enabled) {
+			return 0;
+		}
+
+		data->te_enabled = false;
+		ret = gpio_pin_interrupt_configure_dt(&config->tearing_effect, GPIO_INT_DISABLE);
+		if (ret < 0) {
+			return ret;
+		}
+
+		(void)gpio_remove_callback(config->tearing_effect.port, &data->te_cb_data);
+
+		/* Release a write waiting for a TE signal that may not come anymore */
+		k_sem_give(&data->te_signal);
+
 		return 0;
 	}
 
@@ -625,6 +639,7 @@ static int mipi_dbi_spi_configure_te(const struct device *dev,
 	data->te_delay = delay_us;
 	atomic_set(&data->in_active_area, 0);
 	k_sem_init(&data->te_signal, 0, 1);
+	data->te_enabled = true;
 
 	return ret;
 }

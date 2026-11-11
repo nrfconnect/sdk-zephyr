@@ -15,8 +15,9 @@
 
 /** @cond INTERNAL_HIDDEN */
 struct timer_data {
-	int duration_count;
-	int stop_count;
+	/* Updated from ISR context; volatile keeps LTO from caching the reads. */
+	volatile int duration_count;
+	volatile int stop_count;
 };
 static void duration_expire(struct k_timer *timer);
 static void stop_expire(struct k_timer *timer);
@@ -24,7 +25,17 @@ static void stop_expire(struct k_timer *timer);
 /* TESTPOINT: init timer via K_TIMER_DEFINE */
 K_TIMER_DEFINE(ktimer, duration_expire, stop_expire);
 
-static ZTEST_BMEM struct timer_data tdata;
+/*
+ * tdata is written by the timer expiry/stop callbacks (duration_expire(),
+ * stop_expire()) that run asynchronously from the test thread, and polled by
+ * the test after a k_busy_wait(). Mark it volatile so the compiler reloads it
+ * on every access instead of caching it across the busy-wait: under LTO the
+ * whole-program optimizer otherwise proves nothing visible in k_busy_wait()
+ * writes tdata, caches duration_count, and constant-folds the comparisons
+ * (observed as "duration 0 not 1").
+ */
+static ZTEST_BMEM volatile struct timer_data tdata;
+
 /** @endcond */
 
 #define DURATION 100
@@ -47,26 +58,23 @@ static ZTEST_BMEM struct timer_data tdata;
  *
  * @details
  * Passing proves the system uptime clock is a forward-progressing time source
- * usable from user mode: both the 64-bit and lower-32-bit uptime readings
- * increase as wall time elapses, the 32-bit reading observes a millisecond
- * boundary crossing, and k_uptime_delta() reports a non-zero elapsed interval
- * between successive calls.
+ * usable from user mode: both the 64-bit and lower-32-bit millisecond uptime
+ * readings increase as wall time elapses and the 32-bit reading observes a
+ * millisecond boundary crossing.
  *
  * Test steps:
  * - Spin until k_uptime_get() advances by at least 5 ms.
  * - Spin until k_uptime_get_32() advances by at least 5 ms.
  * - Sample the 32-bit uptime, align to a millisecond boundary, and confirm it grew.
- * - Seed a delta reference, then spin until k_uptime_delta() returns non-zero.
  *
  * Expected result:
- * - Uptime readings increase over time and k_uptime_delta() reports elapsed time.
+ * - The millisecond uptime readings increase over time.
  *
- * @see k_uptime_get(), k_uptime_get_32(), k_uptime_delta()
+ * @see k_uptime_get(), k_uptime_get_32()
  */
 ZTEST_USER(clock, test_clock_uptime)
 {
 	uint64_t t64, t32;
-	int64_t d64 = 0;
 
 	/**TESTPOINT: uptime elapse*/
 	t64 = k_uptime_get();
@@ -84,6 +92,90 @@ ZTEST_USER(clock, test_clock_uptime)
 	t32 = k_uptime_get_32();
 	ALIGN_MS_BOUNDARY;
 	zassert_true(k_uptime_get_32() > t32);
+}
+
+/**
+ * @brief Verify the system uptime is reported in system ticks.
+ *
+ * @ingroup kernel_clock_tests
+ *
+ * @details
+ * Passing proves k_uptime_ticks() is a forward-progressing reading of the
+ * system uptime in ticks, usable from user mode.
+ *
+ * Test steps:
+ * - Sample k_uptime_ticks() and spin until it advances.
+ *
+ * Expected result:
+ * - The tick reading increases as wall time elapses.
+ *
+ * @see k_uptime_ticks()
+ */
+ZTEST_USER(clock, test_clock_uptime_ticks)
+{
+	int64_t ticks = k_uptime_ticks();
+
+	/**TESTPOINT: uptime in system ticks advances*/
+	while (k_uptime_ticks() <= ticks) {
+		Z_SPIN_DELAY(50);
+	}
+}
+
+/**
+ * @brief Verify the system uptime is reported in whole seconds.
+ *
+ * @ingroup kernel_clock_tests
+ *
+ * @details
+ * Passing proves k_uptime_seconds() reports the uptime in seconds
+ * consistently with the millisecond uptime clock: the value equals the
+ * floor of the millisecond reading converted to seconds.
+ *
+ * Test steps:
+ * - Sample k_uptime_seconds() between two k_uptime_get() readings.
+ * - Check the seconds value against the floor of both millisecond readings.
+ *
+ * Expected result:
+ * - The seconds reading is bounded by the floors of the surrounding
+ *   millisecond readings.
+ *
+ * @see k_uptime_seconds()
+ */
+ZTEST_USER(clock, test_clock_uptime_seconds)
+{
+	/**TESTPOINT: uptime in seconds is consistent with the millisecond reading*/
+	uint64_t ms_before = k_uptime_get();
+	uint32_t secs = k_uptime_seconds();
+	uint64_t ms_after = k_uptime_get();
+
+	zassert_true(secs >= (ms_before / MSEC_PER_SEC),
+		     "uptime seconds %u below floor of %llu ms", secs, ms_before);
+	zassert_true(secs <= (ms_after / MSEC_PER_SEC),
+		     "uptime seconds %u above floor of %llu ms", secs, ms_after);
+}
+
+/**
+ * @brief Verify elapsed time reporting relative to a reference.
+ *
+ * @ingroup kernel_clock_tests
+ *
+ * @details
+ * Passing proves k_uptime_delta() measures the time elapsed since a
+ * caller-held reference time and updates the reference for the next
+ * measurement.
+ *
+ * Test steps:
+ * - Seed a delta reference, then spin until k_uptime_delta() returns a
+ *   non-zero elapsed time.
+ *
+ * Expected result:
+ * - k_uptime_delta() reports a non-zero interval once time has elapsed.
+ *
+ * @see k_uptime_delta()
+ */
+ZTEST_USER(clock, test_clock_uptime_delta)
+{
+	int64_t d64 = 0;
 
 	/**TESTPOINT: uptime delta*/
 	d64 = k_uptime_delta(&d64);

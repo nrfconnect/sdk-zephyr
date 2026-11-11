@@ -44,6 +44,7 @@ static struct modem_pipe *mock_pipe;
 #define MODEM_CHAT_UTEST_ON_SCRIPT_CALLBACK_BIT		 (9)
 #define MODEM_CHAT_UTEST_ON_CMGL_PARTIAL_CALLED_BIT	 (10)
 #define MODEM_CHAT_UTEST_ON_CMGL_PARTIAL_ANY_CALLED_BIT	 (11)
+#define MODEM_CHAT_UTEST_ON_RESTART_SCRIPT_CALLBACK_BIT	 (12)
 
 static atomic_t callback_called;
 
@@ -139,14 +140,31 @@ static void on_cmgl_any_partial(struct modem_chat *cmd, char **argv, uint16_t ar
 /*************************************************************************************************/
 static enum modem_chat_script_result script_result;
 static void *script_result_user_data;
+static const struct modem_chat_script_chat *script_result_script_chat;
+static enum modem_chat_script_result restart_script_result;
+static int restart_script_run_ret;
 
-static void on_script_result(struct modem_chat *cmd, enum modem_chat_script_result result,
-			     void *user_data)
+static void on_script_result(struct modem_chat *chat, enum modem_chat_script_result result,
+			     const struct modem_chat_script_completion_info *info, void *user_data)
 {
+	zassert_not_null(chat);
+	zassert_not_null(info);
+	zassert_not_null(info->script);
+	zassert_not_null(info->script_chat);
+
 	atomic_set_bit(&callback_called, MODEM_CHAT_UTEST_ON_SCRIPT_CALLBACK_BIT);
 	script_result = result;
 	script_result_user_data = user_data;
+	script_result_script_chat = info->script_chat;
 }
+
+static void on_restart_script_result(struct modem_chat *chat, enum modem_chat_script_result result,
+				     const struct modem_chat_script_completion_info *info,
+				     void *user_data);
+static void on_restart_script_start_next(struct modem_chat *chat,
+					 enum modem_chat_script_result result,
+					 const struct modem_chat_script_completion_info *info,
+					 void *user_data);
 
 /*************************************************************************************************/
 /*                                            Script                                             */
@@ -235,6 +253,56 @@ MODEM_CHAT_SCRIPT_CMDS_DEFINE(
 MODEM_CHAT_SCRIPT_DEFINE(script_echo, script_echo_cmds, abort_matches, on_script_result, 4);
 
 /*************************************************************************************************/
+/*                Scripts for starting a script from a script completion callback                 */
+/*************************************************************************************************/
+MODEM_CHAT_MATCH_DEFINE(first_match, "FIRST", "", NULL);
+MODEM_CHAT_MATCH_DEFINE(second_match, "SECOND", "", NULL);
+
+MODEM_CHAT_SCRIPT_CMDS_DEFINE(
+	script_callback_restart_first_cmds,
+	MODEM_CHAT_SCRIPT_CMD_RESP("FIRST", first_match),
+);
+
+MODEM_CHAT_SCRIPT_CMDS_DEFINE(
+	script_callback_restart_second_cmds,
+	MODEM_CHAT_SCRIPT_CMD_RESP("SECOND", second_match),
+);
+
+MODEM_CHAT_SCRIPT_DEFINE(script_callback_restart_first, script_callback_restart_first_cmds,
+			 abort_matches, on_restart_script_start_next, 4);
+MODEM_CHAT_SCRIPT_DEFINE(script_callback_restart_second, script_callback_restart_second_cmds,
+			 abort_matches, on_restart_script_result, 4);
+
+static void on_restart_script_start_next(struct modem_chat *chat,
+					 enum modem_chat_script_result result,
+					 const struct modem_chat_script_completion_info *info,
+					 void *user_data)
+{
+	zassert_equal(chat, &cmd);
+	zassert_not_null(info);
+	zassert_equal(info->script, &script_callback_restart_first);
+	zassert_equal(info->script_chat, &script_callback_restart_first_cmds[0]);
+	zassert_equal(result, MODEM_CHAT_SCRIPT_RESULT_SUCCESS);
+	zassert_equal(user_data, &cmd_user_data);
+
+	restart_script_run_ret = modem_chat_script_run(chat, &script_callback_restart_second);
+}
+
+static void on_restart_script_result(struct modem_chat *chat, enum modem_chat_script_result result,
+				     const struct modem_chat_script_completion_info *info,
+				     void *user_data)
+{
+	zassert_equal(chat, &cmd);
+	zassert_not_null(info);
+	zassert_equal(info->script, &script_callback_restart_second);
+	zassert_equal(info->script_chat, &script_callback_restart_second_cmds[0]);
+	zassert_equal(user_data, &cmd_user_data);
+
+	atomic_set_bit(&callback_called, MODEM_CHAT_UTEST_ON_RESTART_SCRIPT_CALLBACK_BIT);
+	restart_script_result = result;
+}
+
+/*************************************************************************************************/
 /*                                      Script responses                                         */
 /*************************************************************************************************/
 static const char at_response[] = "AT\r\n";
@@ -289,6 +357,9 @@ static void test_modem_chat_before(void *f)
 {
 	/* Reset callback called */
 	atomic_set(&callback_called, 0);
+	script_result_script_chat = NULL;
+	restart_script_result = MODEM_CHAT_SCRIPT_RESULT_TIMEOUT;
+	restart_script_run_ret = -EALREADY;
 
 	/* Reset mock pipe */
 	modem_backend_mock_reset(&mock);
@@ -444,6 +515,8 @@ ZTEST(modem_chat, test_script_no_error)
 		     "Script result should be SUCCESS");
 	zassert_true(script_result_user_data == &cmd_user_data,
 		     "Script result callback user data is incorrect");
+	zassert_equal(script_result_script_chat, &script_cmds[ARRAY_SIZE(script_cmds) - 1],
+		      "Script result callback script chat is incorrect");
 }
 
 ZTEST(modem_chat, test_start_script_twice_then_abort)
@@ -469,6 +542,79 @@ ZTEST(modem_chat, test_start_script_twice_then_abort)
 		     "Script result should be ABORT");
 	zassert_true(script_result_user_data == &cmd_user_data,
 		     "Script result callback user data is incorrect");
+	zassert_equal(script_result_script_chat, &script_cmds[0],
+		      "Script result callback script chat is incorrect");
+}
+
+ZTEST(modem_chat, test_script_abort_on_second_chat)
+{
+	int ret;
+	bool called;
+
+	zassert_ok(modem_chat_script_run(&cmd, &script), "Failed to start script");
+	k_msleep(100);
+
+	ret = modem_backend_mock_get(&mock, buffer, ARRAY_SIZE(buffer));
+	zassert_equal(ret, sizeof("AT\r\n") - 1);
+	zassert_mem_equal(buffer, "AT\r\n", sizeof("AT\r\n") - 1,
+			  "First request not sent as expected");
+
+	modem_backend_mock_put(&mock, ok_response, sizeof(ok_response) - 1);
+	k_msleep(100);
+
+	ret = modem_backend_mock_get(&mock, buffer, ARRAY_SIZE(buffer));
+	zassert_equal(ret, sizeof("ATE0\r\n") - 1);
+	zassert_mem_equal(buffer, "ATE0\r\n", sizeof("ATE0\r\n") - 1,
+			  "Second request not sent as expected");
+
+	modem_backend_mock_put(&mock, "ERROR 1\r\n", sizeof("ERROR 1\r\n") - 1);
+	k_msleep(100);
+
+	called = atomic_test_bit(&callback_called, MODEM_CHAT_UTEST_ON_SCRIPT_CALLBACK_BIT);
+	zassert_true(called, "Script callback should have been called");
+	zassert_equal(script_result, MODEM_CHAT_SCRIPT_RESULT_ABORT,
+		      "Script result should be ABORT");
+	zassert_equal(script_result_script_chat, &script_cmds[1],
+		      "Script result callback script chat is incorrect");
+	zassert_false(modem_chat_is_running(&cmd));
+}
+
+ZTEST(modem_chat, test_start_script_from_completion_callback)
+{
+	int ret;
+	bool called;
+
+	zassert_ok(modem_chat_script_run(&cmd, &script_callback_restart_first),
+		   "Failed to start first script");
+	k_msleep(100);
+
+	ret = modem_backend_mock_get(&mock, buffer, ARRAY_SIZE(buffer));
+	zassert_equal(ret, sizeof("FIRST\r\n") - 1);
+	zassert_mem_equal(buffer, "FIRST\r\n", sizeof("FIRST\r\n") - 1,
+			  "First request not sent as expected");
+
+	modem_backend_mock_put(&mock, "FIRST\r\n", sizeof("FIRST\r\n") - 1);
+	k_msleep(100);
+
+	zassert_ok(restart_script_run_ret, "Failed to start second script from callback");
+	called = atomic_test_bit(&callback_called, MODEM_CHAT_UTEST_ON_RESTART_SCRIPT_CALLBACK_BIT);
+	zassert_false(called, "Second script callback should not have been called yet");
+
+	ret = modem_backend_mock_get(&mock, buffer, ARRAY_SIZE(buffer));
+	zassert_equal(ret, sizeof("SECOND\r\n") - 1);
+	zassert_mem_equal(buffer, "SECOND\r\n", sizeof("SECOND\r\n") - 1,
+			  "Second request not sent as expected");
+
+	modem_backend_mock_put(&mock, "SECOND\r\n", sizeof("SECOND\r\n") - 1);
+	k_msleep(100);
+
+	called = atomic_test_bit(&callback_called, MODEM_CHAT_UTEST_ON_RESTART_SCRIPT_CALLBACK_BIT);
+	zassert_true(called, "Second script callback should have been called");
+	zassert_equal(restart_script_result, MODEM_CHAT_SCRIPT_RESULT_SUCCESS,
+		      "Second script should have stopped with success");
+	zassert_false(modem_chat_is_running(&cmd));
+	zassert_equal(modem_backend_mock_get(&mock, buffer, ARRAY_SIZE(buffer)), 0,
+		      "Script sent too many requests");
 }
 
 ZTEST(modem_chat, test_start_script_then_time_out)
@@ -489,6 +635,46 @@ ZTEST(modem_chat, test_start_script_then_time_out)
 		     "Script result should be TIMEOUT");
 	zassert_true(script_result_user_data == &cmd_user_data,
 		     "Script result callback user data is incorrect");
+	zassert_equal(script_result_script_chat, &script_cmds[0],
+		      "Script result callback script chat is incorrect");
+}
+
+ZTEST(modem_chat, test_release_cancels_work_items)
+{
+	struct k_work_sync sync;
+
+	zassert_ok(modem_chat_run_script_async(&cmd, &script_timeout_cmd),
+		   "Failed to start script");
+	k_msleep(100);
+	zassert_equal(modem_backend_mock_get(&mock, buffer, ARRAY_SIZE(buffer)),
+		      sizeof("AT\r\n") - 1, "Request not sent as expected");
+
+	modem_backend_mock_put(&mock, ok_response, sizeof(ok_response) - 1);
+	k_msleep(100);
+	zassert_true(k_work_delayable_is_pending(&cmd.script_timeout_work),
+		     "Script timeout work was not scheduled");
+	zassert_true(k_work_delayable_is_pending(&cmd.script_send_timeout_work),
+		     "Script send timeout work was not scheduled");
+
+	modem_chat_release(&cmd);
+
+	zexpect_equal(k_work_busy_get(&cmd.script_run_work), 0,
+		      "Script run work was not cancelled");
+	zexpect_equal(k_work_delayable_busy_get(&cmd.script_timeout_work), 0,
+		      "Script timeout work was not cancelled");
+	zexpect_equal(k_work_busy_get(&cmd.script_abort_work), 0,
+		      "Script abort work was not cancelled");
+	zexpect_equal(k_work_busy_get(&cmd.script_send_work), 0,
+		      "Script send work was not cancelled");
+	zexpect_equal(k_work_delayable_busy_get(&cmd.script_send_timeout_work), 0,
+		      "Script send timeout work was not cancelled");
+	zexpect_equal(k_work_busy_get(&cmd.receive_work), 0,
+		      "Receive work was not cancelled");
+
+	/* Keep the test suite safe when either expectation fails. */
+	k_work_cancel_delayable_sync(&cmd.script_timeout_work, &sync);
+	k_work_cancel_delayable_sync(&cmd.script_send_timeout_work, &sync);
+	zassert_ok(modem_chat_attach(&cmd, mock_pipe), "Failed to reattach modem chat");
 }
 
 ZTEST(modem_chat, test_script_with_partial_matches)
@@ -560,6 +746,8 @@ ZTEST(modem_chat, test_script_with_partial_matches)
 	zassert_true(called == true, "Script callback should have been called");
 	zassert_equal(script_result, MODEM_CHAT_SCRIPT_RESULT_SUCCESS,
 		      "Script should have stopped with success");
+	zassert_equal(script_result_script_chat, &script_partial_cmds[0],
+		      "Script result callback script chat is incorrect");
 
 	/* Assert no data was sent except the request */
 	zassert_equal(modem_backend_mock_get(&mock, buffer, ARRAY_SIZE(buffer)), 0,
@@ -570,12 +758,16 @@ ZTEST(modem_chat, test_script_run_sync_complete)
 {
 	modem_backend_mock_prime(&mock, &at_echo_transaction);
 	zassert_ok(modem_chat_run_script(&cmd, &script_echo), "Failed to run echo script");
+	zassert_equal(script_result_script_chat, &script_echo_cmds[0],
+		      "Script result callback script chat is incorrect");
 }
 
 ZTEST(modem_chat, test_script_run_sync_timeout)
 {
 	zassert_equal(modem_chat_run_script(&cmd, &script_echo), -EAGAIN,
 		      "Failed to run echo script");
+	zassert_equal(script_result_script_chat, &script_echo_cmds[0],
+		      "Script result callback script chat is incorrect");
 }
 
 ZTEST(modem_chat, test_script_run_sync_abort)
@@ -583,6 +775,8 @@ ZTEST(modem_chat, test_script_run_sync_abort)
 	modem_backend_mock_prime(&mock, &at_echo_error_transaction);
 	zassert_equal(modem_chat_run_script(&cmd, &script_echo), -EAGAIN,
 		      "Echo script should time out and return -EAGAIN");
+	zassert_equal(script_result_script_chat, &script_echo_cmds[0],
+		      "Script result callback script chat is incorrect");
 }
 
 ZTEST(modem_chat, test_script_run_dynamic_script_sync)
@@ -680,6 +874,9 @@ ZTEST(modem_chat, test_script_chat_timeout_cmd)
 	zassert_true(called == true, "Script callback should have been called");
 	zassert_equal(script_result, MODEM_CHAT_SCRIPT_RESULT_SUCCESS,
 		      "Script should have stopped with success");
+	zassert_equal(script_result_script_chat,
+		      &script_timeout_cmd_cmds[ARRAY_SIZE(script_timeout_cmd_cmds) - 1],
+		      "Script result callback script chat is incorrect");
 
 	/* Assert no data was sent except the request */
 	zassert_equal(modem_backend_mock_get(&mock, buffer, ARRAY_SIZE(buffer)), 0,
@@ -781,6 +978,83 @@ ZTEST(modem_chat, test_runtime_script)
 
 	ret = modem_chat_script_set_abort_matches(&test_script, NULL, 1);
 	zassert_equal(ret, -EINVAL, "Should have failed to set abort matches");
+}
+
+#if defined(CONFIG_MODEM_CHAT_COMMANDS_CONDITIONAL)
+static bool test_chat_run_result;
+
+static bool test_chat_run(void *user_data)
+{
+	zassert_equal(&cmd_user_data, user_data, "Unexpected user data");
+	return test_chat_run_result;
+}
+
+MODEM_CHAT_MATCHES_DEFINE(partial_matches,
+			  MODEM_CHAT_MATCH_INITIALIZER("ERR", "", NULL, false, false),
+			  MODEM_CHAT_MATCH_INITIALIZER("OK", "", NULL, false, false));
+
+MODEM_CHAT_SCRIPT_CMDS_DEFINE(script_cond_cmds, MODEM_CHAT_SCRIPT_CMD_RESP("AT", ok_match),
+			      MODEM_CHAT_SCRIPT_CMD_RESP_COND("RSP", ok_match, test_chat_run),
+			      MODEM_CHAT_SCRIPT_CMD_RESP_MULT_COND("MULT", partial_matches,
+								   test_chat_run),
+			      MODEM_CHAT_SCRIPT_CMD_RESP_NONE_COND("NONE", 100, test_chat_run),
+			      MODEM_CHAT_SCRIPT_CMD_RESP("AT", ok_match));
+
+MODEM_CHAT_SCRIPT_DEFINE(cond_script, script_cond_cmds, abort_matches, on_script_result, 4);
+#endif
+
+ZTEST(modem_chat, test_script_skip_chats)
+{
+#if defined(CONFIG_MODEM_CHAT_COMMANDS_CONDITIONAL)
+
+	/* Conditional commands are skipped */
+	test_chat_run_result = false;
+	zassert_true(modem_chat_script_run(&cmd, &cond_script) == 0, "Failed to start script");
+	k_msleep(100);
+
+	modem_backend_mock_get(&mock, buffer, ARRAY_SIZE(buffer));
+	zassert_true(memcmp(buffer, "AT\r", sizeof("AT\r") - 1) == 0,
+		     "Request not sent as expected");
+	modem_backend_mock_put(&mock, ok_response, sizeof(ok_response) - 1);
+	k_msleep(100);
+	modem_backend_mock_get(&mock, buffer, ARRAY_SIZE(buffer));
+	zassert_true(memcmp(buffer, "AT\r", sizeof("AT\r") - 1) == 0,
+		     "Request not sent as expected");
+	modem_backend_mock_put(&mock, ok_response, sizeof(ok_response) - 1);
+	k_msleep(100);
+
+	/* Conditional commands are run */
+	test_chat_run_result = true;
+	zassert_true(modem_chat_script_run(&cmd, &cond_script) == 0, "Failed to start script");
+	k_msleep(100);
+
+	modem_backend_mock_get(&mock, buffer, ARRAY_SIZE(buffer));
+	zassert_true(memcmp(buffer, "AT\r", sizeof("AT\r") - 1) == 0,
+		     "Request not sent as expected");
+	modem_backend_mock_put(&mock, ok_response, sizeof(ok_response) - 1);
+	k_msleep(100);
+	modem_backend_mock_get(&mock, buffer, ARRAY_SIZE(buffer));
+	zassert_true(memcmp(buffer, "RSP\r", sizeof("RSP\r") - 1) == 0,
+		     "Request not sent as expected");
+	modem_backend_mock_put(&mock, ok_response, sizeof(ok_response) - 1);
+	k_msleep(100);
+	modem_backend_mock_get(&mock, buffer, ARRAY_SIZE(buffer));
+	zassert_true(memcmp(buffer, "MULT\r", sizeof("MULT\r") - 1) == 0,
+		     "Request not sent as expected");
+	modem_backend_mock_put(&mock, ok_response, sizeof(ok_response) - 1);
+	k_msleep(100);
+	modem_backend_mock_get(&mock, buffer, ARRAY_SIZE(buffer));
+	zassert_true(memcmp(buffer, "NONE\r", sizeof("NONE\r") - 1) == 0,
+		     "Request not sent as expected");
+	k_msleep(100);
+	modem_backend_mock_get(&mock, buffer, ARRAY_SIZE(buffer));
+	zassert_true(memcmp(buffer, "AT\r", sizeof("AT\r") - 1) == 0,
+		     "Request not sent as expected");
+	modem_backend_mock_put(&mock, ok_response, sizeof(ok_response) - 1);
+	k_msleep(100);
+#else
+	ztest_test_skip();
+#endif
 }
 
 /*************************************************************************************************/

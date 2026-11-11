@@ -23,8 +23,8 @@
  * processing of the packet is aborted.
  */
 
-#ifndef H_SMP_
-#define H_SMP_
+#ifndef ZEPHYR_INCLUDE_MGMT_MCUMGR_SMP_SMP_H_
+#define ZEPHYR_INCLUDE_MGMT_MCUMGR_SMP_SMP_H_
 
 #include <zephyr/net_buf.h>
 #include <zephyr/mgmt/mcumgr/transport/smp.h>
@@ -76,6 +76,18 @@ struct net_buf *smp_packet_alloc(void);
  * @param nb    The net_buf to free.
  */
 void smp_packet_free(struct net_buf *nb);
+
+/** @cond INTERNAL_HIDDEN */
+
+/**
+ * @brief	Returns number of free MCUmgr network buffers. Can be enabled with
+ *		@kconfig{CONFIG_MCUMGR_TRANSPORT_NETBUF_AVAILABLE}.
+ *
+ * @return      Number of available MCUmgr network buffers
+ */
+size_t smp_packet_buffers_available(void);
+
+/** @endcond */
 
 /**
  * @brief Decodes, encodes, and transmits SMP packets.
@@ -136,4 +148,4 @@ typedef int (*smp_translate_error_fn)(uint16_t err);
 }
 #endif
 
-#endif /* H_SMP_ */
+#endif /* ZEPHYR_INCLUDE_MGMT_MCUMGR_SMP_SMP_H_ */

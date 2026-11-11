@@ -6,12 +6,12 @@
 
 /dts-v1/;
 
-#include <nxp/mcx/nxp_mcxn94x.dtsi>
+#include <nxp/mcx/mcxn/nxp_mcxn947.dtsi>
 #include "mcx_n9xx_evk.dtsi"
 
 / {
-	model = "NXP MCX-N9XX-EVK board";
 	compatible = "nxp,mcxn947", "nxp,mcx";
+	model = "NXP MCX-N9XX-EVK board";
 
 	cpus {
 		/delete-node/ cpu@0;

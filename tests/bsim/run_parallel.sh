@@ -60,10 +60,12 @@ fi
 set -u
 
 RESULTS_FILE="${RESULTS_FILE:-`pwd`/../RunResults.xml}"
-tmp_res_file=tmp.xml
+tmp_res_file=$(mktemp --tmpdir run_parallel.XXXXXX.xml)
 
 if [[ -v BOARD ]]; then
 	export FAILURE_EXTRA_INFO=" on ${BOARD}"
+else
+  export FAILURE_EXTRA_INFO=""
 fi
 
 all_cases_a=( $all_cases )
@@ -101,7 +103,7 @@ if [ `command -v parallel` ]; then
       rm {#}.log
       echo "</testcase>"
     fi
-    ' ::: $all_cases >> $tmp_res_file ; err=$?
+    ' ::: $all_cases >> $tmp_res_file || err=$?
   fi
 else #fallback in case parallel is not installed
   set +e

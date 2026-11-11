@@ -117,7 +117,7 @@ static void rfcomm_disconnected(struct bt_rfcomm_dlc *dlc)
 	free_channel(chan);
 }
 
-static void rfcomm_recv(struct bt_rfcomm_dlc *dlc, struct net_buf *buf)
+static int rfcomm_recv(struct bt_rfcomm_dlc *dlc, struct net_buf *buf)
 {
 	struct rfcomm_channel *chan = CONTAINER_OF(dlc, struct rfcomm_channel, dlc);
 	struct btp_rfcomm_data_received_ev *ev;
@@ -128,7 +128,7 @@ static void rfcomm_recv(struct bt_rfcomm_dlc *dlc, struct net_buf *buf)
 
 	if (chan->conn == NULL) {
 		LOG_ERR("No connection");
-		return;
+		return 0;
 	}
 
 	ev_len = sizeof(*ev) + buf->len;
@@ -139,7 +139,7 @@ static void rfcomm_recv(struct bt_rfcomm_dlc *dlc, struct net_buf *buf)
 	if (ev_data == NULL) {
 		LOG_ERR("Failed to allocate event buffer");
 		tester_rsp_buffer_unlock();
-		return;
+		return 0;
 	}
 
 	ev = (struct btp_rfcomm_data_received_ev *)ev_data;
@@ -153,6 +153,8 @@ static void rfcomm_recv(struct bt_rfcomm_dlc *dlc, struct net_buf *buf)
 
 	tester_rsp_buffer_free();
 	tester_rsp_buffer_unlock();
+
+	return 0;
 }
 
 static void rfcomm_sent(struct bt_rfcomm_dlc *dlc, int err)
@@ -418,21 +420,40 @@ static uint8_t get_dlc_info(const void *cmd, uint16_t cmd_len,
 	return BTP_STATUS_SUCCESS;
 }
 
+static uint8_t send_rls(const void *cmd, uint16_t cmd_len,
+			void *rsp, uint16_t *rsp_len)
+{
+	const struct btp_rfcomm_send_rls_cmd *cp = cmd;
+	struct rfcomm_channel *chan;
+	int err;
+
+	LOG_DBG("RFCOMM Send RLS");
+	if (cp->address.type != BTP_BR_ADDRESS_TYPE) {
+		return BTP_STATUS_FAILED;
+	}
+
+	chan = find_channel(&cp->address.a, cp->channel);
+	if (chan == NULL) {
+		LOG_ERR("Channel not found");
+		return BTP_STATUS_FAILED;
+	}
+
+	err = bt_rfcomm_send_rls_cmd(&chan->dlc, cp->line_status);
+	if (err != 0) {
+		LOG_ERR("Failed to send RLS (err %d)", err);
+		return BTP_STATUS_FAILED;
+	}
+
+	return BTP_STATUS_SUCCESS;
+}
+
 static uint8_t supported_commands(const void *cmd, uint16_t cmd_len,
 				  void *rsp, uint16_t *rsp_len)
 {
 	struct btp_rfcomm_read_supported_commands_rp *rp = rsp;
 
-	/* Octet 0 */
-	tester_set_bit(rp->data, BTP_RFCOMM_READ_SUPPORTED_COMMANDS);
-	tester_set_bit(rp->data, BTP_RFCOMM_CONNECT);
-	tester_set_bit(rp->data, BTP_RFCOMM_DISCONNECT);
-	tester_set_bit(rp->data, BTP_RFCOMM_SEND_DATA);
-	tester_set_bit(rp->data, BTP_RFCOMM_LISTEN);
-	tester_set_bit(rp->data, BTP_RFCOMM_SEND_RPN);
-	tester_set_bit(rp->data, BTP_RFCOMM_GET_DLC_INFO);
-
-	*rsp_len = sizeof(*rp) + 1;
+	*rsp_len = tester_supported_commands(BTP_SERVICE_ID_RFCOMM, rp->data);
+	*rsp_len += sizeof(*rp);
 
 	return BTP_STATUS_SUCCESS;
 }
@@ -473,6 +494,11 @@ static const struct btp_handler handlers[] = {
 		.opcode = BTP_RFCOMM_GET_DLC_INFO,
 		.expect_len = sizeof(struct btp_rfcomm_get_dlc_info_cmd),
 		.func = get_dlc_info,
+	},
+	{
+		.opcode = BTP_RFCOMM_SEND_RLS,
+		.expect_len = sizeof(struct btp_rfcomm_send_rls_cmd),
+		.func = send_rls,
 	},
 };
 

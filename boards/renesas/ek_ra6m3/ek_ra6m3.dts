@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024-2025 Renesas Electronics Corporation
+ * Copyright (c) 2024-2026 Renesas Electronics Corporation
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -13,15 +13,15 @@
 #include "ek_ra6m3-pinctrl.dtsi"
 
 / {
-	model = "Renesas EK-RA6M3";
 	compatible = "renesas,ra6m3", "renesas,ra";
+	model = "Renesas EK-RA6M3";
 
 	chosen {
 		zephyr,sram = &sram0;
 		zephyr,console = &uart8;
 		zephyr,shell-uart = &uart8;
-		zephyr,flash-controller = &flash1;
-		zephyr,flash = &flash0;
+		zephyr,flash-controller = &code_flash_ctrl;
+		zephyr,flash = &code_flash;
 		zephyr,entropy = &trng;
 		zephyr,crc = &crc;
 	};
@@ -66,6 +66,7 @@
 		sw0 = &button0;
 		sw1 = &button1;
 		watchdog0 = &wdt;
+		i2c-0 = &iic2;
 	};
 };
 
@@ -99,7 +100,6 @@
 };
 
 &iic2 {
-	status = "okay";
 	#address-cells = <1>;
 	#size-cells = <0>;
 	interrupts = <91 1>, <92 1>, <93 1>, <94 1>;
@@ -107,6 +107,7 @@
 	clock-frequency = <I2C_BITRATE_FAST>;
 	pinctrl-0 = <&iic2_default>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &xtal {
@@ -153,9 +154,9 @@
 };
 
 &adc0 {
-	status = "okay";
 	pinctrl-0 = <&adc0_default>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &dac0 {
@@ -182,15 +183,16 @@
 	status = "okay";
 };
 
-&flash1 {
+&data_flash {
 	partitions {
-		compatible = "fixed-partitions";
+		ranges;
 		#address-cells = <1>;
 		#size-cells = <1>;
 
 		storage_partition: partition@0 {
-			label = "storage";
+			compatible = "zephyr,mapped-partition";
 			reg = <0x0 DT_SIZE_K(64)>;
+			label = "storage";
 		};
 	};
 };
@@ -199,6 +201,11 @@
 	pinctrl-0 = <&usbfs_default>;
 	pinctrl-names = "default";
 	maximum-speed = "full-speed";
+	status = "okay";
+
+	zephyr_uhc0: uhc {
+		status = "okay";
+	};
 };
 
 &wdt {
@@ -207,12 +214,14 @@
 
 &eth {
 	local-mac-address = [00 11 22 33 44 57];
-	status = "okay";
 	phy-handle = <&phy>;
+	pinctrl-0 = <&ether_default>;
+	pinctrl-names = "default";
+	status = "okay";
 };
 
 &mdio {
-	pinctrl-0 = <&ether_default>;
+	pinctrl-0 = <&mdio_default>;
 	pinctrl-names = "default";
 	status = "okay";
 
@@ -231,9 +240,9 @@
 	mx25l25645g: qspi-nor-flash@60000000 {
 		compatible = "renesas,ra-qspi-nor";
 		reg = <0x60000000 DT_SIZE_M(32)>;
-		status = "okay";
 		write-block-size = <1>;
 		erase-block-size = <4096>;
+		status = "okay";
 	};
 };
 

@@ -369,7 +369,8 @@ int k_usermode_string_copy(char *dst, const char *src, size_t maxlen);
  * This macro can be used to induce a kernel oops which will kill the
  * calling thread.
  *
- * @param expr Expression to be evaluated
+ * @param expr Expression to be evaluated. The oops is induced when it
+ *             evaluates to true.
  *
  * @note This is an internal API. Do not use unless you are extending
  *       functionality in the Zephyr tree.
@@ -385,14 +386,13 @@ int k_usermode_string_copy(char *dst, const char *src, size_t maxlen);
  * @brief Runtime expression check for system call arguments
  *
  * Used in handler functions to perform various runtime checks on arguments,
- * and generate a kernel oops if anything is not expected, printing a custom
- * message.
+ * printing a custom message if anything is not expected. Wrap in K_OOPS() to
+ * turn a failed check into a kernel oops.
  *
- * @param expr Boolean expression to verify, a false result will trigger an
- *             oops
+ * @param expr Boolean expression to verify, a false result is a failed check
  * @param fmt Printf-style format string (followed by appropriate variadic
  *            arguments) to print on verification failure
- * @return False on success, True on failure
+ * @return false on success, true on failure
  * @note This is an internal API. Do not use unless you are extending
  *       functionality in the Zephyr tree.
  */
@@ -410,12 +410,11 @@ int k_usermode_string_copy(char *dst, const char *src, size_t maxlen);
 /**
  * @brief Runtime expression check for system call arguments
  *
- * Used in handler functions to perform various runtime checks on arguments,
- * and generate a kernel oops if anything is not expected.
+ * Used in handler functions to perform various runtime checks on arguments.
  *
- * @param expr Boolean expression to verify, a false result will trigger an
- *             oops. A stringified version of this expression will be printed.
- * @return 0 on success, nonzero on failure
+ * @param expr Boolean expression to verify, a false result is a failed check.
+ *             A stringified version of this expression will be printed.
+ * @return false on success, true on failure
  * @note This is an internal API. Do not use unless you are extending
  *       functionality in the Zephyr tree.
  */
@@ -442,16 +441,16 @@ int k_usermode_string_copy(char *dst, const char *src, size_t maxlen);
  *        a memory area
  *
  * Checks that the particular memory area is readable and/or writeable by the
- * currently running thread if the CPU was in user mode, and generates a kernel
- * oops if it wasn't. Prevents userspace from getting the kernel to read and/or
- * modify memory the thread does not have access to, or passing in garbage
- * pointers that would crash/pagefault the kernel if dereferenced.
+ * currently running thread if the CPU was in user mode. Prevents userspace
+ * from getting the kernel to read and/or modify memory the thread does not
+ * have access to, or passing in garbage pointers that would crash/pagefault
+ * the kernel if dereferenced.
  *
  * @param ptr Memory area to examine
  * @param size Size of the memory area
  * @param write If the thread should be able to write to this memory, not just
  *		read it
- * @return 0 on success, nonzero on failure
+ * @return false on success, true on failure
  * @note This is an internal API. Do not use unless you are extending
  *       functionality in the Zephyr tree.
  */
@@ -468,14 +467,13 @@ int k_usermode_string_copy(char *dst, const char *src, size_t maxlen);
  * @brief Runtime check that a user thread has read permission to a memory area
  *
  * Checks that the particular memory area is readable by the currently running
- * thread if the CPU was in user mode, and generates a kernel oops if it
- * wasn't. Prevents userspace from getting the kernel to read memory the thread
- * does not have access to, or passing in garbage pointers that would
- * crash/pagefault the kernel if dereferenced.
+ * thread if the CPU was in user mode. Prevents userspace from getting the
+ * kernel to read memory the thread does not have access to, or passing in
+ * garbage pointers that would crash/pagefault the kernel if dereferenced.
  *
  * @param ptr Memory area to examine
  * @param size Size of the memory area
- * @return 0 on success, nonzero on failure
+ * @return false on success, true on failure
  * @note This is an internal API. Do not use unless you are extending
  *       functionality in the Zephyr tree.
  */
@@ -486,14 +484,14 @@ int k_usermode_string_copy(char *dst, const char *src, size_t maxlen);
  * @brief Runtime check that a user thread has write permission to a memory area
  *
  * Checks that the particular memory area is readable and writable by the
- * currently running thread if the CPU was in user mode, and generates a kernel
- * oops if it wasn't. Prevents userspace from getting the kernel to read or
- * modify memory the thread does not have access to, or passing in garbage
- * pointers that would crash/pagefault the kernel if dereferenced.
+ * currently running thread if the CPU was in user mode. Prevents userspace
+ * from getting the kernel to read or modify memory the thread does not have
+ * access to, or passing in garbage pointers that would crash/pagefault the
+ * kernel if dereferenced.
  *
  * @param ptr Memory area to examine
  * @param size Size of the memory area
- * @return 0 on success, nonzero on failure
+ * @return false on success, true on failure
  *
  * @note This is an internal API. Do not use unless you are extending
  *       functionality in the Zephyr tree.
@@ -501,6 +499,22 @@ int k_usermode_string_copy(char *dst, const char *src, size_t maxlen);
 #define K_SYSCALL_MEMORY_WRITE(ptr, size) \
 	K_SYSCALL_MEMORY(ptr, size, 1)
 
+/**
+ * @brief Validate user thread has read and/or write permission for sized array
+ *
+ * Used when the memory region is expressed in terms of number of elements and
+ * each element size, handles any overflow issues with computing the total
+ * array bounds. Otherwise see K_SYSCALL_MEMORY().
+ *
+ * @param ptr Memory area to examine
+ * @param nmemb Number of elements in the array
+ * @param size Size of each array element
+ * @param write If the thread should be able to write to this memory, not just
+ *		read it
+ * @return false on success, true on failure
+ * @note This is an internal API. Do not use unless you are extending
+ *       functionality in the Zephyr tree.
+ */
 #define K_SYSCALL_MEMORY_ARRAY(ptr, nmemb, size, write) \
 	({ \
 		size_t product; \
@@ -517,12 +531,12 @@ int k_usermode_string_copy(char *dst, const char *src, size_t maxlen);
  *
  * Used when the memory region is expressed in terms of number of elements and
  * each element size, handles any overflow issues with computing the total
- * array bounds. Otherwise see _SYSCALL_MEMORY_READ.
+ * array bounds. Otherwise see K_SYSCALL_MEMORY_READ().
  *
  * @param ptr Memory area to examine
  * @param nmemb Number of elements in the array
  * @param size Size of each array element
- * @return 0 on success, nonzero on failure
+ * @return false on success, true on failure
  * @note This is an internal API. Do not use unless you are extending
  *       functionality in the Zephyr tree.
  */
@@ -534,12 +548,12 @@ int k_usermode_string_copy(char *dst, const char *src, size_t maxlen);
  *
  * Used when the memory region is expressed in terms of number of elements and
  * each element size, handles any overflow issues with computing the total
- * array bounds. Otherwise see _SYSCALL_MEMORY_WRITE.
+ * array bounds. Otherwise see K_SYSCALL_MEMORY_WRITE().
  *
  * @param ptr Memory area to examine
  * @param nmemb Number of elements in the array
  * @param size Size of each array element
- * @return 0 on success, nonzero on failure
+ * @return false on success, true on failure
  * @note This is an internal API. Do not use unless you are extending
  *       functionality in the Zephyr tree.
  */
@@ -581,7 +595,7 @@ static inline int k_object_validation_check(struct k_object *ko,
  * @param api_name Name of the driver API struct (e.g. gpio_driver_api)
  * @param op Driver operation (e.g. manage_callback)
  *
- * @return 0 on success, nonzero on failure
+ * @return false on success, true on failure
  *
  * @note This is an internal API. Do not use unless you are extending
  *       functionality in the Zephyr tree.
@@ -612,7 +626,7 @@ static inline int k_object_validation_check(struct k_object *ko,
  * @param _device Untrusted device pointer
  * @param _dtype Expected kernel object type for the provided device pointer
  * @param _api Expected driver API structure memory address
- * @return 0 on success, nonzero on failure
+ * @return false on success, true on failure
  * @note This is an internal API. Do not use unless you are extending
  *       functionality in the Zephyr tree.
  */
@@ -627,13 +641,12 @@ static inline int k_object_validation_check(struct k_object *ko,
 /**
  * @brief Runtime check kernel object pointer for non-init functions
  *
- * Calls k_object_validate and triggers a kernel oops if the check fails.
- * For use in system call handlers which are not init functions; a fatal
- * error will occur if the object is not initialized.
+ * Calls k_object_validate(). For use in system call handlers which are not
+ * init functions; the check fails if the object is not initialized.
  *
  * @param ptr Untrusted kernel object pointer
  * @param type Expected kernel object type
- * @return 0 on success, nonzero on failure
+ * @return false on success, true on failure
  * @note This is an internal API. Do not use unless you are extending
  *       functionality in the Zephyr tree.
  */
@@ -641,14 +654,14 @@ static inline int k_object_validation_check(struct k_object *ko,
 	K_SYSCALL_IS_OBJ(ptr, type, _OBJ_INIT_TRUE)
 
 /**
- * @brief Runtime check kernel object pointer for non-init functions
+ * @brief Runtime check kernel object pointer for init functions
  *
- * See description of _SYSCALL_IS_OBJ. No initialization checks are done.
+ * See description of K_SYSCALL_IS_OBJ(). No initialization checks are done.
  * Intended for init functions where objects may be re-initialized at will.
  *
  * @param ptr Untrusted kernel object pointer
  * @param type Expected kernel object type
- * @return 0 on success, nonzero on failure
+ * @return false on success, true on failure
  * @note This is an internal API. Do not use unless you are extending
  *       functionality in the Zephyr tree.
  */
@@ -657,16 +670,16 @@ static inline int k_object_validation_check(struct k_object *ko,
 	K_SYSCALL_IS_OBJ(ptr, type, _OBJ_INIT_ANY)
 
 /**
- * @brief Runtime check kernel object pointer for non-init functions
+ * @brief Runtime check kernel object pointer for one-shot init functions
  *
- * See description of _SYSCALL_IS_OBJ. Triggers a fatal error if the object is
+ * See description of K_SYSCALL_IS_OBJ(). The check fails if the object is
  * initialized. Intended for init functions where objects, once initialized,
  * can only be re-used when their initialization state expires due to some
  * other mechanism.
  *
  * @param ptr Untrusted kernel object pointer
  * @param type Expected kernel object type
- * @return 0 on success, nonzero on failure
+ * @return false on success, true on failure
  * @note This is an internal API. Do not use unless you are extending
  *       functionality in the Zephyr tree.
  */

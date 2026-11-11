@@ -12,6 +12,7 @@ import os
 import signal
 import subprocess
 import sys
+import threading
 from contextlib import nullcontext
 from importlib import reload
 from subprocess import CalledProcessError, TimeoutExpired
@@ -284,7 +285,7 @@ def test_binaryhandler_try_kill_process_by_pid(mocked_instance):
 TESTDATA_3 = [
     (
         [b'This\\r\\n\n', b'is\r', b'some \x1B[31mANSI\x1B[39m in\n', b'a short\n', b'file.'],
-        mock.Mock(status=TwisterStatus.NONE, capture_coverage=False),
+        mock.Mock(status=TwisterStatus.NONE, capture_coverage=False, fault=False),
         [
             mock.call('This\\r\\n\n'),
             mock.call('is\r'),
@@ -304,7 +305,7 @@ TESTDATA_3 = [
     ),
     (
         [b'Too much.'] * 120,  # Should be more than the timeout
-        mock.Mock(status=TwisterStatus.PASS, capture_coverage=False),
+        mock.Mock(status=TwisterStatus.PASS, capture_coverage=False, fault=False),
         None,
         None,
         True,
@@ -312,7 +313,7 @@ TESTDATA_3 = [
     ),
     (
         [b'Too much.'] * 120,  # Should be more than the timeout
-        mock.Mock(status=TwisterStatus.PASS, capture_coverage=False),
+        mock.Mock(status=TwisterStatus.PASS, capture_coverage=False, fault=False),
         None,
         None,
         True,
@@ -320,7 +321,7 @@ TESTDATA_3 = [
     ),
     (
         [b'Too much.'] * 120,  # Should be more than the timeout
-        mock.Mock(status=TwisterStatus.PASS, capture_coverage=True),
+        mock.Mock(status=TwisterStatus.PASS, capture_coverage=True, fault=False),
         None,
         None,
         False,
@@ -495,22 +496,25 @@ def test_binaryhandler_create_env(
 
 
 TESTDATA_6 = [
-    (TwisterStatus.NONE, False, 2, True, TwisterStatus.FAIL, 'Valgrind error', False),
-    (TwisterStatus.NONE, False, 1, False, TwisterStatus.FAIL, 'Exited with 1', False),
-    (TwisterStatus.FAIL, False, 0, False, TwisterStatus.FAIL, "foobar", False),
-    ('success', False, 0, False, 'success', None, False),
-    (TwisterStatus.NONE, True, 1, True, TwisterStatus.FAIL, 'Exited with 1', True),
+    (TwisterStatus.NONE, False, False, 2, True, TwisterStatus.FAIL, 'Valgrind error', False),
+    (TwisterStatus.NONE, False, False, 1, False, TwisterStatus.FAIL, 'Exited with 1', False),
+    (TwisterStatus.NONE, True, False, 1, False, TwisterStatus.FAIL,
+     'Fault detected while running test', False),
+    (TwisterStatus.FAIL, False, False, 0, False, TwisterStatus.FAIL, "foobar", False),
+    ('success', False, False, 0, False, 'success', None, False),
+    (TwisterStatus.NONE, False, True, 1, True, TwisterStatus.FAIL, 'Exited with 1', True),
 ]
 
 @pytest.mark.parametrize(
-    'harness_status, terminated, returncode, enable_valgrind,' \
+    'harness_status, harness_fault, terminated, returncode, enable_valgrind,' \
     ' expected_status, expected_reason, do_add_missing',
     TESTDATA_6,
-    ids=['valgrind error', 'failed', 'harness failed', 'custom success', 'no status']
+    ids=['valgrind error', 'failed', 'crash', 'harness failed', 'custom success', 'no status']
 )
 def test_binaryhandler_update_instance_info(
     mocked_instance,
     harness_status,
+    harness_fault,
     terminated,
     returncode,
     enable_valgrind,
@@ -525,7 +529,7 @@ def test_binaryhandler_update_instance_info(
     handler.returncode = returncode
     missing_mock = mock.Mock()
     handler.instance.add_missing_case_status = missing_mock
-    mocked_harness = mock.Mock(status=harness_status, reason="foobar")
+    mocked_harness = mock.Mock(status=harness_status, reason="foobar", fault=harness_fault)
 
     handler._update_instance_info(mocked_harness)
 
@@ -818,7 +822,8 @@ TESTDATA_13 = [
         'product',
         None,
         ['west', 'flash', '--no-rebuild', '-d', '$build_dir',
-         '--runner', 'runner', 'param1', 'param2']
+         '--runner', 'runner', '--base-param1', '--base-param2',
+         '--', '--runner-param1', '--runner-param2']
     ),
 
     (
@@ -827,7 +832,8 @@ TESTDATA_13 = [
         'product',
         None,
         ['west', 'flash', '--no-rebuild', '-d', '$build_dir',
-         '--runner', 'pyocd', 'param1', 'param2', '--', '--dev-id', 12345]
+         '--runner', 'pyocd', '--base-param1', '--base-param2',
+         '--', '--dev-id', 12345, '--runner-param1', '--runner-param2']
     ),
     (
         None,
@@ -835,7 +841,8 @@ TESTDATA_13 = [
         'product',
         None,
         ['west', 'flash', '--no-rebuild', '-d', '$build_dir',
-         '--runner', 'nrfjprog', 'param1', 'param2', '--', '--dev-id', 12345]
+         '--runner', 'nrfjprog', '--base-param1', '--base-param2',
+         '--', '--dev-id', 12345, '--runner-param1', '--runner-param2']
     ),
     (
         None,
@@ -843,8 +850,8 @@ TESTDATA_13 = [
         'STM32 STLink',
         None,
         ['west', 'flash', '--no-rebuild', '-d', '$build_dir',
-         '--runner', 'openocd', 'param1', 'param2',
-         '--', '--cmd-pre-init', 'hla_serial 12345']
+         '--runner', 'openocd', '--base-param1', '--base-param2',
+         '--', '--cmd-pre-init', 'hla_serial 12345', '--runner-param1', '--runner-param2']
     ),
     (
         None,
@@ -852,8 +859,8 @@ TESTDATA_13 = [
         'STLINK-V3',
         None,
         ['west', 'flash', '--no-rebuild', '-d', '$build_dir',
-         '--runner', 'openocd', 'param1', 'param2',
-         '--', '--cmd-pre-init', 'hla_serial 12345']
+         '--runner', 'openocd', '--base-param1', '--base-param2',
+         '--', '--cmd-pre-init', 'hla_serial 12345', '--runner-param1', '--runner-param2']
     ),
     (
         None,
@@ -861,8 +868,17 @@ TESTDATA_13 = [
         'EDBG CMSIS-DAP',
         None,
         ['west', 'flash', '--no-rebuild', '-d', '$build_dir',
-         '--runner', 'openocd', 'param1', 'param2',
-         '--', '--cmd-pre-init', 'adapter serial 12345']
+         '--runner', 'openocd', '--base-param1', '--base-param2',
+         '--', '--cmd-pre-init', 'adapter serial 12345', '--runner-param1', '--runner-param2']
+    ),
+    (
+        None,
+        'openocd',
+        'Raspberry Pi Debug Probe (CMSIS-DAP)',
+        None,
+        ['west', 'flash', '--no-rebuild', '-d', '$build_dir',
+         '--runner', 'openocd', '--base-param1', '--base-param2',
+         '--', '--cmd-pre-init', 'cmsis_dap_serial 12345', '--runner-param1', '--runner-param2']
     ),
     (
         None,
@@ -871,7 +887,8 @@ TESTDATA_13 = [
         None,
         ['west', 'flash', '--no-rebuild', '-d', '$build_dir',
          '--runner', 'jlink', '--dev-id', 12345,
-         'param1', 'param2']
+         '--base-param1', '--base-param2',
+         '--', '--runner-param1', '--runner-param2']
     ),
     (
         None,
@@ -880,7 +897,8 @@ TESTDATA_13 = [
         None,
         ['west', 'flash', '--no-rebuild', '-d', '$build_dir',
          '--runner', 'stm32cubeprogrammer', '--dev-id', 12345,
-         'param1', 'param2']
+         '--base-param1', '--base-param2',
+         '--', '--runner-param1', '--runner-param2']
     ),
     (
         None,
@@ -908,8 +926,8 @@ TESTDATA_13_2 = [(True), (False)]
     ids=['default', '--west-flash', 'one west flash value',
          'multiple west flash values', 'generic runner', 'pyocd',
          'nrfjprog', 'openocd, STM32 STLink', 'openocd, STLINK-v3',
-         'openocd, EDBG CMSIS-DAP', 'jlink', 'stm32cubeprogrammer',
-         'flash_command', 'flash_command with args']
+         'openocd, EDBG CMSIS-DAP', 'openocd, Raspberry Pi Debug Probe (CMSIS-DAP)',
+         'jlink', 'stm32cubeprogrammer', 'flash_command', 'flash_command with args']
 )
 @pytest.mark.parametrize('hardware_probe', TESTDATA_13_2, ids=['probe', 'id'])
 def test_devicehandler_create_command(
@@ -934,7 +952,8 @@ def test_devicehandler_create_command(
         product=hardware_product_name,
         probe_id=12345 if hardware_probe else None,
         id=12345 if not hardware_probe else None,
-        runner_params=['param1', 'param2'],
+        base_params=['--base-param1', '--base-param2'],
+        runner_params=['--runner-param1', '--runner-param2'],
         west_flash_cmd=None
     )
 
@@ -944,22 +963,26 @@ def test_devicehandler_create_command(
 
 
 TESTDATA_14 = [
-    ('success', Handler.FailureType.NONE, 'success', None, False),
-    (TwisterStatus.FAIL, Handler.FailureType.NONE, TwisterStatus.FAIL,
+    ('success', False, Handler.FailureType.NONE, 'success', None, False),
+    (TwisterStatus.FAIL, False, Handler.FailureType.NONE, TwisterStatus.FAIL,
         "foobar", True),
-    (TwisterStatus.ERROR, Handler.FailureType.NONE, TwisterStatus.ERROR, 'foobar', True),
-    (TwisterStatus.NONE, Handler.FailureType.NONE, TwisterStatus.FAIL, 'Unknown Error', True),
+    (TwisterStatus.ERROR, False, Handler.FailureType.NONE, TwisterStatus.ERROR, 'foobar', True),
+    (TwisterStatus.NONE, False, Handler.FailureType.NONE, TwisterStatus.FAIL,
+        'Unknown Error', True),
+    (TwisterStatus.NONE, True, Handler.FailureType.TIMEOUT, TwisterStatus.FAIL,
+        'Fault detected while running test', True),
 ]
 
 @pytest.mark.parametrize(
-    'harness_status, failure_type,' \
+    'harness_status, harness_fault, failure_type,' \
     ' expected_status, expected_reason, do_add_missing',
     TESTDATA_14,
-    ids=['custom success', 'failed', 'error', 'no status']
+    ids=['custom success', 'failed', 'error', 'no status', 'crash']
 )
 def test_devicehandler_update_instance_info(
         mocked_instance,
         harness_status,
+        harness_fault,
         failure_type,
         expected_status,
         expected_reason,
@@ -968,7 +991,7 @@ def test_devicehandler_update_instance_info(
     handler = DeviceHandler(mocked_instance, 'build', mock.Mock())
     missing_mock = mock.Mock()
     handler.instance.add_missing_case_status = missing_mock
-    mocked_harness = mock.Mock(status=harness_status, reason="foobar")
+    mocked_harness = mock.Mock(status=harness_status, reason="foobar", fault=harness_fault)
 
     handler._update_instance_info(mocked_harness, failure_type=failure_type)
 
@@ -1386,6 +1409,7 @@ TESTDATA_21 = [
         False,
         None,
         TwisterStatus.FAIL,
+        False,
         Handler.FailureType.NONE,
         TwisterStatus.FAIL,
         "foobar",
@@ -1396,6 +1420,7 @@ TESTDATA_21 = [
         True,
         None,
         TwisterStatus.FAIL,
+        False,
         Handler.FailureType.NONE,
         TwisterStatus.FAIL,
         "foobar",
@@ -1406,9 +1431,21 @@ TESTDATA_21 = [
         False,
         None,
         TwisterStatus.NONE,
+        False,
         Handler.FailureType.TIMEOUT,
         TwisterStatus.FAIL,
         'Timeout',
+        True
+    ),
+    (
+        0,
+        False,
+        None,
+        TwisterStatus.NONE,
+        True,
+        Handler.FailureType.TIMEOUT,
+        TwisterStatus.FAIL,
+        'Fault detected while running test',
         True
     ),
     (
@@ -1416,6 +1453,7 @@ TESTDATA_21 = [
         False,
         None,
         TwisterStatus.NONE,
+        False,
         Handler.FailureType.NONE,
         TwisterStatus.FAIL,
         'Exited with 1',
@@ -1426,6 +1464,7 @@ TESTDATA_21 = [
         False,
         'preexisting reason',
         'good dummy status',
+        False,
         Handler.FailureType.NONE,
         TwisterStatus.FAIL,
         'preexisting reason',
@@ -1435,10 +1474,10 @@ TESTDATA_21 = [
 
 @pytest.mark.parametrize(
     'self_returncode, self_ignore_qemu_crash,' \
-    ' self_instance_reason, harness_status, failure_type,' \
+    ' self_instance_reason, harness_status, harness_fault, failure_type,' \
     ' expected_status, expected_reason, expected_called_missing_case',
     TESTDATA_21,
-    ids=['not failed', 'qemu ignore', 'timeout', 'bad returncode', 'other fail']
+    ids=['not failed', 'qemu ignore', 'timeout', 'crash', 'bad returncode', 'other fail']
 )
 def test_qemuhandler_update_instance_info(
     mocked_instance,
@@ -1446,6 +1485,7 @@ def test_qemuhandler_update_instance_info(
     self_ignore_qemu_crash,
     self_instance_reason,
     harness_status,
+    harness_fault,
     failure_type,
     expected_status,
     expected_reason,
@@ -1453,7 +1493,7 @@ def test_qemuhandler_update_instance_info(
 ):
     mocked_instance.add_missing_case_status = mock.Mock()
     mocked_instance.reason = self_instance_reason
-    mocked_harness = mock.Mock(status=harness_status, reason="foobar")
+    mocked_harness = mock.Mock(status=harness_status, reason="foobar", fault=harness_fault)
 
     handler = QEMUHandler(mocked_instance, 'build', mock.Mock())
     handler.returncode = self_returncode
@@ -1484,13 +1524,16 @@ TESTDATA_24 = [
     (TwisterStatus.FAIL, 'Execution error', TwisterStatus.FAIL, 'Execution error'),
     (TwisterStatus.FAIL, 'unexpected eof', TwisterStatus.FAIL, 'unexpected eof'),
     (TwisterStatus.FAIL, 'unexpected byte', TwisterStatus.FAIL, 'unexpected byte'),
-    (TwisterStatus.NONE, None, TwisterStatus.NONE, 'Unknown Error'),
+    (TwisterStatus.FAIL, None, TwisterStatus.FAIL, 'Unknown Error'),
+    (TwisterStatus.PASS, None, TwisterStatus.PASS, None),
+    (TwisterStatus.NONE, None, TwisterStatus.NONE, None),
 ]
 
 @pytest.mark.parametrize(
     '_status, _reason, expected_status, expected_reason',
     TESTDATA_24,
-    ids=['timeout', 'failed', 'unexpected eof', 'unexpected byte', 'unknown']
+    ids=['timeout', 'failed', 'unexpected eof', 'unexpected byte',
+         'failed unknown', 'passed no reason', 'unknown']
 )
 def test_qemuhandler_thread_update_instance_info(
     mocked_instance,
@@ -1515,6 +1558,7 @@ TESTDATA_25 = [
         [TwisterStatus.NONE] * 60 + [TwisterStatus.PASS] * 6,
         1000,
         False,
+        False,
         TwisterStatus.FAIL,
         'timeout',
         [mock.call('1\n'), mock.call('1\n')]
@@ -1525,6 +1569,7 @@ TESTDATA_25 = [
         -1,
         [TwisterStatus.NONE] * 60 + [TwisterStatus.PASS] * 30,
         100,
+        False,
         False,
         TwisterStatus.FAIL,
         None,
@@ -1537,6 +1582,7 @@ TESTDATA_25 = [
         [TwisterStatus.PASS] * 3,
         100,
         False,
+        False,
         TwisterStatus.FAIL,
         'unexpected eof',
         []
@@ -1548,6 +1594,7 @@ TESTDATA_25 = [
         [TwisterStatus.PASS] * 3,
         100,
         False,
+        False,
         TwisterStatus.FAIL,
         'unexpected byte',
         []
@@ -1558,6 +1605,7 @@ TESTDATA_25 = [
         1,
         [TwisterStatus.NONE] * 3 + [TwisterStatus.PASS] * 7,
         100,
+        False,
         False,
         TwisterStatus.PASS,
         None,
@@ -1570,6 +1618,7 @@ TESTDATA_25 = [
         [TwisterStatus.NONE] * 3 + [TwisterStatus.PASS] * 7,
         100,
         False,
+        False,
         TwisterStatus.FAIL,
         'timeout',
         [mock.call('1\n'), mock.call('2\n')]
@@ -1581,15 +1630,28 @@ TESTDATA_25 = [
         [TwisterStatus.NONE] * 3 + [TwisterStatus.PASS] * 7,
         (n for n in [100, 100, 10000]),
         True,
+        False,
         TwisterStatus.PASS,
         None,
         [mock.call('1\n'), mock.call('2\n'), mock.call('3\n'), mock.call('4\n')]
+    ),
+    (
+        '1\n2\n3\n4\n5\n'.encode('utf-8'),
+        60,
+        1,
+        [TwisterStatus.NONE] * 30,
+        100,
+        False,
+        True,
+        TwisterStatus.FAIL,
+        'Fault detected while running test',
+        [mock.call('1\n'), mock.call('2\n')]
     ),
 ]
 
 @pytest.mark.parametrize(
     'content, timeout, pid, harness_statuses, cputime, capture_coverage,' \
-    ' expected_status, expected_reason, expected_log_calls',
+    ' harness_fault, expected_status, expected_reason, expected_log_calls',
     TESTDATA_25,
     ids=[
         'timeout',
@@ -1598,7 +1660,8 @@ TESTDATA_25 = [
         'unexpected byte',
         'harness success',
         'timeout by pid=0',
-        'capture_coverage'
+        'capture_coverage',
+        'crash detected'
     ]
 )
 def test_qemuhandler_thread(
@@ -1610,6 +1673,7 @@ def test_qemuhandler_thread(
     harness_statuses,
     cputime,
     capture_coverage,
+    harness_fault,
     expected_status,
     expected_reason,
     expected_log_calls
@@ -1643,7 +1707,7 @@ def test_qemuhandler_thread(
 
         return file_object
 
-    harness = mock.Mock(capture_coverage=capture_coverage, handle=print)
+    harness = mock.Mock(capture_coverage=capture_coverage, handle=print, fault=harness_fault)
     type(harness).status = mock.PropertyMock(side_effect=harness_statuses)
 
     p = mock.Mock()
@@ -1684,24 +1748,35 @@ def test_qemuhandler_thread(
     mock_thread_update_instance_info.assert_called_once_with(
         handler,
         expected_status,
-        mock.ANY
+        expected_reason if expected_reason is not None else mock.ANY
     )
 
     file_objs[handler.log].write.assert_has_calls(expected_log_calls)
 
 
 TESTDATA_26 = [
-    (True, False, TwisterStatus.NONE, True,
+    (True, False, TwisterStatus.NONE, True, True, 'stale',
      ['No timeout, return code from QEMU (1): 1',
       'return code from QEMU (1): 1']),
-    (False, True, TwisterStatus.PASS, True, ['return code from QEMU (1): 0']),
-    (False, True, TwisterStatus.FAIL, False, ['return code from QEMU (None): 1']),
+    (False, True, TwisterStatus.PASS, True, False, 'stale',
+     ['return code from QEMU (1): 0']),
+    (False, True, TwisterStatus.FAIL, False, False, 'harness reason',
+     ['return code from QEMU (None): 1']),
+    # The run command exited without QEMU ever writing its pid file: the
+    # monitor thread is released and the exit code, not the stale reason,
+    # names the failure.
+    (False, False, TwisterStatus.NONE, False, True, 'Exited with 1',
+     ['No timeout, return code from QEMU (None): 1',
+      'QEMU exited with 1 without connecting: releasing the monitor thread',
+      'return code from QEMU (None): 1']),
 ]
 
 @pytest.mark.parametrize(
-    'isatty, do_timeout, harness_status, exists_pid_fn, expected_logs',
+    'isatty, do_timeout, harness_status, exists_pid_fn,'
+    ' expect_release, expected_reason, expected_logs',
     TESTDATA_26,
-    ids=['no timeout, isatty', 'timeout passed', 'timeout, no pid_fn']
+    ids=['no timeout, isatty', 'timeout passed', 'timeout, no pid_fn',
+         'exited before start']
 )
 def test_qemuhandler_handle(
     mocked_instance,
@@ -1711,6 +1786,8 @@ def test_qemuhandler_handle(
     do_timeout,
     harness_status,
     exists_pid_fn,
+    expect_release,
+    expected_reason,
     expected_logs
 ):
     def mock_wait(*args, **kwargs):
@@ -1743,7 +1820,7 @@ def test_qemuhandler_handle(
         handler.pid_fn = os.path.join(sysbuild_build_dir, 'qemu.pid')
         handler.log_fn = os.path.join('dummy', 'log')
 
-    harness = mock.Mock(status=harness_status)
+    harness = mock.Mock(status=harness_status, fault=False, reason='harness reason')
     handler_options_west_flash = []
 
     domain_build_dir = os.path.join('sysbuild', 'dummydir')
@@ -1762,6 +1839,9 @@ def test_qemuhandler_handle(
     handler._set_qemu_filenames = mock.Mock(side_effect=mock_filenames)
     handler.get_default_domain_build_dir = mock.Mock(return_value=domain_build_dir)
     handler.terminate = mock.Mock()
+    handler._release_thread = mock.Mock(return_value=True)
+    # A reason left over from a previous iteration or a loaded test plan.
+    handler.instance.reason = 'stale'
 
     unlink_mock = mock.Mock()
 
@@ -1774,6 +1854,50 @@ def test_qemuhandler_handle(
         handler.handle(harness)
 
     assert all([expected_log in caplog.text for expected_log in expected_logs])
+    assert handler._release_thread.called == expect_release
+    assert handler.instance.reason == expected_reason
+
+
+def test_qemuhandler_release_thread(mocked_instance, tmp_path):
+    """The monitor thread blocks opening the fifos until QEMU connects.
+
+    When QEMU never does, _release_thread() connects in its place and the
+    thread finishes with the EOF it then reads, instead of sitting in
+    open() until the test timeout.
+    """
+    handler = QEMUHandler(mocked_instance, 'build', mock.Mock(timeout_multiplier=1))
+    handler.fifo_fn = str(tmp_path / 'qemu-fifo')
+    handler.pid_fn = str(tmp_path / 'qemu.pid')
+    handler.log_fn = str(tmp_path / 'handler.log')
+    harness = mock.Mock(status=TwisterStatus.NONE, fault=False)
+
+    handler.thread = threading.Thread(
+        target=QEMUHandler._thread,
+        args=(handler, 60, str(tmp_path), handler.log_fn, handler.fifo_fn,
+              handler.pid_fn, harness, False),
+        daemon=True,
+    )
+    handler.thread.start()
+
+    with mock.patch(
+        'twisterlib.handlers.QEMUHandler._thread_update_instance_info'
+    ) as update_mock:
+        assert handler._release_thread(timeout=5) is True
+        handler.thread.join(5)
+
+    assert not handler.thread.is_alive()
+    update_mock.assert_called_once_with(handler, TwisterStatus.FAIL, 'unexpected eof')
+    assert not os.path.exists(handler.fifo_fn + '.in')
+    assert not os.path.exists(handler.fifo_fn + '.out')
+
+
+def test_qemuhandler_release_thread_gone(mocked_instance, tmp_path):
+    """Nothing to release once the thread has finished and removed the fifos."""
+    handler = QEMUHandler(mocked_instance, 'build', mock.Mock(timeout_multiplier=1))
+    handler.fifo_fn = str(tmp_path / 'qemu-fifo')
+    handler.thread = mock.Mock(is_alive=mock.Mock(return_value=False))
+
+    assert handler._release_thread(timeout=5) is False
 
 
 def test_qemuhandler_get_fifo(mocked_instance):

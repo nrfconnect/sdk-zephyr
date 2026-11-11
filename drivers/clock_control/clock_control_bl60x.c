@@ -51,6 +51,9 @@ LOG_MODULE_REGISTER(clock_control_bl60x, CONFIG_CLOCK_CONTROL_LOG_LEVEL);
 #define BL60X_TARGET_BASIC_CLOCK	MHZ(40)
 
 #define CRYSTAL_FREQ_TO_ID(freq) CONCAT(CRYSTAL_ID_FREQ_, freq)
+#define CRYSTAL_FREQ DT_PROP(DT_INST_CLOCKS_CTLR_BY_NAME(0, crystal), clock_frequency)
+
+#define TARGET_TIMEBASE_FREQ DT_PROP(DT_PATH(cpus), timebase_frequency)
 
 enum bl60x_clkid {
 	bl60x_clkid_clk_root = BL60X_CLKID_CLK_ROOT,
@@ -479,7 +482,7 @@ static __ramfunc uint32_t clock_control_bl60x_get_xclk(const struct device *dev)
 	if (tmp == 0) {
 		return BFLB_RC32M_FREQUENCY;
 	} else if (tmp == 1) {
-		return DT_PROP(DT_INST_CLOCKS_CTLR_BY_NAME(0, crystal), clock_frequency);
+		return CRYSTAL_FREQ;
 	} else {
 		return 0;
 	}
@@ -536,7 +539,15 @@ static __ramfunc uint32_t clock_control_bl60x_get_bclk(const struct device *dev)
 
 static uint32_t clock_control_bl60x_mtimer_get_clk_src_div(const struct device *dev)
 {
-	return clock_control_bl60x_get_bclk(dev) / 1000 / 1000 - 1;
+	if (clock_control_bl60x_get_bclk(dev) < TARGET_TIMEBASE_FREQ) {
+		LOG_ERR("Timebase frequency is too fast for this configuration");
+		return 0;
+	} else if (clock_control_bl60x_get_bclk(dev) / BIT(GLB_CPU_RTC_DIV_LEN)
+		   > TARGET_TIMEBASE_FREQ) {
+		LOG_ERR("Timebase frequency is too slow for this configuration");
+		return BIT(GLB_CPU_RTC_DIV_LEN) - 1;
+	}
+	return clock_control_bl60x_get_bclk(dev) / TARGET_TIMEBASE_FREQ - 1;
 }
 
 static void clock_control_bl60x_cache_2T(bool yes)
@@ -574,11 +585,12 @@ static void clock_control_bl60x_setup_pll(const struct device *dev)
 
 	if (data->pll.source == BL60X_CLKID_CLK_CRYSTAL) {
 		clock_control_bl60x_init_pll(data->pll.source, config->crystal_id,
-			BFLB_MUL_CLK(clock_control_bl60x_crystal_SDMIN_table[config->crystal_id],
-				     data->pll.top_frequency, BL60X_PLL_TOP_FREQ));
+			BFLB_MUL_CLK_XIP(
+				clock_control_bl60x_crystal_SDMIN_table[config->crystal_id],
+				data->pll.top_frequency, BL60X_PLL_TOP_FREQ));
 	} else {
 		clock_control_bl60x_init_pll(data->pll.source, CRYSTAL_ID_FREQ_32000000,
-			BFLB_MUL_CLK(
+			BFLB_MUL_CLK_XIP(
 				clock_control_bl60x_crystal_SDMIN_table[CRYSTAL_ID_FREQ_32000000],
 				data->pll.top_frequency, BL60X_PLL_TOP_FREQ));
 	}
@@ -620,7 +632,9 @@ static __bflb_critfunc void clock_control_bl60x_init_root_as_crystal(const struc
 	sys_write32(clock_control_bl60x_get_clk(dev), CORECLOCKREGISTER);
 }
 
-static __ramfunc void clock_control_bl60x_update_flash_clk(const struct device *dev)
+static __ramfunc void clock_control_bl60x_update_flash_clk(const struct device *dev,
+							   const enum bl60x_clkid source,
+							   bool final)
 {
 	struct clock_control_bl60x_data *data = dev->data;
 	volatile uint32_t tmp;
@@ -634,11 +648,11 @@ static __ramfunc void clock_control_bl60x_update_flash_clk(const struct device *
 	tmp = *(volatile uint32_t *)(GLB_BASE + GLB_CLK_CFG2_OFFSET);
 	tmp &= GLB_SF_CLK_SEL_UMSK;
 	tmp &= GLB_SF_CLK_SEL2_UMSK;
-	if (data->flashclk.source == bl60x_clkid_clk_pll) {
+	if (source == bl60x_clkid_clk_pll) {
 		clk = clock_control_bl60x_get_clk(dev);
 		tmp |= 0U << GLB_SF_CLK_SEL_POS;
 		tmp |= 0U << GLB_SF_CLK_SEL2_POS;
-	} else if (data->flashclk.source == bl60x_clkid_clk_crystal) {
+	} else if (source == bl60x_clkid_clk_crystal) {
 		clk = clock_control_bl60x_get_xclk(dev);
 		tmp |= 0U << GLB_SF_CLK_SEL_POS;
 		tmp |= 1U << GLB_SF_CLK_SEL2_POS;
@@ -651,12 +665,12 @@ static __ramfunc void clock_control_bl60x_update_flash_clk(const struct device *
 	/* If flash controller will manage flash, set to standard speed
 	 * and let it set the divider.
 	 */
-#if defined(CONFIG_SOC_FLASH_BFLB)
-	clk = DIV_ROUND_CLOSEST(clk, BL60X_TARGET_BASIC_CLOCK);
-	tmp |= clamp(clk - 1, 0x0, 0x7) << GLB_SF_CLK_DIV_POS;
-#else
-	tmp |= (data->flashclk.divider - 1) << GLB_SF_CLK_DIV_POS;
-#endif
+	if (IS_ENABLED(CONFIG_SOC_FLASH_BFLB) || !final) {
+		clk = DIV_ROUND_CLOSEST(clk, BL60X_TARGET_BASIC_CLOCK);
+		tmp |= clamp(clk - 1, 0x0, 0x7) << GLB_SF_CLK_DIV_POS;
+	} else {
+		tmp |= (data->flashclk.divider - 1) << GLB_SF_CLK_DIV_POS;
+	}
 
 	*(volatile uint32_t *)(GLB_BASE + GLB_CLK_CFG2_OFFSET) = tmp;
 
@@ -770,6 +784,8 @@ static __bflb_critfunc int clock_control_bl60x_update_clocks(const struct device
 	clock_control_bl60x_set_root_clock_dividers(0, 0);
 	sys_write32(BFLB_RC32M_FREQUENCY, CORECLOCKREGISTER);
 
+	clock_control_bl60x_update_flash_clk(dev, bl60x_clkid_clk_rc32m, false);
+
 	clock_control_bl60x_set_PKA_clock(0);
 	clock_control_bl60x_cache_2T(false);
 
@@ -807,6 +823,8 @@ static __bflb_critfunc int clock_control_bl60x_update_clocks(const struct device
 	} else {
 		/* Root clock already setup as RC32M */
 	}
+
+	clock_control_bl60x_update_flash_clk(dev, data->flashclk.source, true);
 
 	ret = clock_control_bl60x_clock_trim_32M();
 	if (ret < 0) {
@@ -1023,7 +1041,7 @@ static int clock_control_bl60x_get_rate(const struct device *dev, clock_control_
 	} else if ((enum bl60x_clkid)sys == bl60x_clkid_clk_bclk) {
 		*rate = clock_control_bl60x_get_bclk(dev);
 	} else if ((enum bl60x_clkid)sys == bl60x_clkid_clk_crystal) {
-		*rate = DT_PROP(DT_INST_CLOCKS_CTLR_BY_NAME(0, crystal), clock_frequency);
+		*rate = CRYSTAL_FREQ;
 	} else if ((enum bl60x_clkid)sys == bl60x_clkid_clk_rc32m) {
 		*rate = BFLB_RC32M_FREQUENCY;
 	} else {
@@ -1049,8 +1067,6 @@ static int clock_control_bl60x_init(const struct device *dev)
 
 	clock_bflb_settle();
 
-	clock_control_bl60x_update_flash_clk(dev);
-
 	irq_unlock(key);
 
 	return 0;
@@ -1064,8 +1080,7 @@ static DEVICE_API(clock_control, clock_control_bl60x_api) = {
 };
 
 static const struct clock_control_bl60x_config clock_control_bl60x_config = {
-	.crystal_id = CRYSTAL_FREQ_TO_ID(DT_PROP(DT_INST_CLOCKS_CTLR_BY_NAME(0, crystal),
-						 clock_frequency)),
+	.crystal_id = CRYSTAL_FREQ_TO_ID(CRYSTAL_FREQ),
 };
 
 static struct clock_control_bl60x_data clock_control_bl60x_data = {
@@ -1139,6 +1154,9 @@ BUILD_ASSERT(CLK_SRC_IS(f32k, xtal32k)
 
 BUILD_ASSERT(DT_PROP(DT_INST_CLOCKS_CTLR_BY_NAME(0, rc32m), clock_frequency)
 	== BFLB_RC32M_FREQUENCY, "RC32M must be 32M");
+
+BUILD_ASSERT(TARGET_TIMEBASE_FREQ > KHZ(10) && TARGET_TIMEBASE_FREQ <= MHZ(96),
+	     "Timebase frequency should be greater than 10 KHz and <= than 96MHz");
 
 DEVICE_DT_INST_DEFINE(0, clock_control_bl60x_init, NULL, &clock_control_bl60x_data,
 		      &clock_control_bl60x_config, PRE_KERNEL_1, CONFIG_CLOCK_CONTROL_INIT_PRIORITY,

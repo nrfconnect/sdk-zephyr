@@ -21,6 +21,18 @@ int bt_le_adv_set_enable_ext(struct bt_le_ext_adv *adv,
 			 bool enable,
 			 const struct bt_le_ext_adv_start_param *param);
 int bt_le_adv_set_enable_legacy(struct bt_le_ext_adv *adv, bool enable);
-int bt_le_lim_adv_cancel_timeout(struct bt_le_ext_adv *adv);
+#if defined(CONFIG_BT_LIM_ADV)
+void bt_le_lim_adv_cancel_timeout(struct bt_le_ext_adv *adv);
+#else
+static inline void bt_le_lim_adv_cancel_timeout(struct bt_le_ext_adv *adv)
+{
+	ARG_UNUSED(adv);
+}
+#endif /* CONFIG_BT_LIM_ADV */
+
+/* End the high duty cycle directed advertising set whose timeout the Controller reported with a
+ * connection complete event, as an LE Advertising Set Terminated event would.
+ */
+void bt_le_adv_high_duty_timeout(void);
 void bt_adv_reset_adv_pool(void);
 struct bt_le_ext_adv *bt_adv_lookup_by_id(uint8_t id);

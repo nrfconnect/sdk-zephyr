@@ -1,3 +1,5 @@
 tests:
   libraries.word_granular_access:
-    filter: CONFIG_ARCH_HAS_WORD_GRANULAR_ACCESS_INSTR_MEM
+    ignore_faults: true
+    platform_allow:
+      - esp32_devkitc/esp32/procpu

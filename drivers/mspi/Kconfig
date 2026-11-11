@@ -1,6 +1,8 @@
 # MSPI driver configuration options
 
 # Copyright (c) 2024 Ambiq Micro Inc. <www.ambiq.com>
+# SPDX-FileCopyrightText: Copyright The Zephyr Project Contributors
+#
 # SPDX-License-Identifier: Apache-2.0
 
 #
@@ -37,11 +39,11 @@ config MSPI_COMPLETION_TIMEOUT_TOLERANCE
 	help
 	  The tolerance value in ms for the MSPI completion timeout logic.
 
-config MSPI_XIP
-	bool "XIP eXecute In Place"
+config MSPI_MEMMAP
+	bool "Memory mapped device access"
 	help
-	  Describes controller hardware XIP capability and
-	  enables mspi_xip_config calls in device drivers.
+	  Describes controller hardware memory map capability and
+	  enables mspi_memmap_config calls in device drivers.
 
 config MSPI_SCRAMBLE
 	bool "Scrambling support"
@@ -68,8 +70,11 @@ source "subsys/logging/Kconfig.template.log_config"
 
 # zephyr-keep-sorted-start
 source "drivers/mspi/Kconfig.ambiq"
+source "drivers/mspi/Kconfig.cadence"
 source "drivers/mspi/Kconfig.dw"
+source "drivers/mspi/Kconfig.mchp_xec"
 source "drivers/mspi/Kconfig.mspi_emul"
+source "drivers/mspi/Kconfig.nxp"
 source "drivers/mspi/Kconfig.stm32"
 # zephyr-keep-sorted-stop
 endif # MSPI

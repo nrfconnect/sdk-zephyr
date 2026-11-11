@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 u-blox AG
+ * Copyright (c) 2026 u-blox AG
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -8,8 +8,8 @@
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 
 / {
-	model = "u-blox evk_iris_w1 rw612";
 	compatible = "u-blox,ubx_evk_iris_w1_rw612";
+	model = "u-blox evk_iris_w1 rw612";
 
 	aliases {
 		led0 = &rgb_red;
@@ -26,7 +26,6 @@
 
 	chosen {
 		zephyr,sram = &sram_data;
-		zephyr,flash = &fm25m6413ibe;
 		zephyr,console = &flexcomm3;
 		zephyr,shell-uart = &flexcomm3;
 		zephyr,flash-controller = &ext_flash_ctrl;
@@ -73,29 +72,29 @@
 
 &flexcomm3 {
 	compatible = "nxp,lpc-usart";
-	status = "okay";
 	current-speed = <115200>;
 	pinctrl-0 = <&pinmux_flexcomm3_usart>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &flexcomm0 {
 	compatible = "nxp,lpc-i2s";
-	status = "disabled";
 	pinctrl-0 = <&pinmux_flexcomm0_i2s>;
 	pinctrl-names = "default";
+	status = "disabled";
 };
 
 &hsgpio0 {
-	status = "okay";
 	pinctrl-0 = <&pinmux_hsgpio0>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &hsgpio1 {
-	status = "okay";
 	pinctrl-0 = <&pinmux_hsgpio1>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &crc {
@@ -103,7 +102,6 @@
 };
 
 &flexspi {
-	status = "okay";
 	ahb-bufferable;
 	ahb-prefetch;
 	ahb-cacheable;
@@ -111,61 +109,22 @@
 	ahb-boundary = "1024";
 	rx-clock-source = <1>;
 	rx-clock-source-b = <1>;
+	status = "okay";
 
-	/* external flash */
 	ext_flash_ctrl: flash-controller@0 {
 		compatible = "nxp,imx-flexspi-nor";
 		reg = <0>;
-		size = <DT_SIZE_M(8 * 8)>;
-		status = "okay";
-		spi-max-frequency = <133000000>;
+		spi-max-frequency = <DT_FREQ_M(133)>;
 
 		#address-cells = <1>;
 		#size-cells = <1>;
-		ranges = <0x0 0x18000000 DT_SIZE_M(8)>;
-
-		fm25m6413ibe: flash@0 {
-			compatible = "soc-nv-flash";
-			reg = <0x0 DT_SIZE_M(8)>;
-			erase-block-size = <4096>;
-			write-block-size = <1>;
-
-			partitions {
-				compatible = "fixed-partitions";
-				#address-cells = <1>;
-				#size-cells = <1>;
-
-				/*
-				 * Partition sizes must be aligned
-				 * to the flash memory sector size of 4KB.
-				 */
-				boot_partition: partition@0 {
-					label = "mcuboot";
-					reg = <0x00000000 DT_SIZE_K(128)>;
-				};
-
-				slot0_partition: partition@20000 {
-					label = "image-0";
-					reg = <0x00020000 DT_SIZE_M(3)>;
-				};
-
-				slot1_partition: partition@320000 {
-					label = "image-1";
-					reg = <0x00320000 DT_SIZE_M(3)>;
-				};
-
-				storage_partition: partition@620000 {
-					label = "storage";
-					reg = <0x00620000 (DT_SIZE_M(2) - DT_SIZE_K(128))>;
-				};
-			};
-		};
+		status = "okay";
 	};
 };
 
 &hci {
-	status = "okay";
 	wakeup-source;
+	status = "okay";
 };
 
 &wwdt {
@@ -186,9 +145,9 @@
 
 /* OS Timer is the wakeup source for PM mode 2 */
 &os_timer {
-	status = "okay";
 	wakeup-source;
 	deep-sleep-counter = <&rtc_highres>;
+	status = "okay";
 };
 
 &systick {
@@ -196,20 +155,20 @@
 };
 
 &sctimer {
-	status = "okay";
 	pinctrl-0 = <&pinmux_pwm0>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 /* RTC is the wakeup source for PM modes 3,4 */
 &rtc_highres {
-	status = "okay";
 	wakeup-source;
+	status = "okay";
 };
 
 &nbu {
-	status = "okay";
 	wakeup-source;
+	status = "okay";
 };
 
 &xtal32 {
@@ -224,7 +183,7 @@ zephyr_udc0: &usb_otg {
 	compatible = "nxp,lpc-spi";
 	pinctrl-0 = <&pinmux_flexcomm1_spi>;
 	pinctrl-names = "default";
-	status = "okay";
 	#address-cells = <1>;
 	#size-cells = <0>;
+	status = "okay";
 };

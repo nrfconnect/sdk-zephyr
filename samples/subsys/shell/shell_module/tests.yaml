@@ -74,8 +74,11 @@ tests:
     harness: robot
     arch_exclude:
       - xtensa
-    platform_exclude:
-      - qemu_rx/r5f562n8
+    # Some QEMUs are getting stuck on termination, so keep this only for
+    # working platforms for now.
+    platform_allow:
+      - qemu_x86
+      - native_sim
     extra_configs:
       - arch:posix:CONFIG_UART_NATIVE_PTY_0_ON_STDINOUT=y
     harness_config:
@@ -99,7 +102,7 @@ tests:
       - CONFIG_IPC_SERVICE=y
       - CONFIG_MBOX=y
       - CONFIG_SHELL_REMOTE=y
-      - CONFIG_PBUF_RX_READ_BUF_SIZE=256
       - CONFIG_HEAP_MEM_POOL_SIZE=1024
     extra_args:
       - FILE_SUFFIX=remote_shell
+      - platform:nrf54l:shell_module_SNIPPET=nordic-flpr

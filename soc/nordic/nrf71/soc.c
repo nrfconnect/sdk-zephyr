@@ -323,12 +323,10 @@ void arch_busy_wait(uint32_t time_us)
 	nrfx_coredep_delay_us(time_us);
 }
 
-#ifdef CONFIG_SOC_RESET_HOOK
+#if defined(CONFIG_SOC_RESET_HOOK) && defined(CONFIG_ARM)
 void soc_reset_hook(void)
 {
 	SystemInit();
+	nordicsemi_nrf71_init();
 }
 #endif
-
-/* Init must precede sys_clock_driver_init */
-SYS_INIT(nordicsemi_nrf71_init, EARLY, 0);

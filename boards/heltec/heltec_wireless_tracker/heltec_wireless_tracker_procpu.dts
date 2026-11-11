@@ -7,15 +7,15 @@
  */
 /dts-v1/;
 
-#include <espressif/esp32s3/esp32s3_fn8.dtsi>
+#include <espressif/esp32s3/esp32s3.dtsi>
 #include <espressif/partitions_0x0_amp.dtsi>
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 #include <zephyr/dt-bindings/lora/sx126x.h>
 #include "heltec_wireless_tracker-pinctrl.dtsi"
 
 / {
-	model = "Heltec Wireless Tracker V1.1 PROCPU";
 	compatible = "espressif,esp32s3";
+	model = "Heltec Wireless Tracker V1.1 PROCPU";
 
 	aliases {
 		uart-0 = &uart0;
@@ -46,7 +46,7 @@
 
 	vbatt {
 		compatible = "voltage-divider";
-		io-channels = <&adc1 0>;
+		io-channels = <&adc0 0>;
 		output-ohms = <100000>;
 		full-ohms = <(100000 + 390000)>;
 	};
@@ -73,9 +73,9 @@
 
 		st7735r_160x80: st7735r@0 {
 			compatible = "sitronix,st7735r";
+			reg = <0>;
 			mipi-max-frequency = <24000000>;
 			mipi-mode = "MIPI_DBI_MODE_SPI_4WIRE";
-			reg = <0>;
 			width = <160>;
 			height = <80>;
 			inversion-on;
@@ -101,29 +101,34 @@
 	};
 };
 
-&adc1 {
+&flash0 {
+	reg = <0x0 DT_SIZE_M(8)>;
+	ranges = <0x0 0x0 DT_SIZE_M(8)>;
+};
+
+&adc0 {
 	status = "okay";
 };
 
 &uart0 {
-	status = "okay";
 	current-speed = <115200>;
 	pinctrl-0 = <&uart0_default>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &uart1 {
-	status = "okay";
 	current-speed = <115200>;
 	pinctrl-0 = <&uart1_default>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &uart2 {
-	status = "okay";
 	current-speed = <115200>;
 	pinctrl-0 = <&uart2_default>;
 	pinctrl-names = "default";
+	status = "okay";
 
 	gnss: gnss-nmea-generic {
 		compatible = "gnss-nmea-generic";
@@ -154,9 +159,9 @@
 &spi2 {
 	#address-cells = <1>;
 	#size-cells = <0>;
-	status = "okay";
 	pinctrl-0 = <&spim2_default>;
 	pinctrl-names = "default";
+	status = "okay";
 
 	lora0: lora@0 {
 		compatible = "semtech,sx1262";

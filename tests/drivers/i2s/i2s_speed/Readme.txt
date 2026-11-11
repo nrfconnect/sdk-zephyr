@@ -19,6 +19,13 @@ These are the HW changes required to run this test:
 	- Remove J99, J100
 	- Short Data J99-pin1 (SAI1_RX_DATA0) to J100-pin1 (SAI1_TX_DATA0)
 
+FRDM-IMXRT1152:
+This board uses CONFIG_I2S_TEST_SEPARATE_DEVICES=n and connects TX and RX blocks in one
+SAI peripheral by shorting signals externally on the board.
+These are the HW changes required to run this test:
+	- Populate R58, R69
+	- Short Data J28-pin1 (SAI1_RX_DATA00) to J27-pin1 (SAI1_TX_DATA00)
+
 FRDM-MCXN947:
 This board uses CONFIG_I2S_TEST_SEPARATE_DEVICES=y and connects two SAI peripherals by shorting
 signals externally on the EVK.  These are the HW changes required to run this test:
@@ -53,3 +60,10 @@ signals externally on the EVK.  These are the HW changes required to run this te
         - Short BCLK J1-pin9  (SAI1_RX_BCLK/P3_18) to J8-pin25 (SAI0_TX_BCLK/P3_8)
         - Short SYNC J1-pin13 (SAI1_RX_FS/P1_7)    to J8-pin26 (SAI0_TX_FS/P3_9)
         - Short Data J1-pin15 (SAI1_RXD0/P2_9)     to J8-pin27  (SAI0_TXD0/P3_10)
+
+TEENSY41:
+This board uses a single SAI and connects the TX and RX signals by shorting externally on the board.
+These are the HW changes required to run this test on Teensy 4.1:
+	- Short BCLK pin 21 (SAI1_RX_BCLK  / GPIO_AD_B1_11) to pin 26 (SAI1_TX_BCLK  / GPIO_AD_B1_14)
+	- Short SYNC pin 20 (SAI1_RX_SYNC  / GPIO_AD_B1_10) to pin 27 (SAI1_TX_SYNC  / GPIO_AD_B1_15)
+	- Short Data pin 8  (SAI1_RX_DATA0 / GPIO_AD_B1_12) to pin 7  (SAI1_TX_DATA0 / GPIO_AD_B1_13)

@@ -422,6 +422,7 @@ class TestBoilerplateFilter:
     # ------------------------------------------------------------------
 
     def test_pure_spdx_change(self):
+        # REUSE-IgnoreStart
         diff = textwrap.dedent("""\
             --- a/drivers/foo/foo.c
             +++ b/drivers/foo/foo.c
@@ -429,6 +430,7 @@ class TestBoilerplateFilter:
             -// SPDX-License-Identifier: BSD-3-Clause
             +// SPDX-License-Identifier: Apache-2.0
         """)
+        # REUSE-IgnoreEnd
         s = tp.BoilerplateFilter()
         assert s._all_changes_boilerplate(diff) is True
 
@@ -478,6 +480,25 @@ class TestBoilerplateFilter:
         s = tp.BoilerplateFilter()
         assert s._all_changes_boilerplate(diff) is False
 
+    def test_delimiter_prefixed_substantive_changes_detected(self):
+        changes = [
+            ("#define FOO_TIMEOUT 100", "#define FOO_TIMEOUT 200"),
+            ("#include <zephyr/foo.h>", "#include <zephyr/bar.h>"),
+            ("*ptr = 1;", "*ptr = 0;"),
+        ]
+
+        s = tp.BoilerplateFilter()
+
+        for old, new in changes:
+            diff = textwrap.dedent(f"""\
+                --- a/drivers/foo/foo.c
+                +++ b/drivers/foo/foo.c
+                @@ -20 +20 @@
+                -{old}
+                +{new}
+            """)
+            assert s._all_changes_boilerplate(diff) is False
+
     def test_mixed_boilerplate_and_code_not_boilerplate(self):
         diff = textwrap.dedent("""\
             --- a/drivers/foo/foo.c
@@ -516,6 +537,7 @@ class TestBoilerplateFilter:
         assert "drivers/foo/foo.c" in handled
 
     def test_boilerplate_file_consumed(self):
+        # REUSE-IgnoreStart
         spdx_diff = textwrap.dedent("""\
             --- a/drivers/foo/foo.c
             +++ b/drivers/foo/foo.c
@@ -523,6 +545,7 @@ class TestBoilerplateFilter:
             -// SPDX-License-Identifier: BSD-3-Clause
             +// SPDX-License-Identifier: Apache-2.0
         """)
+        # REUSE-IgnoreEnd
         # ws_only diff is non-empty (SPDX is not whitespace), full diff has only boilerplate
         s = self._strategy({"drivers/foo/foo.c": (spdx_diff, spdx_diff)})
         _, handled = s.analyze(["drivers/foo/foo.c"])
@@ -535,6 +558,18 @@ class TestBoilerplateFilter:
             @@ -20 +20 @@
             -\treturn 0;
             +\treturn -EIO;
+        """)
+        s = self._strategy({"drivers/foo/foo.c": (code_diff, code_diff)})
+        _, handled = s.analyze(["drivers/foo/foo.c"])
+        assert "drivers/foo/foo.c" not in handled
+
+    def test_preprocessor_change_not_consumed(self):
+        code_diff = textwrap.dedent("""\
+            --- a/drivers/foo/foo.c
+            +++ b/drivers/foo/foo.c
+            @@ -20 +20 @@
+            -#define FOO_TIMEOUT 100
+            +#define FOO_TIMEOUT 200
         """)
         s = self._strategy({"drivers/foo/foo.c": (code_diff, code_diff)})
         _, handled = s.analyze(["drivers/foo/foo.c"])
@@ -610,6 +645,39 @@ class TestIgnoreStrategy:
 
     def test_consumes_is_true(self):
         assert tp.IgnoreStrategy.consumes is True
+
+
+# ---------------------------------------------------------------------------
+# ManifestStrategy
+# ---------------------------------------------------------------------------
+
+
+class TestManifestStrategy:
+    """Unit tests for ManifestStrategy."""
+
+    def _strategy(self, tmp_path, diff_result):
+        strategy = tp.ManifestStrategy(
+            zephyr_base=str(tmp_path), repo=mock.Mock(), commits="base..head"
+        )
+        strategy._diff_manifests = mock.Mock(return_value=diff_result)
+        return strategy
+
+    def test_no_revision_change_returns_no_calls(self, tmp_path):
+        # west.yml changed but no project revision differs (e.g. a
+        # comment/formatting edit, or an unrelated field such as
+        # `west-commands`). `calls` must stay a list of TwisterCall objects,
+        # not the set of consumed filenames - see run()'s `call.full_run`.
+        strategy = self._strategy(tmp_path, set())
+        calls, handled = strategy.analyze(["west.yml"])
+        assert calls == []
+        assert handled == {"west.yml"}
+
+    def test_revision_change_emits_call(self, tmp_path):
+        strategy = self._strategy(tmp_path, {"hal_realtek"})
+        calls, handled = strategy.analyze(["west.yml"])
+        assert len(calls) == 1
+        assert calls[0].extra_args == ["-t", "hal_realtek"]
+        assert handled == {"west.yml"}
 
 
 # ---------------------------------------------------------------------------

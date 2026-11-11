@@ -14,6 +14,8 @@
 /**
  * @brief Connection management
  * @defgroup bt_conn Connection management
+ * @since 1.0
+ * @version 1.0.1
  * @ingroup bluetooth
  * @{
  */
@@ -1131,17 +1133,18 @@ struct bt_conn_le_info {
 	uint16_t latency; /**< Connection peripheral latency */
 	uint16_t timeout; /**< Connection supervision timeout */
 
-#if defined(CONFIG_BT_USER_PHY_UPDATE)
+#if defined(CONFIG_BT_USER_PHY_UPDATE) || defined(__DOXYGEN__)
+	/** Connection PHY info  */
 	const struct bt_conn_le_phy_info      *phy;
 #endif /* defined(CONFIG_BT_USER_PHY_UPDATE) */
 
-#if defined(CONFIG_BT_USER_DATA_LEN_UPDATE)
-	/* Connection maximum single fragment parameters */
+#if defined(CONFIG_BT_USER_DATA_LEN_UPDATE) || defined(__DOXYGEN__)
+	/** Connection maximum single fragment parameters */
 	const struct bt_conn_le_data_len_info *data_len;
 #endif /* defined(CONFIG_BT_USER_DATA_LEN_UPDATE) */
 
-#if defined(CONFIG_BT_SUBRATING)
-	/* Connection subrating parameters */
+#if defined(CONFIG_BT_SUBRATING) || defined(__DOXYGEN__)
+	/** Connection subrating parameters */
 	const struct bt_conn_le_subrating_info *subrate;
 #endif /* defined(CONFIG_BT_SUBRATING) */
 };
@@ -1778,7 +1781,7 @@ int bt_conn_le_set_default_phy(uint8_t pref_tx_phy, uint8_t pref_rx_phy);
  *   - @ref BT_HCI_ERR_REMOTE_LOW_RESOURCES
  *   - @ref BT_HCI_ERR_REMOTE_POWER_OFF
  *   - @ref BT_HCI_ERR_UNSUPP_REMOTE_FEATURE
- *   - @ref BT_HCI_ERR_PAIRING_NOT_SUPPORTED
+ *   - @ref BT_HCI_ERR_PAIRING_NOT_SUPPORTED (BR/EDR connections only)
  *   - @ref BT_HCI_ERR_UNACCEPT_CONN_PARAM
  *
  *  @param conn Connection to disconnect.
@@ -2021,6 +2024,9 @@ int bt_conn_create_auto_stop(void);
  *
  *  @return 0 on success or negative error
  *  @return -EINVAL @p conn is not a valid @ref BT_CONN_TYPE_LE or @ref BT_CONN_TYPE_BR connection.
+ *  @return -EALREADY A Security Request is already in flight (one sent by the
+ *                    peripheral has not yet been answered). It is left as-is and
+ *                    the security level it carries is not changed.
  */
 int bt_conn_set_security(struct bt_conn *conn, bt_security_t sec);
 
@@ -2086,39 +2092,50 @@ enum bt_conn_le_cs_procedure_enable_state {
 
 /** CS Test Tone Antenna Config Selection.
  *
+ *  See Bluetooth Core Specification, Vol 6, Part A, Section 5.3
+ *  and Bluetooth Core Specification, Vol 6, Part H, Section 4.7
+ *
  *  These enum values are indices in the following table, where N_AP is the maximum
  *  number of antenna paths (in the range [1, 4]).
  *
- * +--------------+-------------+-------------------+-------------------+--------+
- * | Config Index | Total Paths | Dev A: # Antennas | Dev B: # Antennas | Config |
- * +--------------+-------------+-------------------+-------------------+--------+
- * |            0 |           1 |                 1 |                 1 | 1:1    |
- * |            1 |           2 |                 2 |                 1 | N_AP:1 |
- * |            2 |           3 |                 3 |                 1 | N_AP:1 |
- * |            3 |           4 |                 4 |                 1 | N_AP:1 |
- * |            4 |           2 |                 1 |                 2 | 1:N_AP |
- * |            5 |           3 |                 1 |                 3 | 1:N_AP |
- * |            6 |           4 |                 1 |                 4 | 1:N_AP |
- * |            7 |           4 |                 2 |                 2 | 2:2    |
- * +--------------+-------------+-------------------+-------------------+--------+
+ * +--------------+-------------+-----------------------+-----------------------+--------+
+ * | Config Index | Total Paths | Initiator: # Antennas | Reflector: # Antennas | Config |
+ * +--------------+-------------+-----------------------+-----------------------+--------+
+ * |            0 |           1 |                     1 |                     1 | 1:1    |
+ * |            1 |           2 |                     2 |                     1 | N_AP:1 |
+ * |            2 |           3 |                     3 |                     1 | N_AP:1 |
+ * |            3 |           4 |                     4 |                     1 | N_AP:1 |
+ * |            4 |           2 |                     1 |                     2 | 1:N_AP |
+ * |            5 |           3 |                     1 |                     3 | 1:N_AP |
+ * |            6 |           4 |                     1 |                     4 | 1:N_AP |
+ * |            7 |           4 |                     2 |                     2 | 2:2    |
+ * +--------------+-------------+-----------------------+-----------------------+--------+
  *
  *  There are therefore four groups of possible antenna configurations:
  *
- *  - 1:1 configuration, where both A and B support 1 antenna each
- *  - 1:N_AP configuration, where A supports 1 antenna, B supports N_AP antennas, and
- *    N_AP is a value in the range [2, 4]
- *  - N_AP:1 configuration, where A supports N_AP antennas, B supports 1 antenna, and
- *    N_AP is a value in the range [2, 4]
- *  - 2:2 configuration, where both A and B support 2 antennas and N_AP = 4
+ *  - 1:1 configuration, where both Initiator and Reflector support 1 antenna each
+ *  - 1:N_AP configuration, where Initiator supports 1 antenna, Reflector supports
+ *    N_AP antennas, and N_AP is a value in the range [2, 4]
+ *  - N_AP:1 configuration, where Initiator supports N_AP antennas, Reflector supports
+ *    1 antenna, and N_AP is a value in the range [2, 4]
+ *  - 2:2 configuration, where both Initiator and Reflector support 2 antennas and N_AP = 4
  */
 enum bt_conn_le_cs_tone_antenna_config_selection {
+	/** Initiator (dev A): 1 antenna, Reflector (dev B): 1 antenna */
 	BT_LE_CS_TONE_ANTENNA_CONFIGURATION_A1_B1 = BT_HCI_OP_LE_CS_ACI_0,
+	/** Initiator (dev A): 2 antennas, Reflector (dev B): 1 antenna */
 	BT_LE_CS_TONE_ANTENNA_CONFIGURATION_A2_B1 = BT_HCI_OP_LE_CS_ACI_1,
+	/** Initiator (dev A): 3 antennas, Reflector (dev B): 1 antenna */
 	BT_LE_CS_TONE_ANTENNA_CONFIGURATION_A3_B1 = BT_HCI_OP_LE_CS_ACI_2,
+	/** Initiator (dev A): 4 antennas, Reflector (dev B): 1 antenna */
 	BT_LE_CS_TONE_ANTENNA_CONFIGURATION_A4_B1 = BT_HCI_OP_LE_CS_ACI_3,
+	/** Initiator (dev A): 1 antenna, Reflector (dev B): 2 antennas */
 	BT_LE_CS_TONE_ANTENNA_CONFIGURATION_A1_B2 = BT_HCI_OP_LE_CS_ACI_4,
+	/** Initiator (dev A): 1 antenna, Reflector (dev B): 3 antennas */
 	BT_LE_CS_TONE_ANTENNA_CONFIGURATION_A1_B3 = BT_HCI_OP_LE_CS_ACI_5,
+	/** Initiator (dev A): 1 antenna, Reflector (dev B): 4 antennas */
 	BT_LE_CS_TONE_ANTENNA_CONFIGURATION_A1_B4 = BT_HCI_OP_LE_CS_ACI_6,
+	/** Initiator (dev A): 2 antennas, Reflector (dev B): 2 antennas */
 	BT_LE_CS_TONE_ANTENNA_CONFIGURATION_A2_B2 = BT_HCI_OP_LE_CS_ACI_7,
 };
 
@@ -2161,7 +2178,7 @@ struct bt_conn_le_cs_procedure_enable_complete {
 
 /** @brief BR/EDR specific connection callbacks. */
 struct bt_conn_br_cb {
-#if defined(CONFIG_BT_POWER_MODE_CONTROL)
+#if defined(CONFIG_BT_POWER_MODE_CONTROL) || defined(__DOXYGEN__)
 	/** @brief A BR/EDR connection mode has changed.
 	 *
 	 *  This callback notifies the application that the sniff mode has changed.
@@ -2214,6 +2231,14 @@ struct bt_conn_br_cb {
  *  tracking the connection state. If a callback is not of interest for
  *  an instance, it may be set to NULL and will as a consequence not be
  *  used for that instance.
+ *
+ *  @note The callbacks are invoked from a thread context, never from an
+ *        ISR. Whether a callback is invoked from a context internal to
+ *        the stack or synchronously from within the API call that
+ *        triggers it, and from which context, is not part of the API and
+ *        may change between releases. See
+ *        @rstref{Callback execution contexts <bluetooth_callback_contexts>}
+ *        for the hazards of blocking in a callback and their mitigations.
  */
 struct bt_conn_cb {
 	/** @brief A new connection has been established.
@@ -2339,7 +2364,7 @@ struct bt_conn_cb {
 	void (*le_param_update_rejected)(struct bt_conn *conn, uint8_t hci_err);
 #endif /* defined(CONFIG_BT_USER_CONN_PARAM_REJECTED) || defined(__DOXYGEN__) */
 
-#if defined(CONFIG_BT_SMP)
+#if defined(CONFIG_BT_SMP) || defined(__DOXYGEN__)
 	/** @brief Remote Identity Address has been resolved.
 	 *
 	 *  This callback notifies the application that a remote
@@ -2374,7 +2399,7 @@ struct bt_conn_cb {
 				 enum bt_security_err err);
 #endif /* defined(CONFIG_BT_SMP) || defined(CONFIG_BT_CLASSIC) */
 
-#if defined(CONFIG_BT_REMOTE_INFO)
+#if defined(CONFIG_BT_REMOTE_INFO) || defined(__DOXYGEN__)
 	/** @brief Remote information procedures has completed.
 	 *
 	 *  This callback notifies the application that the remote information
@@ -2387,25 +2412,25 @@ struct bt_conn_cb {
 				      struct bt_conn_remote_info *remote_info);
 #endif /* defined(CONFIG_BT_REMOTE_INFO) */
 
-#if defined(CONFIG_BT_CLASSIC)
+#if defined(CONFIG_BT_CLASSIC) || defined(__DOXYGEN__)
 	/** @brief BR/EDR specific callbacks. */
 	struct bt_conn_br_cb br;
 #endif /* CONFIG_BT_CLASSIC */
 
-#if defined(CONFIG_BT_USER_PHY_UPDATE)
+#if defined(CONFIG_BT_USER_PHY_UPDATE) || defined(__DOXYGEN__)
 	/** @brief The PHY of the connection has changed.
 	 *
 	 *  This callback notifies the application that the PHY of the
 	 *  connection has changed.
 	 *
 	 *  @param conn Connection object.
-	 *  @param info Connection LE PHY information.
+	 *  @param param Connection LE PHY information.
 	 */
 	void (*le_phy_updated)(struct bt_conn *conn,
 			       struct bt_conn_le_phy_info *param);
 #endif /* defined(CONFIG_BT_USER_PHY_UPDATE) */
 
-#if defined(CONFIG_BT_USER_DATA_LEN_UPDATE)
+#if defined(CONFIG_BT_USER_DATA_LEN_UPDATE) || defined(__DOXYGEN__)
 	/** @brief The data length parameters of the connection has changed.
 	 *
 	 *  This callback notifies the application that the maximum Link Layer
@@ -2418,7 +2443,7 @@ struct bt_conn_cb {
 				    struct bt_conn_le_data_len_info *info);
 #endif /* defined(CONFIG_BT_USER_DATA_LEN_UPDATE) */
 
-#if defined(CONFIG_BT_DF_CONNECTION_CTE_RX)
+#if defined(CONFIG_BT_DF_CONNECTION_CTE_RX) || defined(__DOXYGEN__)
 	/** @brief Callback for IQ samples report collected when sampling
 	 *        CTE received by data channel PDU.
 	 *
@@ -2429,7 +2454,7 @@ struct bt_conn_cb {
 			      const struct bt_df_conn_iq_samples_report *iq_report);
 #endif /* CONFIG_BT_DF_CONNECTION_CTE_RX */
 
-#if defined(CONFIG_BT_TRANSMIT_POWER_CONTROL)
+#if defined(CONFIG_BT_TRANSMIT_POWER_CONTROL) || defined(__DOXYGEN__)
 	/** @brief LE Read Remote Transmit Power Level procedure has completed or LE
 	 *  Transmit Power Reporting event.
 	 *
@@ -2445,7 +2470,7 @@ struct bt_conn_cb {
 				const struct bt_conn_le_tx_power_report *report);
 #endif /* CONFIG_BT_TRANSMIT_POWER_CONTROL */
 
-#if defined(CONFIG_BT_PATH_LOSS_MONITORING)
+#if defined(CONFIG_BT_PATH_LOSS_MONITORING) || defined(__DOXYGEN__)
 	/** @brief LE Path Loss Threshold event.
 	 *
 	 *  This callback notifies the application that there has been a path loss threshold
@@ -2459,7 +2484,7 @@ struct bt_conn_cb {
 				const struct bt_conn_le_path_loss_threshold_report *report);
 #endif /* CONFIG_BT_PATH_LOSS_MONITORING */
 
-#if defined(CONFIG_BT_SUBRATING)
+#if defined(CONFIG_BT_SUBRATING) || defined(__DOXYGEN__)
 	/** @brief LE Subrate Changed event.
 	 *
 	 *  This callback notifies the application that the subrating parameters
@@ -2499,7 +2524,7 @@ struct bt_conn_cb {
 				  const struct bt_conn_le_conn_rate_changed *params);
 #endif /* CONFIG_BT_SHORTER_CONNECTION_INTERVALS */
 
-#if defined(CONFIG_BT_LE_EXTENDED_FEAT_SET)
+#if defined(CONFIG_BT_LE_EXTENDED_FEAT_SET) || defined(__DOXYGEN__)
 	/** @brief Read all remote features complete event.
 	 *
 	 *  This callback notifies the application that a 'read all remote
@@ -2518,7 +2543,7 @@ struct bt_conn_cb {
 		const struct bt_conn_le_read_all_remote_feat_complete *params);
 #endif /* CONFIG_BT_LE_EXTENDED_FEAT_SET */
 
-#if defined(CONFIG_BT_FRAME_SPACE_UPDATE)
+#if defined(CONFIG_BT_FRAME_SPACE_UPDATE) || defined(__DOXYGEN__)
 	/** @brief Frame Space Update Complete event.
 	 *
 	 *  This callback notifies the application that the frame space of
@@ -2538,7 +2563,7 @@ struct bt_conn_cb {
 		const struct bt_conn_le_frame_space_updated *params);
 #endif /* CONFIG_BT_FRAME_SPACE_UPDATE */
 
-#if defined(CONFIG_BT_CHANNEL_SOUNDING)
+#if defined(CONFIG_BT_CHANNEL_SOUNDING) || defined(__DOXYGEN__)
 	/** @brief LE CS Read Remote Supported Capabilities Complete event.
 	 *
 	 *  This callback notifies the application that a Channel Sounding
@@ -2549,7 +2574,7 @@ struct bt_conn_cb {
 	 *
 	 *  @param conn Connection object.
 	 *  @param status HCI status of complete event.
-	 *  @param remote_cs_capabilities Pointer to CS Capabilities on success or NULL otherwise.
+	 *  @param params Pointer to CS Capabilities on success or NULL otherwise.
 	 */
 	void (*le_cs_read_remote_capabilities_complete)(struct bt_conn *conn,
 							uint8_t status,
@@ -2816,30 +2841,6 @@ int bt_le_oob_get_sc_data(struct bt_conn *conn,
 			  const struct bt_le_oob_sc_data **oobd_local,
 			  const struct bt_le_oob_sc_data **oobd_remote);
 
-/**
- *  DEPRECATED - use @ref BT_PASSKEY_RAND instead. Special passkey value that can be used to disable
- *  a previously set fixed passkey.
- */
-#define BT_PASSKEY_INVALID 0xffffffff
-
-/** @brief Set a fixed passkey to be used for pairing.
- *
- *  This API is only available when the CONFIG_BT_FIXED_PASSKEY
- *  configuration option has been enabled.
- *
- *  Sets a fixed passkey to be used for pairing. If set, the
- *  pairing_confirm() callback will be called for all incoming pairings.
- *
- * @deprecated Use @ref BT_PASSKEY_RAND and the app_passkey callback from @ref bt_conn_auth_cb
- *             instead.
- *
- *  @param passkey A valid passkey (0 - 999999) or BT_PASSKEY_INVALID
- *                 to disable a previously set fixed passkey.
- *
- *  @return 0 on success or a negative error code on failure.
- */
-__deprecated int bt_passkey_set(unsigned int passkey);
-
 /** Info Structure for OOB pairing */
 struct bt_conn_oob_info {
 	/** Type of OOB pairing method */
@@ -2872,7 +2873,6 @@ struct bt_conn_oob_info {
 	};
 };
 
-#if defined(CONFIG_BT_SMP_APP_PAIRING_ACCEPT)
 /** @brief Pairing request and pairing response info structure.
  *
  *  This structure is the same for both smp_pairing_req and smp_pairing_rsp
@@ -2902,7 +2902,6 @@ struct bt_conn_pairing_feat {
 	 */
 	uint8_t resp_key_dist;
 };
-#endif /* CONFIG_BT_SMP_APP_PAIRING_ACCEPT */
 
 /**
  * Special passkey value that can be used to generate a random passkey when using the
@@ -2911,9 +2910,18 @@ struct bt_conn_pairing_feat {
  */
 #define BT_PASSKEY_RAND 0xffffffff
 
-/** Authenticated pairing callback structure */
+/** Authenticated pairing callback structure
+ *
+ *  @note The callbacks are invoked from a thread context, never from an
+ *        ISR. Whether a callback is invoked from a context internal to
+ *        the stack or synchronously from within the API call that
+ *        triggers it, and from which context, is not part of the API and
+ *        may change between releases. See
+ *        @rstref{Callback execution contexts <bluetooth_callback_contexts>}
+ *        for the hazards of blocking in a callback and their mitigations.
+ */
 struct bt_conn_auth_cb {
-#if defined(CONFIG_BT_SMP_APP_PAIRING_ACCEPT)
+#if defined(CONFIG_BT_SMP_APP_PAIRING_ACCEPT) || defined(__DOXYGEN__)
 	/** @brief Query to proceed incoming pairing or not.
 	 *
 	 *  On any incoming pairing req/rsp this callback will be called for
@@ -2967,7 +2975,7 @@ struct bt_conn_auth_cb {
 	 */
 	void (*passkey_display)(struct bt_conn *conn, unsigned int passkey);
 
-#if defined(CONFIG_BT_PASSKEY_KEYPRESS)
+#if defined(CONFIG_BT_PASSKEY_KEYPRESS) || defined(__DOXYGEN__)
 	/** @brief Receive Passkey Keypress Notification during pairing
 	 *
 	 *  This allows the remote device to use the local device to give users
@@ -2991,7 +2999,7 @@ struct bt_conn_auth_cb {
 	 */
 	void (*passkey_display_keypress)(struct bt_conn *conn,
 					 enum bt_conn_auth_keypress type);
-#endif
+#endif /* CONFIG_BT_PASSKEY_KEYPRESS */
 
 	/** @brief Request the user to enter a passkey.
 	 *
@@ -3089,7 +3097,7 @@ struct bt_conn_auth_cb {
 	 */
 	void (*pairing_confirm)(struct bt_conn *conn);
 
-#if defined(CONFIG_BT_CLASSIC)
+#if defined(CONFIG_BT_CLASSIC) || defined(__DOXYGEN__)
 	/** @brief Request the user to enter a passkey.
 	 *
 	 *  This callback will be called for a BR/EDR (Bluetooth Classic)
@@ -3109,9 +3117,9 @@ struct bt_conn_auth_cb {
 	 *  @param highsec true if 16 digit PIN is required.
 	 */
 	void (*pincode_entry)(struct bt_conn *conn, bool highsec);
-#endif
+#endif /* CONFIG_BT_CLASSIC */
 
-#if defined(CONFIG_BT_APP_PASSKEY)
+#if defined(CONFIG_BT_APP_PASSKEY) || defined(__DOXYGEN__)
 	/** @brief Allow the application to provide a passkey for pairing.
 	 *
 	 *  If implemented, this callback allows the application to provide passkeys for pairing.
@@ -3136,7 +3144,16 @@ struct bt_conn_auth_cb {
 #endif /* CONFIG_BT_APP_PASSKEY */
 };
 
-/** Authenticated pairing information callback structure */
+/** Authenticated pairing information callback structure
+ *
+ *  @note The callbacks are invoked from a thread context, never from an
+ *        ISR. Whether a callback is invoked from a context internal to
+ *        the stack or synchronously from within the API call that
+ *        triggers it, and from which context, is not part of the API and
+ *        may change between releases. See
+ *        @rstref{Callback execution contexts <bluetooth_callback_contexts>}
+ *        for the hazards of blocking in a callback and their mitigations.
+ */
 struct bt_conn_auth_info_cb {
 	/** @brief notify that pairing procedure was complete.
 	 *
@@ -3167,7 +3184,22 @@ struct bt_conn_auth_info_cb {
 	 */
 	void (*bond_deleted)(uint8_t id, const bt_addr_le_t *peer);
 
-#if defined(CONFIG_BT_CLASSIC)
+	/** @brief The peer's support for address resolution has been read.
+	 *
+	 *  This callback notifies the application that the automatic read of
+	 *  a bonded peer's Central Address Resolution characteristic, enabled
+	 *  with @kconfig{CONFIG_BT_GATT_AUTO_READ_CENTRAL_ADDR_RES}, has
+	 *  finished. The answer is also available from
+	 *  bt_le_bond_addr_res_support(), and remains unknown when the read
+	 *  failed.
+	 *
+	 *  @param conn    Connection the characteristic was read on.
+	 *  @param support The peer's support for address resolution.
+	 */
+	void (*addr_res_support_read)(struct bt_conn *conn,
+				      enum bt_le_addr_res_support support);
+
+#if defined(CONFIG_BT_CLASSIC) || defined(__DOXYGEN__)
 	/** @brief Notify that bond of classic has been deleted.
 	 *
 	 *  This callback notifies the application that the bond information of classic
@@ -3398,11 +3430,12 @@ int bt_conn_br_switch_role(const struct bt_conn *conn, uint8_t role);
  */
 int bt_conn_br_set_role_switch_enable(const struct bt_conn *conn, bool enable);
 
-#if defined(CONFIG_BT_POWER_MODE_CONTROL)
 /** @brief bluetooth conn check and enter sniff mode
  *
  *  This function is used to identify which ACL link connection is to
  *  be placed in Sniff mode
+ *
+ *  @kconfig_dep{CONFIG_BT_POWER_MODE_CONTROL}
  *
  *  @param conn bt_conn conn
  *  @param min_interval Minimum sniff interval.
@@ -3415,6 +3448,8 @@ int bt_conn_br_enter_sniff_mode(struct bt_conn *conn, uint16_t min_interval,
 
 /** @brief bluetooth conn check and exit sniff mode
  *
+ *  @kconfig_dep{CONFIG_BT_POWER_MODE_CONTROL}
+ *
  *  @param conn bt_conn conn
  *
  *  @return  Zero for success, non-zero otherwise.
@@ -3426,6 +3461,8 @@ int bt_conn_br_exit_sniff_mode(struct bt_conn *conn);
  *  Configure sniff subrating parameters for a BR/EDR connection.
  *  Sniff subrating allows further power savings by reducing the
  *  number of sniff anchor points the device needs to listen on.
+ *
+ *  @kconfig_dep{CONFIG_BT_POWER_MODE_CONTROL}
  *
  *  @param conn               Connection object.
  *  @param max_latency        Maximum allowed sniff subrate latency
@@ -3443,7 +3480,6 @@ int bt_conn_br_exit_sniff_mode(struct bt_conn *conn);
 int bt_conn_br_set_sniff_subrating(struct bt_conn *conn, uint16_t max_latency,
 				   uint16_t min_remote_timeout,
 				   uint16_t min_local_timeout);
-#endif /* CONFIG_BT_POWER_MODE_CONTROL */
 
 /** @brief Read BR/EDR supervision timeout.
  *

@@ -28,12 +28,23 @@ Z_THREAD_LOCAL uint32_t is_user_mode;
 #endif /* CONFIG_USERSPACE */
 
 /**
+ * @brief Build the initial context frame of a new thread.
+ *
  * Initializes a stack area such that it can be "restored" later and
  * begin running with the specified function and three arguments.  The
  * entry function takes three arguments to match the signature of
  * Zephyr's k_thread_entry_t.  Thread will start with EXCM clear and
  * INTLEVEL set to zero (i.e. it's a user thread, we don't start with
  * anything masked, so don't assume that!).
+ *
+ * @param thread Thread being created.
+ * @param stack_top Initial top of the thread stack.
+ * @param entry Thread entry function.
+ * @param arg1 First argument to @p entry.
+ * @param arg2 Second argument to @p entry.
+ * @param arg3 Third argument to @p entry.
+ *
+ * @return Switch handle of the new thread.
  */
 static void *init_stack(struct k_thread *thread, int *stack_top,
 			void (*entry)(void *, void *, void *),
@@ -72,7 +83,7 @@ static void *init_stack(struct k_thread *thread, int *stack_top,
 	 */
 	thread->arch.return_ps = PS_WOE | PS_UM | PS_CALLINC(1);
 
-	if ((thread->base.user_options & K_USER) == K_USER) {
+	if (k_thread_is_user_thread(thread)) {
 		frame->bsa.pc = (uintptr_t)arch_user_mode_enter;
 	} else {
 		frame->bsa.pc = (uintptr_t)z_thread_entry;
@@ -86,7 +97,7 @@ static void *init_stack(struct k_thread *thread, int *stack_top,
 #ifdef CONFIG_THREAD_LOCAL_STORAGE
 	frame->bsa.threadptr = thread->tls;
 #elif CONFIG_USERSPACE
-	frame->bsa.threadptr = (uintptr_t)((thread->base.user_options & K_USER) ? thread : NULL);
+	frame->bsa.threadptr = (uintptr_t)(k_thread_is_user_thread(thread) ? thread : NULL);
 #endif
 #endif
 
@@ -120,6 +131,19 @@ void arch_new_thread(struct k_thread *thread, k_thread_stack_t *stack,
 {
 	thread->switch_handle = init_stack(thread, (int *)stack_ptr, entry,
 					   p1, p2, p3);
+
+#if defined(CONFIG_USERSPACE) && defined(CONFIG_XTENSA_MMU)
+	/*
+	 * Start with no page tables. arch_mem_domain_thread_add() uses a
+	 * non-NULL arch.ptables to detect that the thread is migrating from a
+	 * previous memory domain and reset its stack there. For a brand new
+	 * thread - in particular a dynamically allocated one (k_object_alloc()),
+	 * whose backing memory is not zeroed - this field would otherwise hold
+	 * garbage and the "migration" would walk a bogus page table.
+	 */
+	thread->arch.ptables = NULL;
+#endif
+
 #ifdef CONFIG_XTENSA_LAZY_HIFI_SHARING
 	memset(thread->arch.hifi_regs, 0, sizeof(thread->arch.hifi_regs));
 #endif /* CONFIG_XTENSA_LAZY_HIFI_SHARING */
@@ -166,6 +190,13 @@ int arch_float_enable(struct k_thread *thread, unsigned int options)
 
 
 #if defined(CONFIG_XTENSA_LAZY_HIFI_SHARING)
+/**
+ * @brief Drop HiFi coprocessor ownership of a thread.
+ *
+ * Clears the HiFi owner of the thread's CPU if it is @p thread.
+ *
+ * @param thread Thread giving up the HiFi coprocessor.
+ */
 void xtensa_hifi_disown(struct k_thread *thread)
 {
 	unsigned int cpu_id = 0;
@@ -267,7 +298,7 @@ int arch_thread_priv_stack_space_get(const struct k_thread *thread, size_t *stac
 
 	struct xtensa_thread_stack_header *hdr_stack_obj;
 
-	if ((thread->base.user_options & K_USER) != K_USER) {
+	if (!k_thread_is_user_thread(thread)) {
 		return -EINVAL;
 	}
 

@@ -12,7 +12,7 @@
 #include <zephyr/drivers/watchdog.h>
 #include <zephyr/drivers/clock_control/stm32_clock_control.h>
 #include <zephyr/kernel.h>
-#include <zephyr/sys_clock.h>
+#include <zephyr/sys/clock.h>
 #include <soc.h>
 #include <stm32_ll_bus.h>
 #include <stm32_ll_rcc.h>
@@ -54,7 +54,7 @@
 
 #ifdef CONFIG_IWDG_STM32_EARLY_WAKEUP
 
-void iwdg_stm32_isr(const struct device *dev)
+static void iwdg_stm32_isr(const struct device *dev)
 {
 	struct iwdg_stm32_data *data = dev->data;
 	IWDG_TypeDef *iwdg = ((const struct iwdg_stm32_config *)dev->config)->instance;

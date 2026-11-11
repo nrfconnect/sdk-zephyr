@@ -6,57 +6,75 @@
 #include <mem.h>
 #include <arm64/armv8-a.dtsi>
 #include <zephyr/dt-bindings/interrupt-controller/arm-gic.h>
+#include <zephyr/dt-bindings/clock/rk3588-cru.h>
+#include <zephyr/dt-bindings/reset/rk3588-cru-reset.h>
 
 / {
+	compatible = "rockchip,rk3588";
 	#address-cells = <1>;
 	#size-cells = <1>;
-
-	compatible = "rockchip,rk3588";
 	interrupt-parent = <&gic>;
 
 	cpus {
 		#address-cells = <1>;
 		#size-cells = <0>;
 
-		cpu@0 {
-			device_type = "cpu";
+		a55_cpu0: cpu@0 {
 			compatible = "arm,cortex-a55";
+			reg = <0x000>;
+			device_type = "cpu";
 			enable-method = "psci";
 			clock-frequency = <24000000>;
-			reg = <0x000>;
 		};
 
-		cpu@100 {
-			device_type = "cpu";
+		a55_cpu1: cpu@100 {
 			compatible = "arm,cortex-a55";
-			enable-method = "psci";
 			reg = <0x100>;
+			device_type = "cpu";
+			enable-method = "psci";
 		};
 
-		cpu@200 {
-			device_type = "cpu";
+		a55_cpu2: cpu@200 {
 			compatible = "arm,cortex-a55";
-			enable-method = "psci";
 			reg = <0x200>;
-		};
-
-		cpu@300 {
 			device_type = "cpu";
-			compatible = "arm,cortex-a55";
 			enable-method = "psci";
-			reg = <0x300>;
 		};
-	};
 
-	gic: interrupt-controller@fe600000 {
-		#address-cells = <1>;
-		compatible = "arm,gic-v3", "arm,gic";
-		#interrupt-cells = <4>;
-		interrupt-controller;
+		a55_cpu3: cpu@300 {
+			compatible = "arm,cortex-a55";
+			reg = <0x300>;
+			device_type = "cpu";
+			enable-method = "psci";
+		};
 
-		reg = <0xfe600000 0x10000>, /* GICD */
-		      <0xfe680000 0x100000>; /* GICR */
-		status = "okay";
+		a76_cpu0: cpu@400 {
+			compatible = "arm,cortex-a76";
+			reg = <0x400>;
+			device_type = "cpu";
+			enable-method = "psci";
+		};
+
+		a76_cpu1: cpu@500 {
+			compatible = "arm,cortex-a76";
+			reg = <0x500>;
+			device_type = "cpu";
+			enable-method = "psci";
+		};
+
+		a76_cpu2: cpu@600 {
+			compatible = "arm,cortex-a76";
+			reg = <0x600>;
+			device_type = "cpu";
+			enable-method = "psci";
+		};
+
+		a76_cpu3: cpu@700 {
+			compatible = "arm,cortex-a76";
+			reg = <0x700>;
+			device_type = "cpu";
+			enable-method = "psci";
+		};
 	};
 
 	psci {
@@ -73,10 +91,114 @@
 		interrupt-parent = <&gic>;
 	};
 
+	sys_grf: syscon@fd58c000 {
+		compatible = "syscon";
+		reg = <0xfd58c000 0x1000>;
+		status = "okay";
+	};
+
+	php_grf: syscon@fd5b0000 {
+		compatible = "syscon";
+		reg = <0xfd5b0000 0x1000>;
+		status = "okay";
+	};
+
+	cru: clock-controller@fd7c0000 {
+		compatible = "rockchip,rk3588-cru";
+		reg = <0xfd7c0000 0x5c000>;
+		status = "okay";
+
+		cru_clk: clock-controller {
+			compatible = "rockchip,rk3588-cru-clk";
+			#clock-cells = <1>;
+			status = "okay";
+		};
+
+		cru_rst: reset-controller {
+			compatible = "rockchip,rk3588-cru-rst";
+			#reset-cells = <1>;
+			status = "okay";
+		};
+	};
+
+	gmac0: ethernet@fe1b0000 {
+		compatible = "rockchip,rk3588-gmac", "snps,dwmac";
+		reg = <0xfe1b0000 0x10000>;
+		interrupt-parent = <&gic>;
+		interrupts = <GIC_SPI 227 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>;
+		clocks = <&cru_clk CLK_GMAC_125M>, <&cru_clk CLK_GMAC_50M>,
+			 <&cru_clk PCLK_GMAC0>, <&cru_clk ACLK_GMAC0>,
+			 <&cru_clk CLK_GMAC0_PTP_REF>, <&cru_clk MCLK_GMAC0_OUT>;
+		clock-names = "stmmaceth", "clk_mac_ref", "pclk_mac", "aclk_mac",
+			      "ptp_ref", "clk_mac_refout";
+		resets = <&cru_rst SRST_A_GMAC0>;
+		reset-names = "stmmaceth";
+		phy-connection-type = "rgmii";
+		snps,multicast-filter-bins = <64>;
+		snps,perfect-filter-entries = <5>;
+		rockchip,grf = <&sys_grf>;
+		rockchip,php-grf = <&php_grf>;
+		status = "disabled";
+
+		mdio0: mdio {
+			compatible = "snps,dwmac-mdio";
+			#address-cells = <1>;
+			#size-cells = <0>;
+			status = "disabled";
+		};
+
+		ptp_clock0: ptp-clock {
+			compatible = "snps,dwmac-ptp-clock";
+			status = "disabled";
+		};
+	};
+
+	gmac1: ethernet@fe1c0000 {
+		compatible = "rockchip,rk3588-gmac", "snps,dwmac";
+		reg = <0xfe1c0000 0x10000>;
+		interrupt-parent = <&gic>;
+		interrupts = <GIC_SPI 234 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>;
+		clocks = <&cru_clk CLK_GMAC_125M>, <&cru_clk CLK_GMAC_50M>,
+			 <&cru_clk PCLK_GMAC1>, <&cru_clk ACLK_GMAC1>,
+			 <&cru_clk CLK_GMAC1_PTP_REF>;
+		clock-names = "stmmaceth", "clk_mac_ref", "pclk_mac", "aclk_mac", "ptp_ref";
+		resets = <&cru_rst SRST_A_GMAC1>;
+		reset-names = "stmmaceth";
+		phy-connection-type = "rgmii";
+		snps,multicast-filter-bins = <64>;
+		snps,perfect-filter-entries = <5>;
+		rockchip,grf = <&sys_grf>;
+		rockchip,php-grf = <&php_grf>;
+		status = "disabled";
+
+		mdio1: mdio {
+			compatible = "snps,dwmac-mdio";
+			#address-cells = <1>;
+			#size-cells = <0>;
+			status = "disabled";
+		};
+
+		ptp_clock1: ptp-clock {
+			compatible = "snps,dwmac-ptp-clock";
+			status = "disabled";
+		};
+	};
+
+	gic: interrupt-controller@fe600000 {
+		compatible = "arm,gic-v3", "arm,gic";
+
+		reg = <0xfe600000 0x10000>, /* GICD */
+		      <0xfe680000 0x100000>; /* GICR */
+		#address-cells = <1>;
+		#interrupt-cells = <4>;
+		interrupt-controller;
+		status = "okay";
+	};
+
 	uart2: serial@feb50000 {
 		compatible = "rockchip,rk3588-uart", "ns16550";
 		reg = <0xfeb50000 0x100>;
-		interrupts = <GIC_SPI 333 IRQ_TYPE_EDGE IRQ_DEFAULT_PRIORITY>;
+		interrupts = <GIC_SPI 333 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>;
 		clock-frequency = <12000000>;
 		reg-shift = <2>;
 		status = "disabled";
@@ -85,7 +207,7 @@
 	uart3: serial@feb60000 {
 		compatible = "rockchip,rk3588-uart", "ns16550";
 		reg = <0xfeb60000 0x100>;
-		interrupts = <GIC_SPI 334 IRQ_TYPE_EDGE IRQ_DEFAULT_PRIORITY>;
+		interrupts = <GIC_SPI 334 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>;
 		clock-frequency = <24000000>;
 		reg-shift = <2>;
 		status = "disabled";

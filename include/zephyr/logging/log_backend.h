@@ -52,6 +52,17 @@ enum log_backend_evt {
 	 */
 	LOG_BACKEND_EVT_PROCESS_THREAD_DONE,
 
+	/**
+	 * @brief Event when process thread starts processing.
+	 *
+	 * This event is emitted before the process thread starts
+	 * processing pending log messages. Each such event is followed
+	 * by exactly one @ref LOG_BACKEND_EVT_PROCESS_THREAD_DONE event.
+	 *
+	 * @note Deferred mode only.
+	 */
+	LOG_BACKEND_EVT_PROCESS_THREAD_START,
+
 	/** @brief Maximum number of backend events */
 	LOG_BACKEND_EVT_MAX,
 };
@@ -266,7 +277,7 @@ static inline uint8_t log_backend_id_get(const struct log_backend *const backend
 /**
  * @brief Get backend.
  *
- * @param[in] idx  Pointer to the backend instance.
+ * @param[in] idx  Index of the backend instance.
  *
  * @return    Pointer to the backend instance.
  */
