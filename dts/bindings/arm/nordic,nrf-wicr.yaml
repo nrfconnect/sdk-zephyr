@@ -11,11 +11,6 @@ properties:
   reg:
     required: true
 
-  data-rfparams:
-    type: phandle
-    description: |
-      Phandle to the memory region containing RF parameters.
-
   data-vtfaddress:
     type: phandle
     description: |
