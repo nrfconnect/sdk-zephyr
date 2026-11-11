@@ -79,12 +79,9 @@ static inline int32_t z_vrfy_k_stack_alloc_init(struct k_stack *stack,
 
 int k_stack_cleanup(struct k_stack *stack)
 {
-	k_spinlock_key_t key = k_spin_lock(&stack->lock);
-
 	SYS_PORT_TRACING_OBJ_FUNC_ENTER(k_stack, cleanup, stack);
 
 	CHECKIF(z_waitq_head(&stack->wait_q) != NULL) {
-		k_spin_unlock(&stack->lock, key);
 		SYS_PORT_TRACING_OBJ_FUNC_EXIT(k_stack, cleanup, stack, -EAGAIN);
 
 		return -EAGAIN;
@@ -96,7 +93,6 @@ int k_stack_cleanup(struct k_stack *stack)
 		stack->flags &= ~K_STACK_FLAG_ALLOC;
 	}
 
-	k_spin_unlock(&stack->lock, key);
 	SYS_PORT_TRACING_OBJ_FUNC_EXIT(k_stack, cleanup, stack, 0);
 
 	return 0;
