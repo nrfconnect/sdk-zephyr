@@ -647,8 +647,7 @@ static void coap_server_retransmit(void)
 
 		if (coap_pending_cycle(pending)) {
 			ret = zsock_sendto(service->data->sock_fd, pending->data, pending->len, 0,
-					   net_sad(&pending->addr_storage),
-					   ADDRLEN(net_sad(&pending->addr_storage)));
+					   &pending->addr, ADDRLEN(&pending->addr));
 			if (ret < 0) {
 				LOG_ERR("Failed to send pending retransmission for %s (%d)",
 					service->name, ret);
@@ -657,8 +656,7 @@ static void coap_server_retransmit(void)
 		} else {
 			LOG_WRN("Packet retransmission failed for %s", service->name);
 
-			coap_service_remove_observer(service, NULL,
-						     net_sad(&pending->addr_storage), NULL, 0U);
+			coap_service_remove_observer(service, NULL, &pending->addr, NULL, 0U);
 			coap_server_free(pending->data);
 			coap_pending_clear(pending);
 		}

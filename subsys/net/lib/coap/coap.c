@@ -1633,9 +1633,7 @@ int coap_pending_init(struct coap_pending *pending,
 
 	pending->id = coap_header_get_id(request);
 
-	memcpy(&pending->addr_storage, addr,
-	       addr->sa_family == NET_AF_INET ?
-			sizeof(struct net_sockaddr_in) : sizeof(struct net_sockaddr_in6));
+	memcpy(&pending->addr, addr, sizeof(*addr));
 
 	if (params) {
 		pending->params = *params;
