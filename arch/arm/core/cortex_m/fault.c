@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2014 Wind River Systems, Inc.
  * Copyright (c) 2020 Nordic Semiconductor ASA.
+ * Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -54,6 +55,14 @@ LOG_MODULE_DECLARE(os, CONFIG_KERNEL_LOG_LEVEL);
  * to the Secure stack during a Non-Secure exception entry.
  */
 #define ADDITIONAL_STATE_CONTEXT_WORDS 10
+#define ADDITIONAL_STATE_CONTEXT_R4_OFFSET 2
+#define ADDITIONAL_STATE_CONTEXT_R5_OFFSET 3
+#define ADDITIONAL_STATE_CONTEXT_R6_OFFSET 4
+#define ADDITIONAL_STATE_CONTEXT_R7_OFFSET 5
+#define ADDITIONAL_STATE_CONTEXT_R8_OFFSET 6
+#define ADDITIONAL_STATE_CONTEXT_R9_OFFSET 7
+#define ADDITIONAL_STATE_CONTEXT_R10_OFFSET 8
+#define ADDITIONAL_STATE_CONTEXT_R11_OFFSET 9
 
 #if defined(CONFIG_ARMV7_M_ARMV8_M_MAINLINE)
 /* helpers to access memory/bus/usage faults */
@@ -822,6 +831,18 @@ static uint32_t fault_handle(struct arch_esf *esf, int fault, bool *recoverable)
 }
 
 #if defined(CONFIG_ARM_SECURE_FIRMWARE)
+static inline bool secure_stack_has_additional_context(const struct arch_esf *secure_esf)
+{
+	const uint32_t *top_of_sec_stack = (const uint32_t *)secure_esf;
+
+#if defined(CONFIG_ARMV7_M_ARMV8_M_FP)
+	return (*top_of_sec_stack == INTEGRITY_SIGNATURE_STD) ||
+	       (*top_of_sec_stack == INTEGRITY_SIGNATURE_EXT);
+#else
+	return *top_of_sec_stack == INTEGRITY_SIGNATURE;
+#endif /* CONFIG_ARMV7_M_ARMV8_M_FP */
+}
+
 #if (CONFIG_FAULT_DUMP == 2)
 /**
  * @brief Dump the Secure Stack information for an exception that
@@ -840,14 +861,10 @@ static void secure_stack_dump(const struct arch_esf *secure_esf)
 	 * In case of a Non-Secure function call the top of the
 	 * stack contains the return address to Secure state.
 	 */
-	uint32_t *top_of_sec_stack = (uint32_t *)secure_esf;
+	const uint32_t *top_of_sec_stack = (const uint32_t *)secure_esf;
 	uint32_t sec_ret_addr;
-#if defined(CONFIG_ARMV7_M_ARMV8_M_FP)
-	if ((*top_of_sec_stack == INTEGRITY_SIGNATURE_STD) ||
-	    (*top_of_sec_stack == INTEGRITY_SIGNATURE_EXT)) {
-#else
-	if (*top_of_sec_stack == INTEGRITY_SIGNATURE) {
-#endif /* CONFIG_ARMV7_M_ARMV8_M_FP */
+
+	if (secure_stack_has_additional_context(secure_esf)) {
 		/* Secure state interrupted by a Non-Secure exception.
 		 * The return address after the additional state
 		 * context, stacked by the Secure code upon
@@ -871,6 +888,38 @@ static void secure_stack_dump(const struct arch_esf *secure_esf)
 #endif /* CONFIG_FAULT_DUMP== 2 */
 #endif /* CONFIG_ARM_SECURE_FIRMWARE */
 
+struct fault_esf_context {
+	const uint32_t *additional_context;
+};
+
+#if defined(CONFIG_ARM_SECURE_FIRMWARE)
+static inline const uint32_t *secure_stack_additional_context(const struct arch_esf *esf)
+{
+	const uint32_t *top_of_sec_stack = (const uint32_t *)esf;
+
+	if (secure_stack_has_additional_context(esf)) {
+		return top_of_sec_stack;
+	}
+
+	return NULL;
+}
+
+static inline struct arch_esf *skip_secure_stack_context(struct arch_esf *esf,
+							 struct fault_esf_context *context)
+{
+	const uint32_t *additional_context = secure_stack_additional_context(esf);
+
+	if (additional_context == NULL) {
+		PR_FAULT_INFO("  Missing Secure additional context integrity signature");
+		return NULL;
+	}
+
+	context->additional_context = additional_context;
+
+	return (struct arch_esf *)(additional_context + ADDITIONAL_STATE_CONTEXT_WORDS);
+}
+#endif /* CONFIG_ARM_SECURE_FIRMWARE */
+
 /*
  * This internal function does the following:
  *
@@ -883,7 +932,7 @@ static void secure_stack_dump(const struct arch_esf *secure_esf)
  * @return ESF pointer on success, otherwise return NULL
  */
 static inline struct arch_esf *get_esf(uint32_t msp, uint32_t psp, uint32_t exc_return,
-				       bool *nested_exc)
+				       bool *nested_exc, struct fault_esf_context *context)
 {
 	bool alternative_state_exc = false;
 	struct arch_esf *ptr_esf = NULL;
@@ -896,6 +945,8 @@ static inline struct arch_esf *get_esf(uint32_t msp, uint32_t psp, uint32_t exc_
 	}
 
 #if defined(CONFIG_ARM_SECURE_FIRMWARE)
+	context->additional_context = NULL;
+
 	if ((exc_return & EXC_RETURN_EXCEPTION_SECURE_Secure) == 0U) {
 		/* Secure Firmware shall only handle Secure Exceptions.
 		 * This is a fatal error.
@@ -928,7 +979,7 @@ static inline struct arch_esf *get_esf(uint32_t msp, uint32_t psp, uint32_t exc_
 
 		/* Handle the actual fault.
 		 * Extract the correct stack frame from the Non-Secure state
-		 * and supply it to the fault handing function.
+		 * and supply it to the fault handling function.
 		 */
 		if (exc_return & EXC_RETURN_MODE_THREAD) {
 			ptr_esf = (struct arch_esf *)__TZ_get_PSP_NS();
@@ -986,6 +1037,19 @@ static inline struct arch_esf *get_esf(uint32_t msp, uint32_t psp, uint32_t exc_
 			ptr_esf = (struct arch_esf *)msp;
 			*nested_exc = true;
 		}
+
+#if defined(CONFIG_ARM_SECURE_FIRMWARE)
+		if ((exc_return & EXC_RETURN_CALLEE_STACK_Msk) == EXC_RETURN_CALLEE_STACK_SKIPPED) {
+			/* Only look for the integrity signature when EXC_RETURN
+			 * reports skipped callee stacking; otherwise, a normal
+			 * r0 value matching the signature could be skipped by
+			 * mistake.
+			 * If the signature is present, keep its address for r4-r11
+			 * and advance ptr_esf to the basic frame.
+			 */
+			ptr_esf = skip_secure_stack_context(ptr_esf, context);
+		}
+#endif
 	}
 
 	return ptr_esf;
@@ -1027,6 +1091,7 @@ void z_arm_fault(uint32_t msp, uint32_t psp, uint32_t exc_return, _callee_saved_
 	uint32_t reason = K_ERR_CPU_EXCEPTION;
 	int fault = SCB->ICSR & SCB_ICSR_VECTACTIVE_Msk;
 	bool recoverable, nested_exc;
+	struct fault_esf_context context;
 	struct arch_esf *esf;
 
 #ifdef CONFIG_USE_SWITCH
@@ -1047,8 +1112,32 @@ void z_arm_fault(uint32_t msp, uint32_t psp, uint32_t exc_return, _callee_saved_
 	/* Retrieve the Exception Stack Frame (ESF) to be supplied
 	 * as argument to the remainder of the fault handling process.
 	 */
-	esf = get_esf(msp, psp, exc_return, &nested_exc);
+	esf = get_esf(msp, psp, exc_return, &nested_exc, &context);
 	__ASSERT(esf != NULL, "ESF could not be retrieved successfully. Shall never occur.");
+
+#if defined(CONFIG_EXTRA_EXCEPTION_INFO) && defined(CONFIG_ARMV7_M_ARMV8_M_MAINLINE)
+	SCB_Type *scb_ptr;
+
+#if defined(CONFIG_ARM_SECURE_FIRMWARE)
+	scb_ptr = context.non_secure_esf ? SCB_NS : SCB;
+#else /* !CONFIG_ARM_SECURE_FIRMWARE */
+	scb_ptr = SCB;
+#endif /* CONFIG_ARM_SECURE_FIRMWARE */
+
+	/* Snapshot system control registers inspected and/or modified
+	 * during fault handling before fault handling is performed.
+	 */
+	esf_copy.extra_info.cfsr = scb_ptr->CFSR;
+	esf_copy.extra_info.hfsr = scb_ptr->HFSR;
+	esf_copy.extra_info.dfsr = scb_ptr->DFSR;
+	esf_copy.extra_info.mmfar = scb_ptr->MMFAR;
+	esf_copy.extra_info.bfar = scb_ptr->BFAR;
+#if defined(CONFIG_ARM_SECURE_FIRMWARE)
+	esf_copy.extra_info.sfsr = SAU->SFSR;
+	esf_copy.extra_info.sfar = SAU->SFAR;
+	esf_copy.extra_info.non_secure = context.non_secure_esf;
+#endif /* CONFIG_ARM_SECURE_FIRMWARE */
+#endif /* CONFIG_EXTRA_EXCEPTION_INFO && CONFIG_ARMV7_M_ARMV8_M_MAINLINE */
 
 	z_arm_set_fault_sp(esf, exc_return);
 
@@ -1062,12 +1151,39 @@ void z_arm_fault(uint32_t msp, uint32_t psp, uint32_t exc_return, _callee_saved_
 	memcpy(&esf_copy, esf, sizeof(struct arch_esf));
 	ARG_UNUSED(callee_regs);
 #else
+	_callee_saved_t *fault_callee_regs = callee_regs;
+
+#if defined(CONFIG_ARM_SECURE_FIRMWARE)
+	_callee_saved_t secure_callee_regs;
+
+	if (context.additional_context != NULL) {
+		/* The fault assembly wrapper saves r4-r11 after exception entry.
+		 * When EXC_RETURN says callee stacking was skipped, the processor
+		 * already saved the interrupted Secure r4-r11 in this additional
+		 * context block, so use those values instead.
+		 */
+		secure_callee_regs = (_callee_saved_t){
+			.v1 = context.additional_context[ADDITIONAL_STATE_CONTEXT_R4_OFFSET],
+			.v2 = context.additional_context[ADDITIONAL_STATE_CONTEXT_R5_OFFSET],
+			.v3 = context.additional_context[ADDITIONAL_STATE_CONTEXT_R6_OFFSET],
+			.v4 = context.additional_context[ADDITIONAL_STATE_CONTEXT_R7_OFFSET],
+			.v5 = context.additional_context[ADDITIONAL_STATE_CONTEXT_R8_OFFSET],
+			.v6 = context.additional_context[ADDITIONAL_STATE_CONTEXT_R9_OFFSET],
+			.v7 = context.additional_context[ADDITIONAL_STATE_CONTEXT_R10_OFFSET],
+			.v8 = context.additional_context[ADDITIONAL_STATE_CONTEXT_R11_OFFSET],
+			.psp = (uint32_t)esf,
+		};
+		fault_callee_regs = &secure_callee_regs;
+	}
+#endif /* CONFIG_ARM_SECURE_FIRMWARE */
+
 	/* the extra exception info is not present in the original esf
 	 * so we only copy the fields before those.
 	 */
 	memcpy(&esf_copy, esf, offsetof(struct arch_esf, extra_info));
-	esf_copy.extra_info = (struct __extra_esf_info){
-		.callee = callee_regs, .exc_return = exc_return, .msp = msp};
+	esf_copy.extra_info.callee = fault_callee_regs;
+	esf_copy.extra_info.exc_return = exc_return;
+	esf_copy.extra_info.msp = msp;
 #endif /* CONFIG_EXTRA_EXCEPTION_INFO */
 
 	/* Overwrite stacked IPSR to mark a nested exception,
