@@ -198,7 +198,6 @@
 				ngpios = <11>;
 				status = "disabled";
 				port = <2>;
-				hspadctrl-supported;
 			};
 
 			timer00: timer@55000 {

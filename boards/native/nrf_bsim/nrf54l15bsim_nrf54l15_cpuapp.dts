@@ -113,7 +113,6 @@
 
 &gpio2 {
 	status = "okay";
-	/delete-property/ hspadctrl-supported;
 };
 
 &gpiote20 {
