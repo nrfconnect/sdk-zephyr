@@ -102,9 +102,7 @@ struct bt_mesh_blob_xfer_info {
 	/** MTU size in octets. */
 	uint16_t mtu_size;
 
-	/** Bit field indicating blocks that were not received, one bit per block of the
-	 *  transfer, or NULL if the status did not include it.
-	 */
+	/** Bit field indicating blocks that were not received.  */
 	const uint8_t *missing_blocks;
 };
 
