@@ -28,10 +28,6 @@ LOG_MODULE_REGISTER(net_coap, CONFIG_COAP_LOG_LEVEL);
 #include <zephyr/net/coap.h>
 #include <zephyr/net/coap_mgmt.h>
 
-#if defined(CONFIG_COAP_OSCORE)
-#include "coap_oscore_internal.h"
-#endif /* CONFIG_COAP_OSCORE */
-
 #define COAP_PATH_ELEM_DELIM '/'
 #define COAP_PATH_ELEM_QUERY '?'
 #define COAP_PATH_ELEM_AMP   '&'
@@ -198,7 +194,7 @@ int coap_packet_init(struct coap_packet *cpkt, uint8_t *data, uint16_t max_len,
 	cpkt->max_len = max_len;
 	cpkt->delta = 0U;
 #if defined(CONFIG_COAP_OSCORE)
-	cpkt->oscore_ctx = NULL;
+	cpkt->is_oscore = false;
 #endif /* defined(CONFIG_COAP_OSCORE) */
 
 	hdr = (ver & 0x3) << 6;
@@ -787,7 +783,7 @@ int coap_packet_parse(struct coap_packet *cpkt, uint8_t *data, uint16_t len,
 	cpkt->hdr_len = 0U;
 	cpkt->delta = 0U;
 #if defined(CONFIG_COAP_OSCORE)
-	cpkt->oscore_ctx = NULL;
+	cpkt->is_oscore = false;
 #endif /* defined(CONFIG_COAP_OSCORE) */
 
 	/* Token lengths 9-15 are reserved. */
@@ -1995,20 +1991,19 @@ void coap_observer_init(struct coap_observer *observer, const struct coap_packet
 	memcpy(&observer->addr, addr, net_family2size(addr->sa_family));
 
 #if defined(CONFIG_COAP_OSCORE)
-	observer->oscore_ctx = NULL;
+	observer->is_oscore = false;
 #endif
 }
 
 #if defined(CONFIG_COAP_OSCORE)
 void coap_observer_init_oscore(struct coap_observer *observer, const struct coap_packet *request,
-			       const struct net_sockaddr *addr,
-			       struct coap_oscore_context *oscore_ctx)
+			       const struct net_sockaddr *addr, bool is_oscore)
 {
 	observer->tkl = coap_header_get_token(request, observer->token);
 
 	memcpy(&observer->addr, addr, net_family2size(addr->sa_family));
 
-	observer->oscore_ctx = oscore_ctx;
+	observer->is_oscore = is_oscore;
 }
 #endif /* CONFIG_COAP_OSCORE */
 
@@ -2038,18 +2033,6 @@ bool coap_register_observer(struct coap_resource *resource,
 
 	sys_slist_append(&resource->observers, &observer->list);
 
-#if defined(CONFIG_COAP_OSCORE)
-	/* Take the OSCORE context reference the observer holds for its lifetime
-	 * (paired with the release in coap_remove_observer()). A no-op for
-	 * non-OSCORE observers. If the context is already stale, drop the pointer so
-	 * the observer never releases a reference it did not take.
-	 */
-	if (observer->oscore_ctx != NULL &&
-	    coap_oscore_context_inc_refcount(observer->oscore_ctx) != 0) {
-		observer->oscore_ctx = NULL;
-	}
-#endif /* CONFIG_COAP_OSCORE */
-
 	first = resource->age == 0;
 	if (first) {
 		resource->age = COAP_OBSERVE_FIRST_OFFSET;
@@ -2066,16 +2049,6 @@ bool coap_remove_observer(struct coap_resource *resource,
 	if (!sys_slist_find_and_remove(&resource->observers, &observer->list)) {
 		return false;
 	}
-
-#if defined(CONFIG_COAP_OSCORE)
-	/* Release the OSCORE context reference taken in coap_register_observer().
-	 * A no-op for non-OSCORE observers.
-	 */
-	if (observer->oscore_ctx != NULL) {
-		coap_oscore_context_dec_refcount(observer->oscore_ctx);
-		observer->oscore_ctx = NULL;
-	}
-#endif /* CONFIG_COAP_OSCORE */
 
 	coap_observer_raise_event(resource, observer, NET_EVENT_COAP_OBSERVER_REMOVED);
 
@@ -2214,7 +2187,7 @@ int coap_tcp_packet_init(struct coap_packet *cpkt, uint8_t *data,
 	cpkt->max_len = max_len;
 	cpkt->delta = 0U;
 #if defined(CONFIG_COAP_OSCORE)
-	cpkt->oscore_ctx = NULL;
+	cpkt->is_oscore = false;
 #endif /* defined(CONFIG_COAP_OSCORE) */
 
 	/* Assuming packet without options or payload */
@@ -2356,7 +2329,7 @@ int coap_tcp_packet_parse(struct coap_packet *cpkt, uint8_t *data,
 	cpkt->hdr_len = 0U;
 	cpkt->delta = 0U;
 #if defined(CONFIG_COAP_OSCORE)
-	cpkt->oscore_ctx = NULL;
+	cpkt->is_oscore = false;
 #endif /* defined(CONFIG_COAP_OSCORE) */
 
 	tkl = cpkt->data[0] & 0x0f;
