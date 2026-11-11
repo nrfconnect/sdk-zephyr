@@ -4287,10 +4287,14 @@ bool net_if_ipv4_addr_onlink(struct net_if **iface, const struct net_in_addr *ad
 	struct net_if *best_iface = NULL;
 	uint8_t best_len = 0U;
 
+	if (iface == NULL || *iface == NULL) {
+		return false;
+	}
+
 	STRUCT_SECTION_FOREACH(net_if, tmp) {
 		struct net_if_ipv4 *ipv4;
 
-		if (iface != NULL && *iface != NULL && *iface != tmp) {
+		if (*iface != tmp) {
 			continue;
 		}
 
@@ -4332,10 +4336,7 @@ bool net_if_ipv4_addr_onlink(struct net_if **iface, const struct net_in_addr *ad
 	}
 
 	if (best_iface != NULL) {
-		if (iface != NULL) {
-			*iface = best_iface;
-		}
-
+		*iface = best_iface;
 		return true;
 	}
 
