@@ -69,10 +69,7 @@ void z_sys_poweroff(void)
 #endif /* defined(CONFIG_HAS_NORDIC_RAM_CTRL) */
 
 #if defined(CONFIG_RETAINED_MEM_NRF_RAM_CTRL)
-	/* Retention is best-effort because z_sys_poweroff() cannot return an
-	 * error. Continue powering off if applying the devicetree configuration
-	 * fails, in which case the configured retained data may not survive.
-	 */
+	/* Restore retention for retained_mem driver regions defined in devicetree */
 	(void)z_nrf_retained_mem_retention_apply();
 #endif
 
