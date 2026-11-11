@@ -87,11 +87,6 @@
 		};
 	};
 
-	usbhs_phy: usbhs_phy {
-		compatible = "nordic,nrf-usbhs-phy-type2";
-		status = "reserved";
-	};
-
 	soc {
 		#address-cells = <1>;
 		#size-cells = <1>;
@@ -247,7 +242,6 @@
 				#address-cells = <1>;
 				#size-cells = <1>;
 				regulator = <&vregusb>;
-				phy = <&usbhs_phy>;
 				status = "disabled";
 
 				usbhs: usbhs@20000 {
