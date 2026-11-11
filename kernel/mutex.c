@@ -51,7 +51,6 @@
 
 #include <zephyr/kernel.h>
 #include <zephyr/toolchain.h>
-#include <kspinlock.h>
 #include <ksched.h>
 #include <scheduler.h>
 #include <kthread.h>
