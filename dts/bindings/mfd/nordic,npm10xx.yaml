@@ -30,7 +30,7 @@ properties:
 
   longpress-reset-source:
     type: string
-    default: "shphld"
+    default: "none"
     enum:
       - "none"
       - "gpio"
@@ -38,9 +38,9 @@ properties:
       - "both"
     description: |
       Select long press reset source for the PMIC. Choose one of the following:
-        none - no reset source
+        none - no reset source, hardware's default
         gpio - reset button connected to GPIO, choose GPIO number using longpress-reset-gpio
-        shphld - reset button connected to SHPHLD pin, hardware's default
+        shphld - reset button connected to SHPHLD pin
         both - reset button connected to both SHPHLD and GPIO pins, choose GPIO number
 
   longpress-reset-gpio-config:
@@ -51,7 +51,7 @@ properties:
 
   longpress-reset-debounce-s:
     type: int
-    default: 10
+    default: 3
     enum:
       - 3
       - 5
@@ -59,7 +59,7 @@ properties:
       - 20
     description: |
       Duration in seconds the reset button(s) need to be pressed to issue a reset. Defaults to the
-      hardware reset value of 10 s.
+      hardware reset value.
 
   shphld-wakeup-disable:
     type: boolean
