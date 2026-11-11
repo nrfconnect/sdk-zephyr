@@ -170,7 +170,7 @@
 	status = "okay";
 };
 
-&antsw {
+&wifi_antsw {
 	status = "okay";
 };
 
