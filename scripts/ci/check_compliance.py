@@ -508,11 +508,10 @@ class StyleCheckMixin:
                     changed.update((hunk.target_start, hunk.target_start + 1))
         return changed
 
-    def _check_files(self, tool, file_filter, extra_args=()):
+    def _check_files(self, tool, file_filter):
         # Run 'tool' on each added/modified file matching 'file_filter' and
         # report issues on changed lines only. 'tool' is a Path; file_filter is a
-        # predicate on the file path string; 'extra_args' are passed to the tool
-        # before the file argument.
+        # predicate on the file path string.
         for file in get_files(filter="d"):
             if not file_filter(file):
                 continue
@@ -522,7 +521,7 @@ class StyleCheckMixin:
                 continue
 
             result = subprocess.run(
-                [sys.executable, str(tool), *extra_args, file],
+                [sys.executable, str(tool), file],
                 cwd=GIT_TOP,
                 capture_output=True,
                 text=True,
@@ -2234,10 +2233,6 @@ class CMakeStyle(StyleCheckMixin, ComplianceTest):
     Checks the CMake style of added/modified files against the Zephyr CMake style
     guidelines, using scripts/cmake/cmake_style.py. Only issues on lines touched
     by the change are reported, so pre-existing style is not flagged.
-
-    Downstream projects can extend the mixed-case command allow-list by pointing
-    the CMAKE_STYLE_MIXED_CASE_FILE environment variable at an extra allow-list
-    file (same format as scripts/cmake/cmake_style_mixed_case.txt).
     """
 
     name = "CMakeStyle"
@@ -2252,16 +2247,9 @@ class CMakeStyle(StyleCheckMixin, ComplianceTest):
                 "'pip install tree-sitter tree-sitter-cmake'"
             )
 
-        # Load extensions to the mixed-case command allow-list
-        extra_args = []
-        if path := os.environ.get("CMAKE_STYLE_MIXED_CASE_FILE", None):
-            logging.info(f"Loading extra mixed-case commands from {path}")
-            extra_args += ["--mixed-case-file", path]
-
         self._check_files(
             ZEPHYR_BASE / "scripts" / "cmake" / "cmake_style.py",
             lambda file: file.endswith(".cmake") or Path(file).name == "CMakeLists.txt",
-            extra_args=extra_args,
         )
 
 
