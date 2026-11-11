@@ -6,7 +6,7 @@
  * from mimxrt1040_evk.mex
  */
 
-#include <nxp/nxp_imx/rt/mimxrt1042xjm5b-pinctrl.dtsi>
+#include <nxp/imxrt/imxrt10xx/pinctrl/mimxrt1042xjm5b-pinctrl.dtsi>
 
 &pinctrl {
 	/* Route ADC1 IN3 and IN4 to J33 pins 1 and 2 */
@@ -26,8 +26,8 @@
 			bias-disable;
 			drive-strength = "r0-6";
 			slew-rate = "fast";
-			nxp,speed = "50-mhz";
 			input-enable;
+			nxp,speed = "50-mhz";
 		};
 
 		group1 {
@@ -87,8 +87,8 @@
 			drive-strength = "r0-6";
 			drive-open-drain;
 			slew-rate = "slow";
-			nxp,speed = "100-mhz";
 			input-enable;
+			nxp,speed = "100-mhz";
 		};
 	};
 
@@ -99,8 +99,8 @@
 				 <&iomuxc_gpio_ad_b1_07_lpi2c3_scl>;
 			drive-strength = "r0-6";
 			slew-rate = "slow";
-			nxp,speed = "100-mhz";
 			input-enable;
+			nxp,speed = "100-mhz";
 		};
 	};
 

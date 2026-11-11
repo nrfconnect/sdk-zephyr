@@ -34,12 +34,11 @@
 #include <zephyr/sys/slist.h>
 #include <zephyr/sys/util.h>
 #include <zephyr/sys/util_macro.h>
-#include <zephyr/sys_clock.h>
+#include <zephyr/sys/clock.h>
 #include <zephyr/toolchain.h>
 
 #include "conn_internal.h"
 #include "common/bt_str.h"
-#include "common/rpa.h"
 #include "crypto/bt_crypto.h"
 #include "ecc.h"
 #include "hci_core.h"
@@ -53,6 +52,13 @@ LOG_MODULE_REGISTER(bt_smp);
 
 #define SMP_TIMEOUT K_SECONDS(30)
 
+/* Number of confirm/random rounds in the LE Secure Connections Passkey Entry
+ * protocol. The passkey is a 6-digit decimal number, which is carried one bit
+ * per round, least significant bit first.
+ * Core Spec 6.3, Vol 3, Part H, 2.3.5.6.3.
+ */
+#define SMP_PASSKEY_ROUNDS 20U
+
 #if defined(CONFIG_BT_SIGNING)
 #define SIGN_DIST BT_SMP_DIST_SIGN
 #else
@@ -65,7 +71,7 @@ LOG_MODULE_REGISTER(bt_smp);
 #define ID_DIST 0
 #endif
 
-#if defined(CONFIG_BT_CLASSIC)
+#if defined(CONFIG_BT_SMP_DERIVE_LK)
 #define LINK_DIST BT_SMP_DIST_LINK_KEY
 #else
 #define LINK_DIST 0
@@ -188,17 +194,17 @@ struct bt_smp {
 	/* MacKey */
 	uint8_t				mackey[16];
 
-	/* LE SC passkey */
-	uint32_t				passkey;
-
-	/* LE SC passkey round */
-	uint8_t				passkey_round;
-
 	/* LE SC local OOB data */
 	const struct bt_le_oob_sc_data	*oobd_local;
 
 	/* LE SC remote OOB data */
 	const struct bt_le_oob_sc_data	*oobd_remote;
+
+	/* LE SC passkey */
+	uint32_t				passkey;
+
+	/* LE SC passkey round */
+	uint8_t				passkey_round;
 
 	/* Local key distribution */
 	uint8_t				local_dist;
@@ -221,12 +227,6 @@ struct bt_smp {
 	/* Bondable flag */
 	atomic_t			bondable;
 };
-
-static unsigned int fixed_passkey = BT_PASSKEY_RAND;
-
-#define DISPLAY_FIXED(smp) (IS_ENABLED(CONFIG_BT_FIXED_PASSKEY) && \
-			    fixed_passkey != BT_PASSKEY_RAND && \
-			    (smp)->method == PASSKEY_DISPLAY)
 
 #if !defined(CONFIG_BT_SMP_SC_PAIR_ONLY)
 /* based on table 2.8 Core Spec 2.3.5.1 Vol. 3 Part H */
@@ -378,11 +378,7 @@ static uint8_t get_io_capa(struct bt_smp *smp)
 #endif /* CONFIG_BT_APP_PASSKEY */
 
 	if (smp_auth_cb->passkey_entry) {
-		if (IS_ENABLED(CONFIG_BT_FIXED_PASSKEY) && fixed_passkey != BT_PASSKEY_RAND) {
-			return BT_SMP_IO_KEYBOARD_DISPLAY;
-		} else {
-			return BT_SMP_IO_KEYBOARD_ONLY;
-		}
+		return BT_SMP_IO_KEYBOARD_ONLY;
 	}
 
 	if (smp_auth_cb->passkey_display) {
@@ -390,11 +386,7 @@ static uint8_t get_io_capa(struct bt_smp *smp)
 	}
 
 no_callbacks:
-	if (IS_ENABLED(CONFIG_BT_FIXED_PASSKEY) && fixed_passkey != BT_PASSKEY_RAND) {
-		return BT_SMP_IO_DISPLAY_ONLY;
-	} else {
-		return BT_SMP_IO_NO_INPUT_OUTPUT;
-	}
+	return BT_SMP_IO_NO_INPUT_OUTPUT;
 }
 
 #if !defined(CONFIG_BT_SMP_SC_PAIR_ONLY)
@@ -780,6 +772,10 @@ static bool ltk_derive_link_key_allowed(struct bt_smp *smp)
 	struct bt_keys_link_key *link_key;
 	struct bt_keys *keys;
 
+	if (!IS_ENABLED(CONFIG_BT_SMP_DERIVE_LK)) {
+		return false;
+	}
+
 	if (!smp->chan.chan.conn) {
 		return false;
 	}
@@ -926,7 +922,7 @@ static void smp_br_id_add_replace(struct bt_keys *keys)
 
 	conflict = bt_id_find_conflict(keys);
 	if (conflict != NULL) {
-		int err;
+		__maybe_unused int err;
 
 		LOG_DBG("Un-pairing old conflicting bond and finalizing new.");
 
@@ -1015,7 +1011,7 @@ static void smp_br_send(struct bt_smp_br *smp, struct net_buf *buf,
 		return;
 	}
 
-	k_work_reschedule(&smp->work, SMP_TIMEOUT);
+	bt_work_reschedule(&smp->work, SMP_TIMEOUT);
 }
 
 static void bt_smp_br_connected(struct bt_l2cap_chan *chan)
@@ -1043,8 +1039,9 @@ static void bt_smp_br_disconnected(struct bt_l2cap_chan *chan)
 	LOG_DBG("chan %p cid 0x%04x", chan,
 		CONTAINER_OF(chan, struct bt_l2cap_br_chan, chan)->tx.cid);
 
-	/* Channel disconnected callback is always called from a work handler
-	 * so canceling of the timeout work should always succeed.
+	/* The channel disconnected callback and timeout work both run on the
+	 * Bluetooth workqueue, so canceling the timeout work should always
+	 * succeed.
 	 */
 	(void)k_work_cancel_delayable(&smp->work);
 
@@ -1276,6 +1273,10 @@ static bool smp_br_pairing_allowed(struct bt_smp_br *smp)
 	struct bt_conn *conn;
 	struct bt_keys_link_key *key;
 	struct bt_keys *le_keys;
+
+	if (!IS_ENABLED(CONFIG_BT_SMP_DERIVE_LTK)) {
+		return false;
+	}
 
 	if (!smp->chan.chan.conn) {
 		return false;
@@ -1533,7 +1534,7 @@ static void convert_to_id_on_irk_match(struct bt_conn *conn, void *data)
 		return;
 	}
 
-	if (bt_rpa_irk_matches(keys->irk.val, &conn->le.dst.a)) {
+	if (bt_addr_matches_irk(&conn->le.dst.a, keys->irk.val)) {
 		if (conn->le.keys != NULL && conn->le.keys != keys) {
 			bt_keys_clear(conn->le.keys);
 		}
@@ -1831,7 +1832,7 @@ int bt_smp_br_send_pairing_req(struct bt_conn *conn)
 
 	/* check if we are allowed to start SMP over BR/EDR */
 	if (!smp_br_pairing_allowed(smp)) {
-		return 0;
+		return -ENOTSUP;
 	}
 
 	/* Channel not yet connected, will start pairing once connected */
@@ -2060,7 +2061,7 @@ static void smp_send(struct bt_smp *smp, struct net_buf *buf,
 		return;
 	}
 
-	k_work_reschedule(&smp->work, SMP_TIMEOUT);
+	bt_work_reschedule(&smp->work, SMP_TIMEOUT);
 }
 
 static int smp_error(struct bt_smp *smp, uint8_t reason)
@@ -2510,22 +2511,18 @@ static uint8_t legacy_request_tk(struct bt_smp *smp)
 
 		break;
 	case PASSKEY_DISPLAY: {
-		uint32_t passkey;
+		uint32_t passkey = BT_PASSKEY_RAND;
 
-		if (IS_ENABLED(CONFIG_BT_FIXED_PASSKEY) && fixed_passkey != BT_PASSKEY_RAND) {
-			passkey = fixed_passkey;
 #if defined(CONFIG_BT_APP_PASSKEY)
-		} else if (smp_auth_cb && smp_auth_cb->app_passkey) {
+		if (smp_auth_cb && smp_auth_cb->app_passkey) {
 			passkey = smp_auth_cb->app_passkey(conn);
 
 			if (passkey != BT_PASSKEY_RAND && passkey > 999999) {
 				LOG_WRN("App-provided passkey is out of valid range: %u", passkey);
 				return BT_SMP_ERR_UNSPECIFIED;
 			}
-#endif /* CONFIG_BT_APP_PASSKEY */
-		} else {
-			passkey = BT_PASSKEY_RAND;
 		}
+#endif /* CONFIG_BT_APP_PASSKEY */
 
 		if (passkey == BT_PASSKEY_RAND) {
 			if (bt_rand(&passkey, sizeof(passkey))) {
@@ -2602,7 +2599,7 @@ static uint8_t legacy_pairing_req(struct bt_smp *smp)
 	}
 
 	/* ask for consent if pairing is not due to sending SecReq*/
-	if ((DISPLAY_FIXED(smp) || smp->method == JUST_WORKS) &&
+	if (smp->method == JUST_WORKS &&
 	    !atomic_test_bit(smp->flags, SMP_FLAG_SEC_REQ) &&
 	    smp_auth_cb && smp_auth_cb->pairing_confirm) {
 		atomic_set_bit(smp->flags, SMP_FLAG_USER);
@@ -2842,7 +2839,7 @@ static uint8_t legacy_pairing_rsp(struct bt_smp *smp)
 	}
 
 	/* ask for consent if this is due to received SecReq */
-	if ((DISPLAY_FIXED(smp) || smp->method == JUST_WORKS) &&
+	if (smp->method == JUST_WORKS &&
 	    atomic_test_bit(smp->flags, SMP_FLAG_SEC_REQ) &&
 	    smp_auth_cb && smp_auth_cb->pairing_confirm) {
 		atomic_set_bit(smp->flags, SMP_FLAG_USER);
@@ -2875,10 +2872,18 @@ static uint8_t smp_central_ident(struct bt_smp *smp, struct net_buf *buf)
 
 static int smp_init(struct bt_smp *smp)
 {
+	/* SMP_FLAG_SEC_REQ is claimed before this runs and has to stay set for
+	 * the whole procedure, so the flags are cleared without ever dropping
+	 * it.
+	 */
+	(void)atomic_and(smp->flags, BIT(SMP_FLAG_SEC_REQ));
+
 	/* Initialize SMP context excluding L2CAP channel context and anything
 	 * else declared after.
 	 */
-	(void)memset(smp, 0, offsetof(struct bt_smp, chan));
+	(void)memset(smp, 0, offsetof(struct bt_smp, flags));
+	(void)memset(&smp->method, 0,
+		     offsetof(struct bt_smp, chan) - offsetof(struct bt_smp, method));
 
 	/* Generate local random number */
 	if (bt_rand(smp->prnd, 16)) {
@@ -3148,28 +3153,35 @@ static int smp_send_security_req(struct bt_conn *conn)
 		}
 	}
 
+	if (atomic_test_and_set_bit(smp->flags, SMP_FLAG_SEC_REQ)) {
+		return -EALREADY;
+	}
+
 	if (smp_init(smp) != 0) {
+		atomic_clear_bit(smp->flags, SMP_FLAG_SEC_REQ);
 		return -ENOBUFS;
 	}
 
 	req_buf = smp_create_pdu(smp, BT_SMP_CMD_SECURITY_REQUEST,
 				 sizeof(*req));
 	if (!req_buf) {
+		atomic_clear_bit(smp->flags, SMP_FLAG_SEC_REQ);
 		return -ENOBUFS;
 	}
 
 	req = net_buf_add(req_buf, sizeof(*req));
 	req->auth_req = get_auth(smp, BT_SMP_AUTH_DEFAULT);
 
+	atomic_set_bit(smp->allowed_cmds, BT_SMP_CMD_PAIRING_REQ);
+
 	/* SMP timer is not restarted for SecRequest so don't use smp_send */
 	err = bt_l2cap_send_pdu(&smp->chan, req_buf, NULL, NULL);
 	if (err) {
 		net_buf_unref(req_buf);
+		atomic_clear_bit(smp->flags, SMP_FLAG_SEC_REQ);
+		atomic_clear_bit(smp->allowed_cmds, BT_SMP_CMD_PAIRING_REQ);
 		return err;
 	}
-
-	atomic_set_bit(smp->flags, SMP_FLAG_SEC_REQ);
-	atomic_set_bit(smp->allowed_cmds, BT_SMP_CMD_PAIRING_REQ);
 
 	return 0;
 }
@@ -3298,7 +3310,7 @@ static uint8_t smp_pairing_req(struct bt_smp *smp, struct net_buf *buf)
 	}
 
 	if (!IS_ENABLED(CONFIG_BT_SMP_SC_PAIR_ONLY) &&
-	    (DISPLAY_FIXED(smp) || smp->method == JUST_WORKS) &&
+	    smp->method == JUST_WORKS &&
 	    !atomic_test_bit(smp->flags, SMP_FLAG_SEC_REQ) &&
 	    smp_auth_cb && smp_auth_cb->pairing_confirm) {
 		atomic_set_bit(smp->flags, SMP_FLAG_USER);
@@ -3541,7 +3553,7 @@ static uint8_t smp_pairing_rsp(struct bt_smp *smp, struct net_buf *buf)
 	}
 
 	if (!IS_ENABLED(CONFIG_BT_SMP_SC_PAIR_ONLY) &&
-	    (DISPLAY_FIXED(smp) || smp->method == JUST_WORKS) &&
+	    smp->method == JUST_WORKS &&
 	    atomic_test_bit(smp->flags, SMP_FLAG_SEC_REQ) &&
 	    smp_auth_cb && smp_auth_cb->pairing_confirm) {
 		atomic_set_bit(smp->flags, SMP_FLAG_USER);
@@ -3971,8 +3983,13 @@ static uint8_t smp_pairing_random(struct bt_smp *smp, struct net_buf *buf)
 			break;
 		case PASSKEY_DISPLAY:
 		case PASSKEY_INPUT:
+			if (smp->passkey_round >= SMP_PASSKEY_ROUNDS) {
+				LOG_WRN("Passkey round %u out of range", smp->passkey_round);
+				return BT_SMP_ERR_UNSPECIFIED;
+			}
+
 			smp->passkey_round++;
-			if (smp->passkey_round == 20U) {
+			if (smp->passkey_round == SMP_PASSKEY_ROUNDS) {
 				break;
 			}
 
@@ -4012,24 +4029,33 @@ static uint8_t smp_pairing_random(struct bt_smp *smp, struct net_buf *buf)
 		break;
 	case PASSKEY_DISPLAY:
 	case PASSKEY_INPUT:
+		if (smp->passkey_round >= SMP_PASSKEY_ROUNDS) {
+			LOG_WRN("Passkey round %u out of range", smp->passkey_round);
+			return BT_SMP_ERR_UNSPECIFIED;
+		}
+
 		err = sc_smp_check_confirm(smp);
 		if (err) {
 			return err;
 		}
 
-		atomic_set_bit(smp->allowed_cmds,
-			       BT_SMP_CMD_PAIRING_CONFIRM);
 		err = smp_send_pairing_random(smp);
 		if (err) {
 			return err;
 		}
 
 		smp->passkey_round++;
-		if (smp->passkey_round == 20U) {
+		if (smp->passkey_round == SMP_PASSKEY_ROUNDS) {
 			atomic_set_bit(smp->allowed_cmds, BT_SMP_DHKEY_CHECK);
 			atomic_set_bit(smp->flags, SMP_FLAG_DHCHECK_WAIT);
 			return 0;
 		}
+
+		/* Only accept another confirm if a round is actually left,
+		 * otherwise a peer can keep the protocol going past the last
+		 * passkey bit.
+		 */
+		atomic_set_bit(smp->allowed_cmds, BT_SMP_CMD_PAIRING_CONFIRM);
 
 		if (bt_rand(smp->prnd, 16)) {
 			return BT_SMP_ERR_UNSPECIFIED;
@@ -4139,7 +4165,7 @@ static uint8_t smp_id_add_replace(struct bt_smp *smp, struct bt_keys *new_bond)
 
 	if (conflict && IS_ENABLED(CONFIG_BT_ID_UNPAIR_MATCHING_BONDS)) {
 		bool trust_ok;
-		int unpair_err;
+		__maybe_unused int unpair_err;
 
 		trust_ok = update_keys_check(smp, conflict);
 		if (!trust_ok) {
@@ -4453,10 +4479,6 @@ __maybe_unused static uint8_t display_passkey(struct bt_smp *smp)
 	struct bt_conn *conn = smp->chan.chan.conn;
 	const struct bt_conn_auth_cb *smp_auth_cb = latch_auth_cb(smp);
 	uint32_t passkey = BT_PASSKEY_RAND;
-
-	if (IS_ENABLED(CONFIG_BT_FIXED_PASSKEY) && fixed_passkey != BT_PASSKEY_RAND) {
-		passkey = fixed_passkey;
-	}
 
 #if defined(CONFIG_BT_APP_PASSKEY)
 	if (smp_auth_cb && smp_auth_cb->app_passkey) {
@@ -4786,7 +4808,7 @@ static uint8_t smp_keypress_notif(struct bt_smp *smp, struct net_buf *buf)
 	}
 
 	/* Reset SMP timeout, like the spec says. */
-	k_work_reschedule(&smp->work, SMP_TIMEOUT);
+	bt_work_reschedule(&smp->work, SMP_TIMEOUT);
 
 	if (smp_auth_cb->passkey_display_keypress) {
 		smp_auth_cb->passkey_display_keypress(conn, type);
@@ -4978,8 +5000,9 @@ static void bt_smp_disconnected(struct bt_l2cap_chan *chan)
 	LOG_DBG("chan %p cid 0x%04x", chan,
 		CONTAINER_OF(chan, struct bt_l2cap_le_chan, chan)->tx.cid);
 
-	/* Channel disconnected callback is always called from a work handler
-	 * so canceling of the timeout work should always succeed.
+	/* The channel disconnected callback and timeout work both run on the
+	 * Bluetooth workqueue, so canceling the timeout work should always
+	 * succeed.
 	 */
 	(void)k_work_cancel_delayable(&smp->work);
 
@@ -5057,13 +5080,17 @@ static void bt_smp_encrypt_change(struct bt_l2cap_chan *chan,
 			 */
 			atomic_set_bit(smp->flags, SMP_FLAG_DERIVE_LK);
 		}
-		/*
-		 * Those are used as pairing finished indicator so generated
-		 * but not distributed keys must be cleared here.
-		 */
-		smp->local_dist &= ~BT_SMP_DIST_LINK_KEY;
-		smp->remote_dist &= ~BT_SMP_DIST_LINK_KEY;
 	}
+
+	/*
+	 * Those are used as pairing finished indicator so generated
+	 * but not distributed keys must be cleared here. This applies to legacy
+	 * pairing too: a link key can only be derived from a Secure Connections
+	 * LTK, so the bit is never consumed there and would otherwise keep the
+	 * distribution set non-empty forever.
+	 */
+	smp->local_dist &= ~BT_SMP_DIST_LINK_KEY;
+	smp->remote_dist &= ~BT_SMP_DIST_LINK_KEY;
 
 	if (smp->remote_dist & BT_SMP_DIST_ENC_KEY) {
 		atomic_set_bit(smp->allowed_cmds, BT_SMP_CMD_ENCRYPT_INFO);
@@ -5186,12 +5213,39 @@ int bt_smp_sign_verify(struct bt_conn *conn, struct net_buf *buf)
 		return -ENOENT;
 	}
 
-	/* Copy signing count */
-	cnt = sys_cpu_to_le32(keys->remote_csrk.cnt);
-	memcpy(net_buf_tail(buf) - sizeof(sig), &cnt, sizeof(cnt));
+	cnt = sys_get_le32(sig);
+
+	/* The Signing Algorithm is performed with the received counter
+	 * value, and replay protection is done by rejecting counter values
+	 * that have already been used (Core Spec v6.2, Vol 3, Part C,
+	 * Section 10.4.2, the last version to specify data signing before
+	 * its removal in v6.3). Values greater than the expected next one
+	 * are accepted, since the peer may consume counter values for
+	 * signed PDUs that never end up being received, e.g. when it
+	 * retries a failed send with a fresh signature or disconnects with
+	 * signed PDUs still queued.
+	 */
+	if (cnt < keys->remote_csrk.cnt) {
+		LOG_WRN("Rejecting already used sign counter %u from %s", cnt,
+			bt_conn_dst_str(conn));
+		return -EBADMSG;
+	}
+
+	/* Fail closed when the received counter is the final possible
+	 * value: accepting it would wrap the next expected value around
+	 * to zero, re-opening the replay window for every previously used
+	 * counter value. The counter space of the CSRK is then exhausted,
+	 * and signing can only resume once a new pairing distributes a
+	 * fresh CSRK.
+	 */
+	if (cnt == UINT32_MAX) {
+		LOG_WRN("Sign counter of remote CSRK for %s exhausted",
+			bt_conn_dst_str(conn));
+		return -EOVERFLOW;
+	}
 
 	LOG_DBG("Sign data len %zu key %s count %u", buf->len - sizeof(sig),
-		bt_hex(keys->remote_csrk.val, 16), keys->remote_csrk.cnt);
+		bt_hex(keys->remote_csrk.val, 16), cnt);
 
 	err = smp_sign_buf(keys->remote_csrk.val, buf->data,
 			   buf->len - sizeof(sig));
@@ -5205,7 +5259,24 @@ int bt_smp_sign_verify(struct bt_conn *conn, struct net_buf *buf)
 		return -EBADMSG;
 	}
 
-	keys->remote_csrk.cnt++;
+	keys->remote_csrk.cnt = cnt + 1U;
+
+	/* The sign counter is bound to the lifetime of the CSRK, not to a
+	 * single power cycle. Without persisting each accepted value, a
+	 * reboot would restore the counter stored at pairing time, making
+	 * previously captured Signed Write Commands verify (replay) again.
+	 *
+	 * Fail closed if the new value cannot be persisted, so that no
+	 * command gets executed unless it is also protected from replay.
+	 * The incremented in-memory value is kept, since the peer has
+	 * already consumed this counter value and expects the next one.
+	 */
+	err = bt_keys_store(keys);
+	if (err != 0) {
+		LOG_ERR("Unable to store updated sign counter for %s",
+			bt_conn_dst_str(conn));
+		return err;
+	}
 
 	return 0;
 }
@@ -5220,6 +5291,19 @@ int bt_smp_sign(struct bt_conn *conn, struct net_buf *buf)
 	if (!keys) {
 		LOG_ERR("Unable to find local CSRK for %s", bt_addr_le_str(&conn->le.dst));
 		return -ENOENT;
+	}
+
+	/* Fail closed when the counter space is exhausted, instead of
+	 * wrapping around and reusing counter values, which the peer
+	 * would reject as replays. The final possible value is never used
+	 * for signing, since a receiver cannot accept it without its own
+	 * next expected value wrapping (see bt_smp_sign_verify()). A new
+	 * pairing needs to distribute a fresh CSRK to resume signing.
+	 */
+	if (keys->local_csrk.cnt == UINT32_MAX) {
+		LOG_ERR("Sign counter of local CSRK for %s exhausted",
+			bt_conn_dst_str(conn));
+		return -EOVERFLOW;
 	}
 
 	/* Reserve space for data signature */
@@ -5240,6 +5324,21 @@ int bt_smp_sign(struct bt_conn *conn, struct net_buf *buf)
 
 	keys->local_csrk.cnt++;
 
+	/* Persist the new counter value so that a reboot does not lead to
+	 * reuse of an already used value, which the peer would reject.
+	 *
+	 * On failure the increment is reverted: the PDU is not sent in
+	 * that case, so the counter value has not been consumed and must
+	 * be used for the next attempt to stay in sync with the peer.
+	 */
+	err = bt_keys_store(keys);
+	if (err != 0) {
+		LOG_ERR("Unable to store updated sign counter for %s",
+			bt_conn_dst_str(conn));
+		keys->local_csrk.cnt--;
+		return err;
+	}
+
 	return 0;
 }
 #else
@@ -5253,36 +5352,6 @@ int bt_smp_sign(struct bt_conn *conn, struct net_buf *buf)
 	return -ENOTSUP;
 }
 #endif /* CONFIG_BT_SIGNING */
-
-static int smp_d1(const uint8_t *key, uint16_t d, uint16_t r, uint8_t res[16])
-{
-	int err;
-
-	LOG_DBG("key %s d %u r %u", bt_hex(key, 16), d, r);
-
-	sys_put_le16(d, &res[0]);
-	sys_put_le16(r, &res[2]);
-	memset(&res[4], 0, 16 - 4);
-
-	err = bt_encrypt_le(key, res, res);
-	if (err) {
-		return err;
-	}
-
-	LOG_DBG("res %s", bt_hex(res, 16));
-	return 0;
-}
-
-int bt_smp_irk_get(uint8_t *ir, uint8_t *irk)
-{
-	uint8_t invalid_ir[16] = { 0 };
-
-	if (!memcmp(ir, invalid_ir, 16)) {
-		return -EINVAL;
-	}
-
-	return smp_d1(ir, 1, 0, irk);
-}
 
 #if defined(CONFIG_BT_SMP_SELFTEST)
 /* Test vectors are taken from RFC 4493
@@ -5962,7 +6031,7 @@ int bt_smp_le_oob_generate_sc_data(struct bt_le_oob_sc_data *le_sc_oob)
 		if (err && err != -EALREADY) {
 			LOG_WRN("Public key re-generation request failed (%d)", err);
 
-			int mutex_err;
+			__maybe_unused int mutex_err;
 
 			mutex_err = k_mutex_unlock(&pub_key_gen.lock);
 			__ASSERT_NO_MSG(mutex_err == 0);
@@ -5976,8 +6045,14 @@ int bt_smp_le_oob_generate_sc_data(struct bt_le_oob_sc_data *le_sc_oob)
 		err = k_condvar_wait(&pub_key_gen.condvar,
 				     &pub_key_gen.lock,
 				     K_SECONDS(30));
-		if (err) {
+		if (err != 0) {
 			LOG_WRN("Public key generation timeout");
+
+			__maybe_unused int mutex_err;
+
+			mutex_err = k_mutex_unlock(&pub_key_gen.lock);
+			__ASSERT_NO_MSG(mutex_err == 0);
+
 			return err;
 		}
 
@@ -6204,23 +6279,6 @@ int bt_smp_auth_pairing_confirm(struct bt_conn *conn)
 	return -EINVAL;
 }
 #endif /* !CONFIG_BT_SMP_SC_PAIR_ONLY */
-
-#if defined(CONFIG_BT_FIXED_PASSKEY)
-int bt_passkey_set(unsigned int passkey)
-{
-	if (passkey == BT_PASSKEY_INVALID || passkey == BT_PASSKEY_RAND) {
-		fixed_passkey = BT_PASSKEY_RAND;
-		return 0;
-	}
-
-	if (passkey > 999999) {
-		return -EINVAL;
-	}
-
-	fixed_passkey = passkey;
-	return 0;
-}
-#endif /* CONFIG_BT_FIXED_PASSKEY */
 
 int bt_smp_start_security(struct bt_conn *conn)
 {

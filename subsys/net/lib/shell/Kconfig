@@ -6,7 +6,6 @@
 menuconfig NET_SHELL
 	bool "Network shell utilities"
 	select SHELL
-	select NET_IPV4_IGMP if NET_NATIVE_IPV4
 	select REQUIRES_FLOAT_PRINTF
 	help
 	  Activate shell module that provides network commands like
@@ -28,7 +27,7 @@ config NET_SHELL_SHOW_DISABLED_COMMANDS
 config NET_SHELL_ETHERNET_SUPPORTED
 	bool "Ethernet related configuration"
 	default y
-	depends on NET_SHELL_SHOW_DISABLED_COMMANDS || NET_L2_ETHERNET
+	depends on NET_SHELL_SHOW_DISABLED_COMMANDS || NET_ARP
 
 config NET_SHELL_CAPTURE_SUPPORTED
 	bool "Packet capture configuration"
@@ -43,7 +42,7 @@ config NET_SHELL_DHCPV4_SUPPORTED
 config NET_SHELL_DHCPV6_SUPPORTED
 	bool "DHCPv6 start / stop"
 	default y
-	depends on NET_SHELL_SHOW_DISABLED_COMMANDS || NET_DHCPV6
+	depends on NET_SHELL_SHOW_DISABLED_COMMANDS || NET_DHCPV6_SERVER || NET_DHCPV6
 
 config NET_SHELL_DNS_RESOLVER_SUPPORTED
 	bool "DNS resolver"
@@ -160,6 +159,7 @@ config NET_SHELL_PTP_SUPPORTED
 	bool "PTP monitoring"
 	default y
 	depends on NET_SHELL_SHOW_DISABLED_COMMANDS || PTP
+	select POSIX_C_LANG_SUPPORT_R if PTP
 
 config NET_SHELL_ROUTE_SUPPORTED
 	bool "IP routing config"
@@ -182,10 +182,17 @@ config NET_SHELL_TCP_SUPPORTED
 	default y
 	depends on NET_SHELL_SHOW_DISABLED_COMMANDS || (NET_NATIVE_TCP && NET_TCP)
 
+config NET_SHELL_TFTP_CLIENT_SUPPORTED
+	bool "TFTP client"
+	default y
+	depends on NET_SHELL_SHOW_DISABLED_COMMANDS || TFTP_LIB
+	select SHELL_GETOPT if TFTP_LIB
+	select GETOPT_LONG if TFTP_LIB
+
 config NET_SHELL_UDP_SUPPORTED
 	bool "Send / receive UDP data"
 	default y
-	depends on NET_SHELL_SHOW_DISABLED_COMMANDS || (NET_NATIVE_UDP && NET_UDP)
+	depends on NET_SHELL_SHOW_DISABLED_COMMANDS || (NET_NATIVE_UDP && NET_UDP && NET_CONTEXT)
 
 config NET_SHELL_VIRTUAL_SUPPORTED
 	bool "Virtual network interface management"
@@ -252,6 +259,8 @@ config NET_SHELL_IP_TABLE_SUPPORTED
 	bool "IP table for IP forward"
 	default y
 	depends on NET_SHELL_SHOW_DISABLED_COMMANDS || NET_IPV4_NAT
+	select SHELL_GETOPT if NET_IPV4_NAT
+	select GETOPT_LONG if NET_IPV4_NAT
 	help
 	  Add IP table rules to allow specific IPv4 packets to be
 	  forwarded through interfaces and subnets.

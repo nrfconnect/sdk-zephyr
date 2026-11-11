@@ -19,8 +19,8 @@
 #include <zephyr/sys/crc.h>
 
 #include <zephyr/drivers/bluetooth.h>
-#include <zephyr/bluetooth/bluetooth.h>
-#include <zephyr/bluetooth/hci.h>
+#include <zephyr/drivers/bluetooth/h4.h>
+#include <zephyr/bluetooth/hci_types.h>
 
 #define LOG_LEVEL CONFIG_BT_HCI_DRIVER_LOG_LEVEL
 #include <zephyr/logging/log.h>
@@ -40,17 +40,21 @@ LOG_MODULE_REGISTER(bt_nxp_ctlr);
 #define HCI_CMD_BT_CONFIG_IR_MODE                       0x02
 #define HCI_CMD_BT_CONFIG_IR_PARAM                      0xFF
 #define HCI_CMD_BT_CONFIG_IR_OPCODE                     BT_OP(BT_OGF_VS, HCI_CMD_BT_CONFIG_IR_OCF)
+#define IR_TRIGGER_EVENT_SIZE                           7U
+#define IR_TRIGGER_BYTE5_EXPECTED                       0xfcU
+#define IR_TRIGGER_BYTE6_EXPECTED                       0x00U
+
 extern const unsigned char *bt_fw_bin;
 extern const unsigned int bt_fw_bin_len;
 
 static const struct device *uart_dev = DEVICE_DT_GET(DT_INST_GPARENT(0));
 
 #if !defined(CONFIG_HCI_NXP_SET_CAL_DATA)
-#define bt_nxp_set_calibration_data_annex55() 0
+#define bt_nxp_set_calibration_data_annex55(ls) 0
 #endif
 
 #if !defined(CONFIG_HCI_NXP_SET_CAL_DATA_ANNEX100)
-#define bt_nxp_set_calibration_data_annex100() 0
+#define bt_nxp_set_calibration_data_annex100(ls) 0
 #endif
 
 #if DT_NODE_HAS_PROP(DT_DRV_INST(0), sdio_reset_gpios)
@@ -254,21 +258,21 @@ struct nxp_ctlr_fw_upload_state {
 	bool is_cmd7_req;
 	bool is_entry_point_req;
 	bool is_setup_done;
+	bool is_ir_request;
+	bool hci_opened;
 
 	uint8_t last_5bytes_buffer[6];
 };
 
 static struct nxp_ctlr_fw_upload_state fw_upload;
 
-static int fw_upload_read_data(uint8_t *buffer, uint32_t len)
+static int fw_upload_read_data_tmo(uint8_t *buffer, uint32_t len, uint32_t timeout_ms)
 {
 	int err;
 
 	while (len > 0) {
-		err = k_sem_take(&fw_upload.rx.sem,
-				 K_MSEC(CONFIG_BT_H4_NXP_CTLR_WAIT_HDR_SIG_TIMEOUT));
+		err = k_sem_take(&fw_upload.rx.sem, K_MSEC(timeout_ms));
 		if (err < 0) {
-			LOG_ERR("Fail to read data");
 			return err;
 		}
 		*buffer = fw_upload.rx.buffer[fw_upload.rx.tail];
@@ -278,6 +282,12 @@ static int fw_upload_read_data(uint8_t *buffer, uint32_t len)
 		len--;
 	}
 	return 0;
+}
+
+static int fw_upload_read_data(uint8_t *buffer, uint32_t len)
+{
+	return fw_upload_read_data_tmo(buffer, len,
+					   CONFIG_BT_H4_NXP_CTLR_WAIT_HDR_SIG_TIMEOUT);
 }
 
 static void fw_upload_read_to_clear(void)
@@ -921,11 +931,11 @@ static int fw_upload_v1_send_data(uint16_t len)
 		len = fw_upload.fw_length - fw_upload.current_length;
 	}
 
-	__ASSERT(sizeof(fw_upload.send_buffer) >= len, "V1: Out of sending buffer range (%u < %u)",
+	__ASSERT(sizeof(fw_upload.send_buffer) >= len, "V1: Out of sending buffer range (%zu < %u)",
 		 sizeof(fw_upload.send_buffer), len);
 
 	if (sizeof(fw_upload.send_buffer) < len) {
-		LOG_ERR("V1: Out of sending buffer range (%u < %u)", sizeof(fw_upload.send_buffer),
+		LOG_ERR("V1: Out of sending buffer range (%zu < %u)", sizeof(fw_upload.send_buffer),
 			len);
 		return -ENOMEM;
 	}
@@ -981,11 +991,11 @@ static int fw_upload_v3_send_data(void)
 		fw_upload.length = fw_upload.fw_length - start;
 	}
 	__ASSERT(sizeof(fw_upload.send_buffer) >= fw_upload.length,
-		 "V3: Out of sending buffer range (%u < %u)", sizeof(fw_upload.send_buffer),
+		 "V3: Out of sending buffer range (%zu < %u)", sizeof(fw_upload.send_buffer),
 		 fw_upload.length);
 
 	if (sizeof(fw_upload.send_buffer) < fw_upload.length) {
-		LOG_ERR("V3: Out of sending buffer range (%u < %u)", sizeof(fw_upload.send_buffer),
+		LOG_ERR("V3: Out of sending buffer range (%zu < %u)", sizeof(fw_upload.send_buffer),
 			fw_upload.length);
 		return -ENOMEM;
 	}
@@ -1106,6 +1116,47 @@ static int fw_uploading(const uint8_t *fw, uint32_t fw_length)
 	return -EINVAL;
 }
 
+#ifdef CONFIG_BT_NXP_CTRL_BSP_TRIGGER
+static int fw_upload_wake_bt_from_bootsleep(void)
+{
+	int err;
+	uint8_t c;
+	int64_t start = k_uptime_get();
+
+	while ((k_uptime_get() - start) < CONFIG_BT_NXP_CTRL_BSP_WAIT_TIMEOUT) {
+		err = fw_upload_read_data_tmo(&c, 1,
+					    CONFIG_BT_NXP_CTRL_HDR_SIG_INTERVAL);
+		if (err < 0) {
+			/* Timeout: no data received - BT CPU has entered BSP sleep.
+			 * Proceed to send wakeup trigger.
+			 */
+			goto send_bsp_trigger;
+		}
+
+		LOG_DBG("HDR SIG 0x%02X received, BT CPU still awake", c);
+	}
+
+	LOG_WRN("Timeout waiting for BT CPU to enter BSP sleep, sending trigger anyway");
+
+send_bsp_trigger:
+	err = uart_line_ctrl_set(uart_dev, UART_LINE_CTRL_RTS, 0);
+	if (err) {
+		LOG_ERR("Fail to set RTS low, err %d", err);
+		return err;
+	}
+
+	k_sleep(K_MSEC(CONFIG_BT_NXP_CTRL_BSP_RTS_PULSE_MS));
+
+	err = uart_line_ctrl_set(uart_dev, UART_LINE_CTRL_RTS, 1);
+	if (err) {
+		LOG_ERR("Fail to set RTS high, err %d", err);
+		return err;
+	}
+
+	return 0;
+}
+#endif /* CONFIG_BT_NXP_CTRL_BSP_TRIGGER */
+
 static void bt_nxp_ctlr_uart_isr(const struct device *unused, void *user_data)
 {
 	int err = 0;
@@ -1135,7 +1186,85 @@ static void bt_nxp_ctlr_uart_isr(const struct device *unused, void *user_data)
 	}
 }
 
-static int bt_nxp_ctlr_init(void)
+#if DT_NODE_HAS_PROP(DT_DRV_INST(0), sdio_reset_gpios) ||                                          \
+	DT_NODE_HAS_PROP(DT_DRV_INST(0), w_disable_gpios)
+/**
+ * @brief Initialize power control GPIOs for Bluetooth controller
+ *
+ * Configures and toggles sdio_reset and w_disable GPIOs to power up
+ * the Bluetooth controller. This performs a power-on-reset sequence.
+ *
+ * @return 0 on success, negative errno on failure
+ */
+static int bt_nxp_init_power_gpios(void)
+{
+	int err;
+
+#if DT_NODE_HAS_PROP(DT_DRV_INST(0), sdio_reset_gpios)
+	/* Check BT REG_ON gpio instance */
+	if (!gpio_is_ready_dt(&sdio_reset)) {
+		LOG_ERR("Error: failed to configure sdio_reset %s pin %d", sdio_reset.port->name,
+			sdio_reset.pin);
+		return -EIO;
+	}
+
+	/* Configure sdio_reset as output */
+	err = gpio_pin_configure_dt(&sdio_reset, GPIO_OUTPUT);
+	if (err) {
+		LOG_ERR("Error: failed to configure sdio_reset %s pin %d err %d",
+			sdio_reset.port->name, sdio_reset.pin, err);
+		return err;
+	}
+
+	err = gpio_pin_set_dt(&sdio_reset, 0);
+	if (err) {
+		return err;
+	}
+#endif /* DT_NODE_HAS_PROP(DT_DRV_INST(0), sdio_reset_gpios) */
+
+#if DT_NODE_HAS_PROP(DT_DRV_INST(0), w_disable_gpios)
+	/* Check BT REG_ON gpio instance */
+	if (!gpio_is_ready_dt(&w_disable)) {
+		LOG_ERR("Error: failed to configure w_disable %s pin %d", w_disable.port->name,
+			w_disable.pin);
+		return -EIO;
+	}
+
+	/* Configure w_disable as output */
+	err = gpio_pin_configure_dt(&w_disable, GPIO_OUTPUT);
+	if (err) {
+		LOG_ERR("Error: failed to configure w_disable %s pin %d err %d",
+			w_disable.port->name, w_disable.pin, err);
+		return err;
+	}
+
+	err = gpio_pin_set_dt(&w_disable, 0);
+	if (err) {
+		return err;
+	}
+#endif /* DT_NODE_HAS_PROP(DT_DRV_INST(0), w_disable_gpios) */
+
+	/* Wait for reset done */
+	k_sleep(K_MSEC(100));
+
+#if DT_NODE_HAS_PROP(DT_DRV_INST(0), sdio_reset_gpios)
+	err = gpio_pin_set_dt(&sdio_reset, 1);
+	if (err) {
+		return err;
+	}
+#endif /* DT_NODE_HAS_PROP(DT_DRV_INST(0), sdio_reset_gpios) */
+
+#if DT_NODE_HAS_PROP(DT_DRV_INST(0), w_disable_gpios)
+	err = gpio_pin_set_dt(&w_disable, 1);
+	if (err) {
+		return err;
+	}
+#endif /* DT_NODE_HAS_PROP(DT_DRV_INST(0), w_disable_gpios) */
+	return 0;
+}
+#endif /* DT_NODE_HAS_PROP sdio_reset_gpios || w_disable_gpios */
+
+static int bt_nxp_ctlr_init(bool is_ir_req)
 {
 	int err;
 	uint32_t speed;
@@ -1158,65 +1287,19 @@ static int bt_nxp_ctlr_init(void)
 
 #if DT_NODE_HAS_PROP(DT_DRV_INST(0), sdio_reset_gpios) ||                                          \
 	DT_NODE_HAS_PROP(DT_DRV_INST(0), w_disable_gpios)
-#if DT_NODE_HAS_PROP(DT_DRV_INST(0), sdio_reset_gpios)
-	/* Check BT REG_ON gpio instance */
-	if (!gpio_is_ready_dt(&sdio_reset)) {
-		LOG_ERR("Error: failed to configure sdio_reset %s pin %d", sdio_reset.port->name,
-			sdio_reset.pin);
-		return -EIO;
+	bool power_reset = !is_ir_req;
+
+	if (IS_ENABLED(CONFIG_BT_HCI_NXP_IR_ENABLE_PDN_TOGGLE)) {
+		power_reset = true;
 	}
 
-	/* Configure sdio_reset as output  */
-	err = gpio_pin_configure_dt(&sdio_reset, GPIO_OUTPUT);
-	if (err) {
-		LOG_ERR("Error %d: failed to configure sdio_reset %s pin %d", err,
-			sdio_reset.port->name, sdio_reset.pin);
-		return err;
+	if (power_reset) {
+		err = bt_nxp_init_power_gpios();
+		if (err != 0) {
+			return err;
+		}
 	}
-	err = gpio_pin_set_dt(&sdio_reset, 0);
-	if (err) {
-		return err;
-	}
-#endif /* DT_NODE_HAS_PROP(DT_DRV_INST(0), sdio_reset_gpios) */
-
-#if DT_NODE_HAS_PROP(DT_DRV_INST(0), w_disable_gpios)
-	/* Check BT REG_ON gpio instance */
-	if (!gpio_is_ready_dt(&w_disable)) {
-		LOG_ERR("Error: failed to configure w_disable %s pin %d", w_disable.port->name,
-			w_disable.pin);
-		return -EIO;
-	}
-
-	/* Configure w_disable as output  */
-	err = gpio_pin_configure_dt(&w_disable, GPIO_OUTPUT);
-	if (err) {
-		LOG_ERR("Error %d: failed to configure w_disable %s pin %d", err,
-			w_disable.port->name, w_disable.pin);
-		return err;
-	}
-	err = gpio_pin_set_dt(&w_disable, 0);
-	if (err) {
-		return err;
-	}
-#endif /* DT_NODE_HAS_PROP(DT_DRV_INST(0), w_disable_gpios) */
-
-	/* wait for reset done */
-	k_sleep(K_MSEC(100));
-
-#if DT_NODE_HAS_PROP(DT_DRV_INST(0), sdio_reset_gpios)
-	err = gpio_pin_set_dt(&sdio_reset, 1);
-	if (err) {
-		return err;
-	}
-#endif /* DT_NODE_HAS_PROP(DT_DRV_INST(0), sdio_reset_gpios) */
-
-#if DT_NODE_HAS_PROP(DT_DRV_INST(0), w_disable_gpios)
-	err = gpio_pin_set_dt(&w_disable, 1);
-	if (err) {
-		return err;
-	}
-#endif /* DT_NODE_HAS_PROP(DT_DRV_INST(0), w_disable_gpios) */
-#endif
+#endif /* DT_NODE_HAS_PROP sdio_reset_gpios || w_disable_gpios */
 
 	uart_irq_rx_disable(uart_dev);
 	uart_irq_tx_disable(uart_dev);
@@ -1239,6 +1322,16 @@ static int bt_nxp_ctlr_init(void)
 
 	uart_irq_rx_enable(uart_dev);
 
+#ifdef CONFIG_BT_NXP_CTRL_BSP_TRIGGER
+	/* Wait for BT CPU to enter boot-sleep-patch state, then send
+	 * RTS trigger to wake it up for FW download in coex scenario.
+	 */
+	err = fw_upload_wake_bt_from_bootsleep();
+	if (err) {
+		LOG_ERR("Fail to wake BT CPU from boot sleep");
+		return err;
+	}
+#endif /* CONFIG_BT_NXP_CTRL_BSP_TRIGGER */
 	err = fw_uploading(bt_fw_bin, bt_fw_bin_len);
 
 	if (err) {
@@ -1258,10 +1351,11 @@ static int bt_nxp_ctlr_init(void)
 
 #if defined(CONFIG_HCI_NXP_SET_CAL_DATA)
 
-static int bt_nxp_set_calibration_data_annex55(void)
+static int bt_nxp_set_calibration_data_annex55(struct bt_hci_lockstep *ls)
 {
-	int ret = 0;
+	BT_HCI_PKT_CMD_DEFINE(cmd, HCI_CMD_STORE_BT_CAL_DATA_PARAM_LENGTH);
 	uint16_t opcode = BT_OP(BT_OGF_VS, HCI_CMD_STORE_BT_CAL_DATA_OCF);
+	int ret;
 
 	const uint8_t hci_cal_data_annex55[HCI_CMD_STORE_BT_CAL_DATA_PARAM_LENGTH] = {
 #if defined(CONFIG_BT_NXP_NW612)
@@ -1351,35 +1445,25 @@ static int bt_nxp_set_calibration_data_annex55(void)
 #endif
 	};
 
-	if (IS_ENABLED(CONFIG_BT_HCI_HOST)) {
-		struct net_buf *buf;
+	net_buf_simple_add_mem(&cmd, hci_cal_data_annex55, HCI_CMD_STORE_BT_CAL_DATA_PARAM_LENGTH);
 
-		buf = bt_hci_cmd_alloc(K_FOREVER);
-		if (buf == NULL) {
-			LOG_ERR("Unable to allocate command buffer");
-			return -ENOMEM;
-		}
-
-		net_buf_add_mem(buf, hci_cal_data_annex55, HCI_CMD_STORE_BT_CAL_DATA_PARAM_LENGTH);
-
-		ret = bt_hci_cmd_send_sync(opcode, buf, NULL);
-		if (ret) {
-			LOG_ERR("Failed to send set-calibration cmd (err %d)", ret);
-			return ret;
-		}
-
-		(void)k_msleep(CONFIG_BT_H4_NXP_CTLR_WAIT_TIME_AFTER_BAUDRATE_UPDATE);
+	ret = bt_hci_lockstep_cmd_send_sync(ls, opcode, &cmd, NULL);
+	if (ret) {
+		LOG_ERR("Failed to send set-calibration cmd (err %d)", ret);
+		return ret;
 	}
 
-	return ret;
+	(void)k_msleep(CONFIG_BT_H4_NXP_CTLR_WAIT_TIME_AFTER_BAUDRATE_UPDATE);
+
+	return 0;
 }
 #endif /*CONFIG_HCI_NXP_SET_CAL_DATA*/
 
 #if defined(CONFIG_HCI_NXP_SET_CAL_DATA_ANNEX100)
 
-static int bt_nxp_set_calibration_data_annex100(void)
+static int bt_nxp_set_calibration_data_annex100(struct bt_hci_lockstep *ls)
 {
-	int ret = 0;
+	BT_HCI_PKT_CMD_DEFINE(cmd, HCI_CMD_STORE_BT_CAL_DATA_PARAM_ANNEX100_LENGTH);
 	const uint8_t hci_cal_data_annex100[HCI_CMD_STORE_BT_CAL_DATA_PARAM_ANNEX100_LENGTH] = {
 #if defined(CONFIG_BT_NXP_NW612)
 		0x64,                   /* Annex Type : 0x64 */
@@ -1415,51 +1499,36 @@ static int bt_nxp_set_calibration_data_annex100(void)
 	};
 
 	uint16_t opcode = BT_OP(BT_OGF_VS, HCI_CMD_STORE_BT_CAL_DATA_ANNEX100_OCF);
+	int ret;
 
-	if (IS_ENABLED(CONFIG_BT_HCI_HOST)) {
-		struct net_buf *buf;
+	net_buf_simple_add_mem(&cmd, hci_cal_data_annex100,
+			       HCI_CMD_STORE_BT_CAL_DATA_PARAM_ANNEX100_LENGTH);
 
-		buf = bt_hci_cmd_alloc(K_FOREVER);
-		if (buf == NULL) {
-			LOG_ERR("Unable to allocate command buffer");
-			return -ENOMEM;
-		}
-
-		net_buf_add_mem(buf, hci_cal_data_annex100,
-					HCI_CMD_STORE_BT_CAL_DATA_PARAM_ANNEX100_LENGTH);
-
-		ret = bt_hci_cmd_send_sync(opcode, buf, NULL);
-		if (ret) {
-			LOG_ERR("Failed to send set-calibration cmd (err %d)", ret);
-			return ret;
-		}
+	ret = bt_hci_lockstep_cmd_send_sync(ls, opcode, &cmd, NULL);
+	if (ret) {
+		LOG_ERR("Failed to send set-calibration cmd (err %d)", ret);
+		return ret;
 	}
 
-	return ret;
+	return 0;
 }
 #endif /* defined(CONFIG_HCI_NXP_SET_CAL_DATA_ANNEX100) */
 
 #if defined(CONFIG_HCI_NXP_CONFIG_IR)
-static int bt_nxp_configure_ir(void)
+static int bt_nxp_configure_ir(struct bt_hci_lockstep *ls)
 {
 	const uint8_t hci_configure_ir[HCI_CMD_BT_CONFIG_IR_LENGTH] = {
 		HCI_CMD_BT_CONFIG_IR_MODE,
 		HCI_CMD_BT_CONFIG_IR_PARAM
 	};
-	struct net_buf *buf;
+	BT_HCI_PKT_CMD_DEFINE(cmd, HCI_CMD_BT_CONFIG_IR_LENGTH);
 	int err;
 
 	LOG_DBG("Configuring IR");
 
-	buf = bt_hci_cmd_alloc(K_FOREVER);
-	if (buf == NULL) {
-		LOG_ERR("Unable to allocate command buffer");
-		return -ENOMEM;
-	}
+	net_buf_simple_add_mem(&cmd, hci_configure_ir, HCI_CMD_BT_CONFIG_IR_LENGTH);
 
-	net_buf_add_mem(buf, hci_configure_ir, HCI_CMD_BT_CONFIG_IR_LENGTH);
-
-	err = bt_hci_cmd_send_sync(HCI_CMD_BT_CONFIG_IR_OPCODE, buf, NULL);
+	err = bt_hci_lockstep_cmd_send_sync(ls, HCI_CMD_BT_CONFIG_IR_OPCODE, &cmd, NULL);
 	if (err) {
 		LOG_DBG("Failed to send config IR cmd (err %d)", err);
 		return err;
@@ -1468,25 +1537,80 @@ static int bt_nxp_configure_ir(void)
 	return 0;
 }
 
+static int fw_check_ir_trigger_event(void)
+{
+	int err = 0;
+	uint8_t ir_event_ack[IR_TRIGGER_EVENT_SIZE];
+
+	/* Read the entire IR trigger event data at once */
+	err = fw_upload_read_data(ir_event_ack, IR_TRIGGER_EVENT_SIZE);
+	if (err < 0) {
+		LOG_ERR("Failed to read IR trigger event data");
+		return err;
+	}
+
+	LOG_HEXDUMP_DBG(ir_event_ack, sizeof(ir_event_ack), "IR Evt data");
+	/* Verify the last 2 bytes are 0xfc and 0x00 which confirms IR is successful */
+	if (ir_event_ack[5] != IR_TRIGGER_BYTE5_EXPECTED ||
+	    ir_event_ack[6] != IR_TRIGGER_BYTE6_EXPECTED) {
+		LOG_ERR("IR trigger failed, status bytes: %02x %02x", ir_event_ack[5],
+			ir_event_ack[6]);
+		return -EINVAL;
+	}
+
+	LOG_DBG("IR trigger event received successfully");
+
+	return err;
+}
+
 int bt_nxp_trigger_ir(const struct device *dev)
 {
 	int err;
-	uint8_t ir_trigger_buf[] = {0x01, 0xfc, 0xfc, 0x00}; /*IR trigger sequence*/
+	uint8_t ir_trigger_buf[] = {0x01, 0xfc, 0xfc, 0x00}; /* IR trigger sequence */
+
+	/*
+	 * The caller must disable the BT host stack before calling this API.
+	 * Return an error if the host stack is still active before initiating IR.
+	 */
+	if (fw_upload.hci_opened) {
+		LOG_ERR("BT host stack is still active. Disable it before triggering IR.");
+		return -EAGAIN;
+	}
+
+	/*
+	 * Flush RX buffer to discard stale data from previous FW download
+	 * session as we are going to use buffer to check for IR trigger ack
+	 */
+	fw_upload_read_to_clear();
+
+	/*
+	 * Enable RX interrupts to receive IR trigger response and set the
+	 * callback handler
+	 */
+	uart_irq_rx_enable(uart_dev);
+	uart_irq_callback_set(uart_dev, bt_nxp_ctlr_uart_isr);
 
 	LOG_DBG("Triggering IR.");
 	ARRAY_FOR_EACH(ir_trigger_buf, i) {
 		uart_poll_out(dev, ir_trigger_buf[i]);
 	}
 
-	LOG_DBG("Downloading FW.");
-	err = bt_nxp_ctlr_init();
-	if (err == 0) {
-		LOG_DBG("IR Successful, Perform BT Init again to activate interface.");
-	} else {
-		LOG_ERR("IR Failed: %d", err);
+	LOG_DBG("Check IR trigger event.");
+	err = fw_check_ir_trigger_event();
+	if (err != 0) {
+		uart_irq_rx_disable(uart_dev);
+		LOG_ERR("IR trigger event wait failed (err %d)", err);
+		return err;
 	}
 
-	return err;
+	uart_irq_rx_disable(uart_dev);
+
+	fw_upload.is_ir_request = true;
+	fw_upload.is_setup_done = false;
+
+	LOG_DBG("IR trigger successful. Do bt init from app to initialize stack");
+
+	return 0;
 }
 #else
 int bt_nxp_trigger_ir(const struct device *dev)
@@ -1499,45 +1623,63 @@ int bt_nxp_trigger_ir(const struct device *dev)
 int bt_hci_transport_setup(const struct device *dev)
 {
 	int ret = 0;
+
 	if (dev != uart_dev) {
 		return -EINVAL;
 	}
 
-	if (!fw_upload.is_setup_done) {
-		LOG_DBG("HCI Transport Initial Setup\n");
-		ret = bt_nxp_ctlr_init();
-	}
-#ifdef	CONFIG_HCI_NXP_TRIGGER_IR_ON_BT_INIT
-	else {
-		LOG_DBG("HCI transport setup after bt disable\n");
-
-		/* If setup is already done earlier, for subsequent bt disable
-		 * and bt enable, trigger IR to reload controller FW
-		 */
+	/* If setup was already done earlier, for a subsequent bt disable and bt
+	 * enable trigger IR to reload the controller FW. On success,
+	 * bt_nxp_trigger_ir() clears is_setup_done, so the block below re-runs the
+	 * FW download.
+	 */
+	if (IS_ENABLED(CONFIG_HCI_NXP_TRIGGER_IR_ON_BT_INIT) && fw_upload.is_setup_done) {
+		LOG_DBG("Trigger IR on BT Init");
 		ret = bt_nxp_trigger_ir(dev);
+		if (ret != 0) {
+			LOG_ERR("IR trigger failed: %d", ret);
+			return ret;
+		}
 	}
-#endif /* defined(CONFIG_HCI_NXP_TRIGGER_IR_ON_BT_INIT) */
+
+	if (!fw_upload.is_setup_done) {
+		LOG_DBG("HCI Transport Setup (IR request: %d)", fw_upload.is_ir_request);
+		ret = bt_nxp_ctlr_init(fw_upload.is_ir_request);
+		if (ret != 0) {
+			LOG_ERR("BT download failed: %d", ret);
+			return ret;
+		}
+	}
+
+	/* Clear the is_ir_request flag irrespective of ret status so the
+	 * application can re-initiate the request if needed.
+	 */
+	fw_upload.is_ir_request = false;
+	fw_upload.hci_opened = true;
+
 	return ret;
+}
+
+int bt_hci_transport_teardown(const struct device *dev)
+{
+	ARG_UNUSED(dev);
+	LOG_DBG("HCI interface shutdown");
+	fw_upload.hci_opened = false;
+
+	return 0;
 }
 
 #define BT_HCI_VSC_BAUDRATE_UPDATE_LENGTH 4
 #define BT_HCI_VSC_BAUDRATE_UPDATE_OPCODE BT_OP(BT_OGF_VS, 0x09)
 
-static int bt_hci_baudrate_update(const struct device *dev, uint32_t baudrate)
+static int bt_hci_baudrate_update(struct bt_hci_lockstep *ls, uint32_t baudrate)
 {
+	BT_HCI_PKT_CMD_DEFINE(cmd, BT_HCI_VSC_BAUDRATE_UPDATE_LENGTH);
 	int err;
-	struct net_buf *buf;
 
-	buf = bt_hci_cmd_alloc(K_FOREVER);
-	if (!buf) {
-		LOG_ERR("Fail to allocate buffer");
-		return -ENOBUFS;
-	}
+	net_buf_simple_add_le32(&cmd, baudrate);
 
-	/* Add new baudrate to the buffer */
-	net_buf_add_le32(buf, baudrate);
-
-	err = bt_hci_cmd_send_sync(BT_HCI_VSC_BAUDRATE_UPDATE_OPCODE, buf, NULL);
+	err = bt_hci_lockstep_cmd_send_sync(ls, BT_HCI_VSC_BAUDRATE_UPDATE_OPCODE, &cmd, NULL);
 	if (err) {
 		LOG_ERR("Fail to send baudrate update cmd");
 		return err;
@@ -1546,16 +1688,16 @@ static int bt_hci_baudrate_update(const struct device *dev, uint32_t baudrate)
 	return 0;
 }
 
-int bt_h4_vnd_setup(const struct device *dev, const struct bt_hci_setup_params *params)
+int bt_h4_vnd_open(const struct device *dev, const struct device *uart, struct bt_hci_lockstep *ls)
 {
 	int err;
 	uint32_t default_speed;
 	uint32_t operation_speed;
 	bool flowcontrol_of_hci;
 
-	ARG_UNUSED(params);
+	ARG_UNUSED(dev);
 
-	if (dev != uart_dev) {
+	if (uart != uart_dev) {
 		return -EINVAL;
 	}
 
@@ -1573,7 +1715,7 @@ int bt_h4_vnd_setup(const struct device *dev, const struct bt_hci_setup_params *
 	}
 
 	if (!fw_upload.is_setup_done) {
-		err = bt_hci_baudrate_update(dev, operation_speed);
+		err = bt_hci_baudrate_update(ls, operation_speed);
 		if (err) {
 			return err;
 		}
@@ -1589,20 +1731,20 @@ int bt_h4_vnd_setup(const struct device *dev, const struct bt_hci_setup_params *
 	}
 
 	if (!fw_upload.is_setup_done) {
-		err = bt_nxp_set_calibration_data_annex55();
+		err = bt_nxp_set_calibration_data_annex55(ls);
 		if (err) {
 			LOG_ERR("Fail to load annex-55 calibration data");
 			return err;
 		}
 
-		err = bt_nxp_set_calibration_data_annex100();
+		err = bt_nxp_set_calibration_data_annex100(ls);
 		if (err) {
 			LOG_ERR("Fail to load annex-100 calibration data");
 			return err;
 		}
 
 #if defined(CONFIG_HCI_NXP_CONFIG_IR)
-		err = bt_nxp_configure_ir();
+		err = bt_nxp_configure_ir(ls);
 		if (err) {
 			LOG_ERR("Fail to configure IR");
 			return err;
@@ -1613,7 +1755,7 @@ int bt_h4_vnd_setup(const struct device *dev, const struct bt_hci_setup_params *
 #if DT_NODE_HAS_PROP(DT_DRV_INST(0), wakeup_bt_gpios)
 	struct gpio_dt_spec wakeup = GPIO_DT_SPEC_GET(DT_DRV_INST(0), wakeup_bt_gpios);
 
-	LOG_DBG("Configuring Wakeup IOs\n");
+	LOG_DBG("Configuring Wakeup IOs");
 	if (!gpio_is_ready_dt(&wakeup)) {
 		LOG_ERR("Error: failed to configure wakeup %s pin %d", wakeup.port->name,
 			wakeup.pin);
@@ -1648,7 +1790,7 @@ int bt_h4_vnd_setup(const struct device *dev, const struct bt_hci_setup_params *
 #endif
 
 #if (defined(CONFIG_BT_NXP_CTRL_WAKE_ON_BT_LED_BLINK))
-	LOG_DBG("Configuring LED0 for BT Activity\n");
+	LOG_DBG("Configuring LED0 for BT Activity");
 	if (!gpio_is_ready_dt(&led_gpio)) {
 		return 0;
 	}

@@ -8,6 +8,7 @@
 /dts-v1/;
 
 #include <arm/armv8-m.dtsi>
+#include <freq.h>
 #include <mem.h>
 
 / {
@@ -19,18 +20,19 @@
 		zephyr,console = &uart1;
 		zephyr,sram = &sram0;
 		zephyr,flash = &flash0;
-		zephyr,code-partitions = &slot0_ns_partition;
+		zephyr,code-partition = &slot0_ns_partition;
 		zephyr,shell-uart = &uart1;
 	};
 
 	cpus {
 		#address-cells = <1>;
 		#size-cells = <0>;
+		timebase-frequency = <DT_FREQ_M(40)>;
 
 		cpu@0 {
-			device_type = "cpu";
 			compatible = "arm,cortex-m33";
 			reg = <0>;
+			device_type = "cpu";
 			#address-cells = <1>;
 			#size-cells = <1>;
 
@@ -41,38 +43,6 @@
 		};
 	};
 
-	flash0: flash@a000000 {
-		/* Embedded flash */
-		compatible = "soc-nv-flash";
-		reg = <0x0a000000 DT_SIZE_M(2)>;
-		erase-block-size = <DT_SIZE_K(4)>;
-		write-block-size = <4>;
-		#address-cells = <1>;
-		#size-cells = <1>;
-
-		partitions {
-			compatible = "fixed-partitions";
-			#address-cells = <1>;
-			#size-cells = <1>;
-
-			/* Please see the memory layout in:
-			 * https://git.trustedfirmware.org/plugins/gitiles/TF-M/trusted-firmware-m.git/+/refs/heads/main/platform/ext/target/arm/musca_b1/partition/flash_layout.h
-			 */
-			slot0_partition: partition@20000 {
-				reg = <0x20000 DT_SIZE_K(384)>;
-			};
-
-			slot0_ns_partition: partition@80000 {
-				reg = <0x80000 DT_SIZE_K(512)>;
-			};
-		};
-	};
-
-	sram0: memory@20040000 {
-		compatible = "mmio-sram";
-		reg = <0x20040000 0x40000>;
-	};
-
 	sysclk: system-clock {
 		compatible = "fixed-clock";
 		clock-frequency = <40000000>;
@@ -81,12 +51,47 @@
 
 	soc {
 		peripheral@40000000 {
+			ranges = <0x0 0x40000000 0x10000000>;
 			#address-cells = <1>;
 			#size-cells = <1>;
-			ranges = <0x0 0x40000000 0x10000000>;
 
 #include "v2m_musca_b1-common.dtsi"
 		};
+	};
+
+	flash0: flash@a000000 {
+		/* Embedded flash */
+		compatible = "soc-nv-flash";
+		reg = <0x0a000000 DT_SIZE_M(2)>;
+		ranges = <0x0 0x0a000000 DT_SIZE_M(2)>;
+		erase-block-size = <DT_SIZE_K(4)>;
+		write-block-size = <4>;
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		partitions {
+			ranges;
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			/* Please see the memory layout in:
+			 * https://git.trustedfirmware.org/plugins/gitiles/TF-M/trusted-firmware-m.git/+/refs/heads/main/platform/ext/target/arm/musca_b1/partition/flash_layout.h
+			 */
+			slot0_partition: partition@20000 {
+				compatible = "zephyr,mapped-partition";
+				reg = <0x20000 DT_SIZE_K(384)>;
+			};
+
+			slot0_ns_partition: partition@80000 {
+				compatible = "zephyr,mapped-partition";
+				reg = <0x80000 DT_SIZE_K(512)>;
+			};
+		};
+	};
+
+	sram0: memory@20040000 {
+		compatible = "mmio-sram";
+		reg = <0x20040000 0x40000>;
 	};
 };
 

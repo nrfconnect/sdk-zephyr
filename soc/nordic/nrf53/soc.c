@@ -74,9 +74,6 @@
 /* HFXO config from DT */
 #if DT_ENUM_HAS_VALUE(HFXO_NODE, load_capacitors, internal)
 #define HFXO_CAP_VAL_X2 (DT_PROP(HFXO_NODE, load_capacitance_femtofarad)) * 2U / 1000U
-#elif defined(CONFIG_SOC_HFXO_CAP_INTERNAL)
-/* HFXO config from legacy Kconfig */
-#define HFXO_CAP_VAL_X2 CONFIG_SOC_HFXO_CAP_INT_VALUE_X2
 #endif
 #endif /* CONFIG_SOC_NRF5340_CPUAPP */
 
@@ -549,36 +546,35 @@ void soc_early_init_hook(void)
 		 + ((offset - 8) << 4) + 32) >> 6;
 
 	nrf_oscillators_hfxo_cap_set(NRF_OSCILLATORS, true, capvalue);
-#elif defined(CONFIG_SOC_HFXO_CAP_EXTERNAL) || \
-	DT_ENUM_HAS_VALUE(HFXO_NODE, load_capacitors, external)
-	nrf_oscillators_hfxo_cap_set(NRF_OSCILLATORS, false, 0);
 #endif
 #endif /* CONFIG_SOC_NRF5340_CPUAPP */
 
-#if defined(CONFIG_SOC_DCDC_NRF53X_APP) || \
-	(DT_PROP(DT_NODELABEL(vregmain), regulator_initial_mode) == NRF5X_REG_MODE_DCDC)
+#if (DT_PROP(DT_NODELABEL(vregmain), regulator_initial_mode) == NRF5X_REG_MODE_DCDC)
 	nrf_regulators_vreg_enable_set(NRF_REGULATORS, NRF_REGULATORS_VREG_MAIN, true);
+#elif (DT_PROP(DT_NODELABEL(vregmain), regulator_initial_mode) == NRF5X_REG_MODE_LDO)
+	if (NRF_ERRATA_DYNAMIC_CHECK(53, 166)) {
+		*((volatile uint32_t *)0x50300C00) = 0x00009375ul;
+		*((volatile uint32_t *)0x503000E4) = 0x0ul;
+		*((volatile uint32_t *)0x50300C00) = 0x00009375ul;
+	}
 #endif
-#if defined(CONFIG_SOC_DCDC_NRF53X_NET) || \
-	(DT_PROP(DT_NODELABEL(vregradio), regulator_initial_mode) == NRF5X_REG_MODE_DCDC)
+#if (DT_PROP(DT_NODELABEL(vregradio), regulator_initial_mode) == NRF5X_REG_MODE_DCDC)
 	nrf_regulators_vreg_enable_set(NRF_REGULATORS, NRF_REGULATORS_VREG_RADIO, true);
 #endif
-#if defined(CONFIG_SOC_DCDC_NRF53X_HV) || DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(vregh))
+#if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(vregh))
 	nrf_regulators_vreg_enable_set(NRF_REGULATORS, NRF_REGULATORS_VREG_HIGH, true);
 #endif
 
+	__maybe_unused int err;
 #if defined(CONFIG_SOC_NRF53_CPUNET_MGMT)
-	int err = nrf53_cpunet_mgmt_init();
+	err = nrf53_cpunet_mgmt_init();
 
 	__ASSERT_NO_MSG(err == 0);
 	(void)err;
 #endif
-}
 
-void soc_late_init_hook(void)
-{
 #ifdef CONFIG_SOC_NRF53_RTC_PRETICK
-	int err = rtc_pretick_init();
+	err = rtc_pretick_init();
 
 	__ASSERT_NO_MSG(err == 0);
 	(void)err;

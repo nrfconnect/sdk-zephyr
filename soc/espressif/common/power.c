@@ -6,13 +6,14 @@
 
 #include <zephyr/device.h>
 #include <zephyr/init.h>
+#include <zephyr/kernel.h>
 #include <zephyr/pm/device.h>
 #include <zephyr/pm/pm.h>
-#include <zephyr/irq.h>
 
 #include <esp_attr.h>
 #include <esp_cpu.h>
 #include <esp_sleep.h>
+#include <esp_timer.h>
 #include <esp_timer_impl.h>
 #include <esp_private/esp_clk.h>
 #include <esp_private/systimer.h>
@@ -26,13 +27,19 @@
 #if defined(CONFIG_SOC_SERIES_ESP32P4)
 #include <hal/pmu_ll.h>
 #include <hal/pmu_types.h>
+#if !defined(CONFIG_ESP32_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP)
 extern esp_err_t sleep_clock_icg_startup_init(void);
+#endif
 #endif
 #if defined(CONFIG_ESP32_PM_POWER_DOWN_CPU_IN_LIGHT_SLEEP)
 #include <esp_private/sleep_cpu.h>
 #endif
 #if defined(CONFIG_ESP32_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP)
 #include <esp_private/sleep_sys_periph.h>
+#endif
+
+#if defined(CONFIG_SOC_ESP32_PM_SLEEP_STATS)
+#include <pmstats.h>
 #endif
 
 #include <power.h>
@@ -45,12 +52,23 @@ extern esp_err_t sleep_clock_icg_startup_init(void);
 LOG_MODULE_REGISTER(soc_pm, CONFIG_SOC_LOG_LEVEL);
 
 #define MIN_RESIDENCY_SLEEP_US DT_PROP(DT_NODELABEL(light_sleep), min_residency_us)
-#define WAKEUP_MARGIN_US       200
+
+#if defined(CONFIG_ESP32_PM_SLP_IRAM_OPT)
+#define ESP32_PM_SLEEP_FN_ATTR IRAM_ATTR
+#else
+#define ESP32_PM_SLEEP_FN_ATTR
+#endif
 
 static const struct device *const rtc_dev = DEVICE_DT_GET_OR_NULL(DT_NODELABEL(rtc_timer));
 
 static bool sleep_enabled;
 static uint64_t sleep_time_us;
+static uint64_t lpm_budget_us;
+static uint64_t lpm_entry_counter;
+#if defined(CONFIG_SOC_ESP32_PM_SLEEP_STATS)
+static uint64_t lpm_deadline_us;
+static uint64_t lpm_kernel_us;
+#endif
 static uint64_t gpio_sleep_hold;
 #if defined(SOC_RTC_SLOW_MEM_SUPPORTED) || defined(SOC_RTC_FAST_MEM_SUPPORTED)
 static RTC_DATA_ATTR uint64_t gpio_was_held;
@@ -64,7 +82,18 @@ static gpio_hal_context_t gpio_hal = {.dev = GPIO_HAL_GET_HW(GPIO_PORT_0)};
 static uint32_t intenable;
 #endif
 
-static bool rtc_wakeup_enable(enum pm_state state, bool enable)
+static inline uint64_t lpm_counter_ticks_per_sec(void)
+{
+#if defined(SOC_SYSTIMER_SUPPORTED)
+	return systimer_us_to_ticks(1000000ULL);
+#elif defined(CONFIG_SOC_SERIES_ESP32)
+	return LACT_TICKS_PER_US * 1000000ULL;
+#else
+	return 1000000ULL;
+#endif
+}
+
+static bool ESP32_PM_SLEEP_FN_ATTR rtc_wakeup_enable(enum pm_state state, bool enable)
 {
 	bool wakeup_allowed;
 	bool result = false;
@@ -96,17 +125,23 @@ static bool rtc_wakeup_enable(enum pm_state state, bool enable)
 	}
 
 	if (enable) {
-		/* Here we subtract a time margin from the sleep period to wake up before the
-		 * systimer/ccount scheduler event. Since the RTC timer is used as a wakeup
-		 * source instead of the systimer, the compensation must be applied based on
-		 * the programmed wakeup time in order to resume execution just in time to
-		 * execute the scheduler event. Because of this, we keep 'exit-latency-us' to
-		 * a minimum in the device tree, and apply the actual compensation here. Also,
-		 * HAL already compensates exit latency according to config/dynamic parameters,
-		 * so we'll leave HAL to manage it.
+		/* The RTC timer, not the systimer/ccount, is the wakeup source, so we must
+		 * resume before the scheduler deadline captured at low-power-idle entry. The
+		 * lead time has two parts: the software latency from that entry until here,
+		 * measured from the counter snapshot taken in the LPM entry hook (the HAL
+		 * cannot see it), plus CONFIG_SOC_ESP32_PM_WAKEUP_MARGIN_US as a residual pad
+		 * for the remaining, unmeasured tail up to the HAL's internal sleep-start (GPIO
+		 * prepare and the sleep prologue). Feature-dependent hardware wake latency
+		 * (peripheral, flash and CPU power down) is compensated by HAL.
 		 */
-		if (sleep_time_us >= (MIN_RESIDENCY_SLEEP_US + WAKEUP_MARGIN_US)) {
-			esp_sleep_enable_timer_wakeup(sleep_time_us - WAKEUP_MARGIN_US);
+		uint64_t now = esp_timer_impl_get_counter_reg();
+		uint64_t elapsed_us =
+			((now - lpm_entry_counter) * 1000000ULL) / lpm_counter_ticks_per_sec();
+		uint64_t lead_us = elapsed_us + CONFIG_SOC_ESP32_PM_WAKEUP_MARGIN_US;
+
+		if ((sleep_time_us > lead_us) &&
+		    ((sleep_time_us - lead_us) >= MIN_RESIDENCY_SLEEP_US)) {
+			esp_sleep_enable_timer_wakeup(sleep_time_us - lead_us);
 			result = true;
 		}
 	} else {
@@ -163,7 +198,7 @@ void esp32_sleep_gpio_prepare(void)
 	}
 }
 
-void esp32_sleep_gpio_restore(void)
+void ESP32_PM_SLEEP_FN_ATTR esp32_sleep_gpio_restore(void)
 {
 	for (int gpio = 0; gpio < SOC_GPIO_PIN_COUNT; gpio++) {
 
@@ -210,11 +245,31 @@ void pm_state_set(enum pm_state state, uint8_t substate_id)
 
 		if (sleep_enabled) {
 			esp32_sleep_gpio_prepare();
-			esp_light_sleep_start();
+#if defined(CONFIG_SOC_ESP32_PM_SLEEP_STATS)
+			esp32_sleep_stats_before(lpm_kernel_us, sleep_time_us,
+						 MIN_RESIDENCY_SLEEP_US +
+							 CONFIG_SOC_ESP32_PM_WAKEUP_MARGIN_US,
+						 lpm_deadline_us);
+#endif
+			esp_err_t ret = esp_light_sleep_start();
+
+			esp32_sleep_gpio_restore();
+
+#if defined(CONFIG_SOC_ESP32_PM_SLEEP_STATS)
+			esp32_sleep_stats_after();
+#endif
+			if (ret != ESP_OK) {
+				LOG_DBG("Light sleep rejected by HAL (0x%x)", ret);
+			}
+		} else if (sleep_time_us != 0U) {
+			/* Avoid retrying suspend until the short alarm fires. */
+			k_cpu_idle();
 		}
 		break;
 
 	case PM_STATE_SOFT_OFF:
+		/* esp_timer alarms do not survive deep sleep. */
+		sleep_time_us = lpm_budget_us;
 		rtc_wakeup_enable(state, true);
 #if defined(SOC_PM_SUPPORT_RTC_PERIPH_PD)
 		esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
@@ -231,14 +286,13 @@ void pm_state_set(enum pm_state state, uint8_t substate_id)
 	}
 }
 
-void pm_state_exit_post_ops(enum pm_state state, uint8_t substate_id)
+void ESP32_PM_SLEEP_FN_ATTR pm_state_exit_post_ops(enum pm_state state, uint8_t substate_id)
 {
 	ARG_UNUSED(substate_id);
 
 	switch (state) {
 	case PM_STATE_STANDBY:
 		if (sleep_enabled) {
-			esp32_sleep_gpio_restore();
 			rtc_wakeup_enable(state, false);
 		}
 
@@ -249,15 +303,8 @@ void pm_state_exit_post_ops(enum pm_state state, uint8_t substate_id)
 		nocache_region_init();
 #endif
 
-#if defined(CONFIG_RISCV)
-		rv_utils_intr_global_enable();
-		irq_unlock(0);
-#elif defined(CONFIG_XTENSA)
+#if defined(CONFIG_XTENSA)
 		z_xt_ints_on(intenable);
-		/* We don't have the key used to lock interruptions here.
-		 * Just set PS.INTLEVEL to 0.
-		 */
-		__asm__ volatile("rsil a2, 0");
 #endif
 		break;
 
@@ -276,9 +323,39 @@ uint64_t esp32_lptim_hook_on_lpm_entry(uint64_t max_lpm_time_us)
 	/* Since LPM state is not yet confirmed, we only program
 	 * wakeup at pm_state_set() event.
 	 */
+	int64_t next_alarm = esp_timer_get_next_alarm_for_wake_up();
+	int64_t now_us = esp_timer_get_time();
+
+	lpm_budget_us = max_lpm_time_us;
 	sleep_time_us = max_lpm_time_us;
 
-	return esp_timer_impl_get_counter_reg();
+	/* An esp_timer alarm is not covered by the kernel timeout. Use the next
+	 * one that should wake the CPU as an earlier deadline. Idle enters sleep
+	 * again after the callback has run.
+	 */
+	if (next_alarm != INT64_MAX) {
+		if (next_alarm <= now_us) {
+			sleep_time_us = 0;
+		} else if ((uint64_t)(next_alarm - now_us) < sleep_time_us) {
+			sleep_time_us = (uint64_t)(next_alarm - now_us);
+		}
+	}
+
+#if defined(CONFIG_SOC_ESP32_PM_SLEEP_STATS)
+	/* Anchor the wake deadline here, at low-power-idle entry, so the wake margin
+	 * to the deadline can be measured on wake in the same esp_timer frame without
+	 * the software-latency bias of anchoring later at sleep-start.
+	 */
+	lpm_kernel_us = max_lpm_time_us;
+	lpm_deadline_us = (uint64_t)now_us + max_lpm_time_us;
+#endif
+
+	/* Keep the LP counter snapshot adjacent to the OS counter snapshot. */
+	uint64_t counter = esp_timer_impl_get_counter_reg();
+
+	lpm_entry_counter = counter;
+
+	return counter;
 }
 
 #if defined(CONFIG_XTENSA_TIMER_LPM_TIMER_HOOK)
@@ -298,11 +375,7 @@ uint64_t z_xtensa_lptim_hook_get_freq(void)
 uint64_t esp32_lptim_hook_get_freq(void)
 #endif
 {
-#if defined(SOC_SYSTIMER_SUPPORTED)
-	return systimer_us_to_ticks(1) * 1000000ULL;
-#elif defined(CONFIG_SOC_SERIES_ESP32)
-	return LACT_TICKS_PER_US * 1000000ULL;
-#endif
+	return lpm_counter_ticks_per_sec();
 }
 
 /* Sleep retention initialization */
@@ -317,11 +390,16 @@ static int sleep_retention_init(void)
 	/* pmu_init() turns on all LP clocks; narrow it to FOSC (RC_SLOW) only. */
 	pmu_ll_lp_set_clk_power(&PMU, PMU_MODE_LP_ACTIVE, BIT(30));
 
+#if !defined(CONFIG_ESP32_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP)
+	/* With TOP power down, the ICG entries would gate the flash clocks
+	 * before the SPI memory registers are backed up.
+	 */
 	err = sleep_clock_icg_startup_init();
 	if (err != ESP_OK) {
 		LOG_ERR("sleep_clock_icg_startup_init failed (%d)", err);
 		ret = err;
 	}
+#endif
 #endif
 
 	err = sleep_clock_startup_init();

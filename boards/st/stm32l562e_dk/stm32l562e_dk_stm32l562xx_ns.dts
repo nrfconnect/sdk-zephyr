@@ -5,11 +5,11 @@
  */
 
 /dts-v1/;
-#include "stm32l562e_dk_common.dtsi"
+#include "stm32l562e_dk-common.dtsi"
 
 / {
-	model = "STMicroelectronics STM32L562E-DK Discovery board";
 	compatible = "st,stm32l562e-dk";
+	model = "STMicroelectronics STM32L562E-DK Discovery board";
 
 	chosen {
 		zephyr,console = &usart1;
@@ -45,9 +45,9 @@
 
 &flash0 {
 	partitions {
+		ranges;
 		#address-cells = <1>;
 		#size-cells = <1>;
-		ranges;
 
 		/*
 		 * Flash layout:
@@ -94,7 +94,7 @@
 	};
 };
 
-&mx25lm51245 {
+&ext_flash_ctrl {
 	partitions {
 		compatible = "fixed-partitions";
 		#address-cells = <1>;

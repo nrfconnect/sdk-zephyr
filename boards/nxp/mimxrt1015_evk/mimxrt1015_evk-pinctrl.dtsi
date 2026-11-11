@@ -6,7 +6,7 @@
  * from mimxrt1015_evk.mex
  */
 
-#include <nxp/nxp_imx/rt/mimxrt1015daf5a-pinctrl.dtsi>
+#include <nxp/imxrt/imxrt10xx/pinctrl/mimxrt1015daf5a-pinctrl.dtsi>
 
 &pinctrl {
 	/* adc1 inputs 1 and 13 */
@@ -27,8 +27,8 @@
 			drive-strength = "r0-6";
 			drive-open-drain;
 			slew-rate = "slow";
-			nxp,speed = "100-mhz";
 			input-enable;
+			nxp,speed = "100-mhz";
 		};
 	};
 

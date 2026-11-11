@@ -2,10 +2,11 @@
 # SPDX-License-Identifier: Apache-2.0
 
 menuconfig NET_GPTP
-	bool "IEEE 802.1AS (gPTP) support [EXPERIMENTAL]"
+	bool "IEEE 802.1AS (gPTP) support"
+	select PRECISION_TIMING if NET_GPTP_USE_DEFAULT_CLOCK_UPDATE
 	select PTP_CLOCK
 	select NET_L2_PTP_TIMESTAMPING
-	select EXPERIMENTAL
+	depends on NET_NATIVE
 	help
 	  Enable gPTP driver that send and receives gPTP packets
 	  and handles network packet timestamps.
@@ -34,93 +35,32 @@ config NET_GPTP_PROBE_CLOCK_SOURCE_ON_DEMAND
 	  updated on each tick.
 	  See IEEE 802.1AS-2011, chapter 9.2 for more details.
 
-choice
-	prompt "gPTP Clock Accuracy"
-	default NET_GPTP_CLOCK_ACCURACY_UNKNOWN
+config NET_GPTP_STATIC_TIME_RECEIVER
+	bool "Static timeReceiver operation"
 	help
-	  Specify the accuracy of the clock. This setting should reflect
-	  the actual capabilities of the hardware.
-	  See 7.6.2.5 of IEEE 1588-2008 for more info.
-
-config NET_GPTP_CLOCK_ACCURACY_UNKNOWN
-	bool "Unknown"
-
-config NET_GPTP_CLOCK_ACCURACY_25NS
-	bool "25ns"
-
-config NET_GPTP_CLOCK_ACCURACY_100NS
-	bool "100ns"
-
-config NET_GPTP_CLOCK_ACCURACY_250NS
-	bool "250ns"
-
-config NET_GPTP_CLOCK_ACCURACY_1US
-	bool "1us"
-
-config NET_GPTP_CLOCK_ACCURACY_2_5US
-	bool "2.5us"
-
-config NET_GPTP_CLOCK_ACCURACY_10US
-	bool "10us"
-
-config NET_GPTP_CLOCK_ACCURACY_25US
-	bool "25us"
-
-config NET_GPTP_CLOCK_ACCURACY_100US
-	bool "100us"
-
-config NET_GPTP_CLOCK_ACCURACY_250US
-	bool "250us"
-
-config NET_GPTP_CLOCK_ACCURACY_1MS
-	bool "1ms"
-
-config NET_GPTP_CLOCK_ACCURACY_2_5MS
-	bool "2.5ms"
-
-config NET_GPTP_CLOCK_ACCURACY_10MS
-	bool "10ms"
-
-config NET_GPTP_CLOCK_ACCURACY_25MS
-	bool "25ms"
-
-config NET_GPTP_CLOCK_ACCURACY_100MS
-	bool "100ms"
-
-config NET_GPTP_CLOCK_ACCURACY_250MS
-	bool "250ms"
-
-config NET_GPTP_CLOCK_ACCURACY_1S
-	bool "1s"
-
-config NET_GPTP_CLOCK_ACCURACY_10S
-	bool "10s"
-
-config NET_GPTP_CLOCK_ACCURACY_GT_10S
-	bool "> 10s"
-
-endchoice
+	  Operate every gPTP port as a statically configured time
+	  receiver, as used by the IEEE 802.1AS automotive profile (AVnu
+	  Automotive Ethernet AVB Functional and Interoperability
+	  Specification). Automotive profile bridges use static port
+	  roles: they transmit Sync and Follow_Up but no Announce
+	  messages, so the BMCA can never select a port role. With this
+	  option the BMCA and all Announce handling are bypassed, the
+	  port role is pinned to the time receiver ("slave") state, asCapable is forced true so that
+	  synchronization does not depend on the neighbor Pdelay
+	  measurement (the bridge is not required to answer Pdelay
+	  requests), and the local clock is disciplined from the received
+	  Sync and Follow_Up messages alone. This matches the linuxptp
+	  ptp4l automotive time receiver configuration (BMCA "noop", clientOnly,
+	  inhibit_announce, asCapable "true", ignore_source_id). The
+	  device never becomes grandmaster and never transmits Sync or
+	  Announce messages, even if NET_GPTP_GM_CAPABLE is set.
+	  The standards analog of disabling the BMCA this way is the
+	  external port configuration of IEEE 802.1AS-2020, chapter
+	  10.3.14, derived from IEEE 1588-2019, chapter 17.6.2.
 
 config NET_GPTP_CLOCK_ACCURACY
-	hex
-	default 0x20 if NET_GPTP_CLOCK_ACCURACY_25NS
-	default 0x21 if NET_GPTP_CLOCK_ACCURACY_100NS
-	default 0x22 if NET_GPTP_CLOCK_ACCURACY_250NS
-	default 0x23 if NET_GPTP_CLOCK_ACCURACY_1US
-	default 0x24 if NET_GPTP_CLOCK_ACCURACY_2_5US
-	default 0x25 if NET_GPTP_CLOCK_ACCURACY_10US
-	default 0x26 if NET_GPTP_CLOCK_ACCURACY_25US
-	default 0x27 if NET_GPTP_CLOCK_ACCURACY_100US
-	default 0x28 if NET_GPTP_CLOCK_ACCURACY_250US
-	default 0x29 if NET_GPTP_CLOCK_ACCURACY_1MS
-	default 0x2a if NET_GPTP_CLOCK_ACCURACY_2_5MS
-	default 0x2b if NET_GPTP_CLOCK_ACCURACY_10MS
-	default 0x2c if NET_GPTP_CLOCK_ACCURACY_25MS
-	default 0x2d if NET_GPTP_CLOCK_ACCURACY_100MS
-	default 0x2e if NET_GPTP_CLOCK_ACCURACY_250MS
-	default 0x2f if NET_GPTP_CLOCK_ACCURACY_1S
-	default 0x30 if NET_GPTP_CLOCK_ACCURACY_10S
-	default 0x31 if NET_GPTP_CLOCK_ACCURACY_GT_10S
+	hex "gPTP Clock Accuracy"
+	range 0 0xff
 	default 0xfe
 
 config NET_GPTP_STACK_SIZE
@@ -137,6 +77,15 @@ config NET_GPTP_NUM_PORTS
 	help
 	  Configures the gPTP stack to work with the given number of ports.
 	  The port concept is the same thing as network interface.
+
+config NET_L2_ETHERNET_MCAST_FILTER_ADD_COUNT_GPTP
+	int
+	default 1
+	help
+	  gPTP listens to one link layer multicast address, the nearest
+	  bridge group address 01:80:C2:00:00:0E, on every one of its ports.
+	  The addresses are tracked per network interface, so one entry is
+	  enough regardless of the number of ports.
 
 config NET_GPTP_NEIGHBOR_PROP_DELAY_THR
 	int "Set neighbor propagation delay threshold (ns)"

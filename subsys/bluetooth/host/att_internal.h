@@ -10,7 +10,7 @@
 #include <zephyr/net_buf.h>
 #include <zephyr/sys/slist.h>
 #include <zephyr/sys/util.h>
-#include <zephyr/sys_clock.h>
+#include <zephyr/sys/clock.h>
 
 /*
  * Copyright (c) 2015-2016 Intel Corporation
@@ -293,12 +293,12 @@ struct bt_att_req {
 	sys_snode_t node;
 	bt_att_func_t func;
 	struct net_buf *buf;
-#if defined(CONFIG_BT_SMP)
+#if defined(CONFIG_BT_ATT_RETRY_ON_SEC_ERR)
 	bt_att_encode_t encode;
-	uint8_t retrying : 1;
+	bool retrying;
 	uint8_t att_op;
 	size_t len;
-#endif /* CONFIG_BT_SMP */
+#endif /* CONFIG_BT_ATT_RETRY_ON_SEC_ERR */
 	void *user_data;
 };
 

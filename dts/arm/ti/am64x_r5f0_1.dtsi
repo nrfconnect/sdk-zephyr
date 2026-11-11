@@ -6,6 +6,12 @@
 
 #include <ti/am64x_r5.dtsi>
 
+/ {
+	chosen {
+		zephyr,system-timer = &main_timer9;
+	};
+};
+
 &main_mbox2 {
 	usr-id = <1>;
 	status = "okay";
@@ -17,8 +23,8 @@
 };
 
 &dmsc {
-	ti,host-id = <38>;
 	mboxes = <&secure_proxy_main 6>, <&secure_proxy_main 7>;
+	ti,host-id = <38>;
 };
 
 &secure_proxy_main {
@@ -26,4 +32,8 @@
 	interrupts = <0 66 IRQ_TYPE_EDGE IRQ_DEFAULT_PRIORITY>,
 		     <0 67 IRQ_TYPE_EDGE IRQ_DEFAULT_PRIORITY>;
 	interrupt-parent = <&vim>;
+};
+
+&main_timer9 {
+	status = "okay";
 };

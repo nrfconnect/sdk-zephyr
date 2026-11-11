@@ -198,11 +198,6 @@ int net_lldp_config_optional(struct net_if *iface, const uint8_t *tlv,
 			     size_t len);
 
 /**
- * @brief Initialize LLDP engine.
- */
-void net_lldp_init(void);
-
-/**
  * @brief LLDP Receive packet callback
  *
  * Callback gets called upon receiving packet. It is responsible for
@@ -221,8 +216,13 @@ typedef enum net_verdict (*net_lldp_recv_cb_t)(struct net_if *iface,
 /**
  * @brief Register LLDP Rx callback function
  *
+ * @details The interface joins the LLDP multicast group when a callback is
+ * registered and leaves it when the callback is set to NULL, so that a
+ * device that filters multicast frames in hardware passes the LLDP frames
+ * up while there is someone to receive them.
+ *
  * @param iface Network interface
- * @param cb Callback function
+ * @param cb Callback function, or NULL to unregister
  *
  * @return 0 if ok, < 0 if error
  */

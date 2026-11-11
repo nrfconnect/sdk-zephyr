@@ -20,6 +20,7 @@
 		zephyr,sram = &sram0;
 		zephyr,flash = &flash0;
 		zephyr,canbus = &fdcan1;
+		zephyr,system-timer = &lptim1;
 	};
 
 	aliases {
@@ -94,9 +95,9 @@
 };
 
 &clk_msis {
-	status = "okay";
 	msi-pll-mode;
 	msi-range = <0>; /* 96 MHz */
+	status = "okay";
 };
 
 &rcc {
@@ -135,8 +136,8 @@
 	pinctrl-names = "default";
 	scl-gpios = <&gpiob 8 GPIO_ACTIVE_HIGH>;
 	sda-gpios = <&gpiob 9 GPIO_ACTIVE_HIGH>;
-	status = "okay";
 	clock-frequency = <I2C_BITRATE_FAST>;
+	status = "okay";
 };
 
 /* PA5 is shared between SPI1_SCK and TIM2_CH1 (PWM2). Keep SPI1 enabled by default */
@@ -180,6 +181,12 @@
 		pinctrl-names = "default";
 		status = "disabled";
 	};
+};
+
+&lptim1 {
+	clocks = <&rcc STM32_CLOCK(APB3, 11)>,
+		 <&rcc STM32_SRC_LSE LPTIM1_SEL(3)>;
+	status = "okay";
 };
 
 &iwdg {

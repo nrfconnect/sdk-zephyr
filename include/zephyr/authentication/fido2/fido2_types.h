@@ -7,6 +7,7 @@
 /**
  * @file
  * @brief FIDO2 shared type definitions.
+ * @ingroup fido2
  */
 
 #ifndef ZEPHYR_INCLUDE_AUTHENTICATION_FIDO2_FIDO2_TYPES_H_
@@ -54,6 +55,27 @@ extern "C" {
 /** @brief PIN hash size */
 #define FIDO2_PIN_HASH_SIZE 16
 
+/** @brief Maximum encrypted PIN hash size */
+#define FIDO2_PIN_HASH_ENC_MAX_SIZE 32
+
+/** @brief Maximum encrypted PIN size */
+#define FIDO2_PIN_ENC_MAX_SIZE 80
+
+/** @brief PIN Protocol 1 auth param size */
+#define FIDO2_PIN_AUTH_SIZE_P1 16
+
+/** @brief PIN Protocol 2 auth param size */
+#define FIDO2_PIN_AUTH_SIZE_P2 32
+
+/** @brief Maximum PIN auth param size */
+#define FIDO2_PIN_AUTH_MAX_SIZE 32
+
+/** @brief Padded PIN size */
+#define FIDO2_PIN_PADDED_SIZE 64
+
+/** @brief Encrypted PIN token size */
+#define FIDO2_PIN_TOKEN_ENC_MAX_SIZE 48
+
 /** @brief Size of a discoverable credential ID */
 #define FIDO2_DISCOVERABLE_CRED_ID_SIZE 32
 
@@ -75,6 +97,18 @@ extern "C" {
 
 /** @brief Maximum number of supported versions */
 #define FIDO2_MAX_VERSIONS 4
+
+/** @brief P-256 public key export size */
+#define FIDO2_P256_UNCOMPRESSED_KEY_SIZE 65
+
+/** @brief P-256 coordinate size */
+#define FIDO2_P256_COORD_SIZE 32
+
+/** @brief EC point prefix */
+#define FIDO2_EC_POINT_UNCOMPRESSED 0x04
+
+/** @brief ASN.1-encoded ECDSA signature length */
+#define FIDO2_ECDSA_SIG_MAX_SIZE 72
 
 /** @brief Credential extension HMAC secret */
 #define FIDO2_EXT_HMAC_SECRET     BIT(0)
@@ -177,9 +211,10 @@ enum fido2_cred_protect {
 
 /** @brief COSE algorithm identifiers */
 enum fido2_cose_alg {
-	FIDO2_COSE_ES256 = -7,   /**< ECDSA w/ SHA-256 */
-	FIDO2_COSE_EDDSA = -8,   /**< EdDSA */
-	FIDO2_COSE_RS256 = -257, /**< RSASSA-PKCS1-v1_5 w/ SHA-256 */
+	FIDO2_COSE_ES256 = -7,           /**< ECDSA w/ SHA-256 */
+	FIDO2_COSE_EDDSA = -8,           /**< EdDSA */
+	FIDO2_COSE_ECDHES_HKDF256 = -25, /**< ECDH ES w/ HKDF */
+	FIDO2_COSE_RS256 = -257,         /**< RSASSA-PKCS1-v1_5 w/ SHA-256 */
 };
 
 /** @brief A stored FIDO2 credential */
@@ -259,6 +294,8 @@ struct fido2_device_info {
 	uint8_t num_pin_uv_auth_protocols;
 	/** Remaining PIN retry attempts. */
 	uint8_t pin_retries;
+	/** Current minimum PIN length */
+	uint8_t min_pin_length;
 };
 
 #ifdef __cplusplus

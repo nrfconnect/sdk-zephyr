@@ -32,8 +32,8 @@
 
 #include <zephyr/shell/shell.h>
 
-#include "host/shell/bt.h"
-#include "common/bt_shell_private.h"
+#include <host/shell/bt.h>
+#include <common/bt_shell_private.h>
 
 #if defined(CONFIG_BT_CONN)
 /* Connection context for BR/EDR legacy pairing in sec mode 3 */
@@ -288,19 +288,13 @@ static void l2cap_connected(struct bt_l2cap_chan *chan)
 static void l2cap_disconnected(struct bt_l2cap_chan *chan)
 {
 #if defined(CONFIG_BT_L2CAP_RET_FC)
-	struct net_buf *buf;
 	struct l2cap_br_chan *br_chan = CONTAINER_OF(chan, struct l2cap_br_chan, chan.chan);
 #endif /* CONFIG_BT_L2CAP_RET_FC */
 
 	bt_shell_print("Channel %p disconnected", chan);
 
 #if defined(CONFIG_BT_L2CAP_RET_FC)
-	do {
-		buf = k_fifo_get(&br_chan->l2cap_recv_fifo, K_NO_WAIT);
-		if (buf != NULL) {
-			net_buf_unref(buf);
-		}
-	} while (buf != NULL);
+	net_buf_fifo_purge(&br_chan->l2cap_recv_fifo);
 #endif /* CONFIG_BT_L2CAP_RET_FC */
 }
 
@@ -646,6 +640,7 @@ static int cmd_l2cap_credits(const struct shell *sh, size_t argc, char *argv[])
 }
 #endif /* CONFIG_BT_L2CAP_RET_FC */
 
+#if defined(CONFIG_BT_TESTING)
 static void l2cap_br_echo_req(struct bt_conn *conn, uint8_t identifier, struct net_buf *buf)
 {
 	bt_shell_print("Incoming ECHO REQ data identifier %u len %u", identifier, buf->len);
@@ -763,6 +758,7 @@ static int cmd_l2cap_echo_rsp(const struct shell *sh, size_t argc, char *argv[])
 
 	return 0;
 }
+#endif /* CONFIG_BT_TESTING */
 
 static int cmd_discoverable(const struct shell *sh, size_t argc, char *argv[])
 {
@@ -1537,12 +1533,11 @@ static struct bt_sdp_discover_params discov_avrcp_tg = {
 	.pool = &sdp_client_pool,
 };
 
-static struct bt_sdp_discover_params discov;
-
 static int cmd_sdp_find_record(const struct shell *sh, size_t argc, char *argv[])
 {
 	int err;
 	const char *action;
+	struct bt_sdp_discover_params *discov;
 
 	if (!default_conn) {
 		shell_print(sh, "Not connected");
@@ -1550,7 +1545,7 @@ static int cmd_sdp_find_record(const struct shell *sh, size_t argc, char *argv[]
 	}
 
 	if (argc == 1) {
-		discov = discov_general;
+		discov = &discov_general;
 		action = "l2cap";
 		goto discover;
 	}
@@ -1558,19 +1553,19 @@ static int cmd_sdp_find_record(const struct shell *sh, size_t argc, char *argv[]
 	action = argv[1];
 
 	if (!strcmp(action, "HFPAG")) {
-		discov = discov_hfpag;
+		discov = &discov_hfpag;
 	} else if (!strcmp(action, "HFPHF")) {
-		discov = discov_hfphf;
+		discov = &discov_hfphf;
 	} else if (!strcmp(action, "A2SRC")) {
-		discov = discov_a2src;
+		discov = &discov_a2src;
 	} else if (!strcmp(action, "A2SNK")) {
-		discov = discov_a2snk;
+		discov = &discov_a2snk;
 	} else if (!strcmp(action, "AVRCP_CT")) {
-		discov = discov_avrcp_ct;
+		discov = &discov_avrcp_ct;
 	} else if (!strcmp(action, "AVRCP_TG")) {
-		discov = discov_avrcp_tg;
+		discov = &discov_avrcp_tg;
 	} else if (!strcmp(action, "PNP")) {
-		discov = discov_pnp;
+		discov = &discov_pnp;
 	} else {
 		shell_help(sh);
 		return SHELL_CMD_HELP_PRINTED;
@@ -1579,7 +1574,7 @@ static int cmd_sdp_find_record(const struct shell *sh, size_t argc, char *argv[]
 discover:
 	shell_print(sh, "SDP UUID \'%s\' gets applied", action);
 
-	err = bt_sdp_discover(default_conn, &discov);
+	err = bt_sdp_discover(default_conn, discov);
 	if (err) {
 		shell_error(sh, "SDP discovery failed: err %d", err);
 		return -ENOEXEC;
@@ -2096,6 +2091,7 @@ static int cmd_default_handler(const struct shell *sh, size_t argc, char **argv)
 	"<window: window in units of 0.625 ms> "                                                   \
 	"<type: 0 for standard, 1 for interlaced>]"
 
+#if defined(CONFIG_BT_TESTING)
 SHELL_STATIC_SUBCMD_SET_CREATE(echo_cmds,
 	SHELL_CMD_ARG(register, NULL, HELP_NONE, cmd_l2cap_echo_reg, 1, 0),
 	SHELL_CMD_ARG(unregister, NULL, HELP_NONE, cmd_l2cap_echo_unreg, 1, 0),
@@ -2103,6 +2099,7 @@ SHELL_STATIC_SUBCMD_SET_CREATE(echo_cmds,
 	SHELL_CMD_ARG(rsp, NULL, "<identifier> <length of data>", cmd_l2cap_echo_rsp, 3, 0),
 	SHELL_SUBCMD_SET_END
 );
+#endif /* CONFIG_BT_TESTING */
 
 #if defined(CONFIG_BT_L2CAP_CONNLESS)
 SHELL_STATIC_SUBCMD_SET_CREATE(connless_cmds,
@@ -2127,7 +2124,9 @@ SHELL_STATIC_SUBCMD_SET_CREATE(l2cap_cmds,
 #if defined(CONFIG_BT_L2CAP_RET_FC)
 	SHELL_CMD_ARG(credits, NULL, HELP_NONE, cmd_l2cap_credits, 1, 0),
 #endif /* CONFIG_BT_L2CAP_RET_FC */
+#if defined(CONFIG_BT_TESTING)
 	SHELL_CMD(echo, &echo_cmds, "L2CAP BR ECHO commands", cmd_default_handler),
+#endif /* CONFIG_BT_TESTING */
 #if defined(CONFIG_BT_L2CAP_CONNLESS)
 	SHELL_CMD(connless, &connless_cmds, "L2CAP connectionless commands", cmd_default_handler),
 #endif /* CONFIG_BT_L2CAP_CONNLESS */

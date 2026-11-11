@@ -18,6 +18,7 @@
 #include <zephyr/drivers/clock_control.h>
 #include <zephyr/pm/device.h>
 #include <esp_clk_tree.h>
+#include <esp_private/esp_clk_tree_common.h>
 #ifdef CONFIG_PWM_CAPTURE
 #include <zephyr/drivers/interrupt_controller/intc_esp32.h>
 #endif /* CONFIG_PWM_CAPTURE */
@@ -29,7 +30,7 @@
 #endif
 
 #if MCPWM_SLEEP_RETENTION_ENABLED
-#include <hal/mcpwm_periph.h>
+#include <mcpwm_private.h>
 #include <esp_private/sleep_retention.h>
 #endif
 
@@ -56,6 +57,7 @@ struct mcpwm_esp32_data {
 	mcpwm_hal_context_t hal;
 	uint32_t mcpwm_clk_hz;
 	struct k_sem cmd_sem;
+	uint8_t timers_started;
 };
 
 #ifdef CONFIG_PWM_CAPTURE
@@ -123,7 +125,8 @@ static void mcpwm_esp32_duty_set(const struct device *dev,
 		duty_mode = channel->inverted ? DUTY_MODE_ACTIVE_LOW : DUTY_MODE_ACTIVE_HIGH;
 	}
 
-	uint32_t timer_clk_hz = data->mcpwm_clk_hz / config->prescale / channel->prescale;
+	uint32_t timer_clk_hz =
+		data->mcpwm_clk_hz / (config->prescale + 1) / (channel->prescale + 1);
 
 	set_duty = (timer_clk_hz / channel->freq) * channel->duty / 100;
 	mcpwm_ll_operator_connect_timer(data->hal.dev, channel->operator_id, channel->timer_id);
@@ -183,11 +186,22 @@ static int mcpwm_esp32_timer_set(const struct device *dev,
 
 	__ASSERT_NO_MSG(channel->freq > 0);
 
-	mcpwm_ll_timer_set_clock_prescale(data->hal.dev, channel->timer_id, channel->prescale);
+	mcpwm_ll_timer_set_clock_prescale(data->hal.dev, channel->timer_id, channel->prescale + 1);
 	mcpwm_ll_timer_set_count_mode(data->hal.dev, channel->timer_id, MCPWM_TIMER_COUNT_MODE_UP);
-	mcpwm_ll_timer_update_period_at_once(data->hal.dev, channel->timer_id);
 
-	uint32_t timer_clk_hz = data->mcpwm_clk_hz / config->prescale / channel->prescale;
+	/* Apply a new period at the next counter wrap while the timer runs */
+	if ((data->timers_started & BIT(channel->timer_id)) == 0U) {
+		mcpwm_ll_timer_update_period_at_once(data->hal.dev, channel->timer_id);
+	} else {
+		mcpwm_ll_timer_enable_update_period_on_tez(data->hal.dev, channel->timer_id, true);
+	}
+
+	uint32_t timer_clk_hz =
+		data->mcpwm_clk_hz / (config->prescale + 1) / (channel->prescale + 1);
+	if ((timer_clk_hz / channel->freq) > MCPWM_LL_MAX_COUNT_VALUE) {
+		LOG_ERR("Period too large for timer %d", channel->timer_id);
+		return -ENOTSUP;
+	}
 
 	mcpwm_ll_timer_set_peak(data->hal.dev, channel->timer_id, timer_clk_hz / channel->freq,
 				false);
@@ -232,15 +246,20 @@ static int mcpwm_esp32_set_cycles(const struct device *dev, uint32_t channel_idx
 	uint64_t clk_freq;
 	struct mcpwm_esp32_config *config = (struct mcpwm_esp32_config *)dev->config;
 	struct mcpwm_esp32_data *data = (struct mcpwm_esp32_data *const)(dev)->data;
-	struct mcpwm_esp32_channel_config *channel = &config->channel_config[channel_idx];
 
-	if (!channel) {
-		LOG_ERR("Error getting channel %d", channel_idx);
+	if (channel_idx >=
+	    MCPWM_LL_GET(OPERATORS_PER_GROUP) * MCPWM_LL_GET(GENERATORS_PER_OPERATOR)) {
+		LOG_ERR("Invalid PWM output channel %d", channel_idx);
 		return -EINVAL;
 	}
 
+	struct mcpwm_esp32_channel_config *channel = &config->channel_config[channel_idx];
+
 	/* Update PWM frequency according to period_cycles */
 	mcpwm_esp32_get_cycles_per_sec(dev, channel_idx, &clk_freq);
+	if (period_cycles == 0U) {
+		return -EINVAL;
+	}
 
 	channel->freq = (uint32_t)(clk_freq / period_cycles);
 	if (!channel->freq) {
@@ -263,6 +282,7 @@ static int mcpwm_esp32_set_cycles(const struct device *dev, uint32_t channel_idx
 
 	mcpwm_ll_timer_set_start_stop_command(data->hal.dev, channel->timer_id,
 					      MCPWM_TIMER_START_NO_STOP);
+	data->timers_started |= BIT(channel->timer_id);
 
 	k_sem_give(&data->cmd_sem);
 
@@ -360,7 +380,7 @@ static int mcpwm_esp32_enable_capture(const struct device *dev, uint32_t channel
 		return -EBUSY;
 	}
 
-	mcpwm_ll_group_set_clock_prescale(config->index, config->prescale);
+	mcpwm_ll_group_set_clock_prescale(config->index, config->prescale + 1);
 	mcpwm_ll_group_enable_shadow_mode(data->hal.dev);
 	mcpwm_ll_group_flush_shadow(data->hal.dev);
 
@@ -401,9 +421,9 @@ static esp_err_t mcpwm_esp32_create_sleep_retention_cb(void *arg)
 {
 	const struct device *dev = arg;
 	const struct mcpwm_esp32_config *cfg = dev->config;
-	const mcpwm_reg_retention_info_t *info;
+	const mcpwm_retention_desc_t *info;
 
-	info = &mcpwm_reg_retention_info[cfg->index];
+	info = &mcpwm_retention_infos[cfg->index];
 
 	return sleep_retention_entries_create(info->regdma_entry_array, info->array_size,
 					      REGDMA_LINK_PRI_MCPWM, info->retention_module);
@@ -418,17 +438,21 @@ static void mcpwm_esp32_sleep_retention_init(const struct device *dev)
 		return;
 	}
 
-	module = mcpwm_reg_retention_info[cfg->index].retention_module;
+	module = mcpwm_retention_infos[cfg->index].retention_module;
 
 	sleep_retention_module_init_param_t init_param = {
 		.cbs = {.create = {.handle = mcpwm_esp32_create_sleep_retention_cb,
 				   .arg = (void *)dev}},
+		.attribute = SLEEP_RETENTION_MODULE_ATTR_ATTACH,
 		.depends = RETENTION_MODULE_BITMAP_INIT(CLOCK_SYSTEM)};
 
 	esp_err_t err = sleep_retention_module_init(module, &init_param);
 
 	if (err == ESP_OK) {
 		err = sleep_retention_module_allocate(module);
+	}
+	if (err == ESP_OK) {
+		err = sleep_retention_module_attach(module);
 	}
 	if (err != ESP_OK) {
 		LOG_WRN("MCPWM sleep retention init failed (%d)", err);
@@ -509,6 +533,11 @@ int mcpwm_esp32_init(const struct device *dev)
 		return ret;
 	}
 
+	if (esp_clk_tree_enable_src(MCPWM_TIMER_CLK_SRC_DEFAULT, true) != ESP_OK) {
+		LOG_ERR("Could not enable clock source");
+		return -EIO;
+	}
+
 	mcpwm_ll_group_enable_clock(config->index, true);
 	mcpwm_ll_group_set_clock_source(config->index, MCPWM_TIMER_CLK_SRC_DEFAULT);
 	esp_clk_tree_src_get_freq_hz(MCPWM_TIMER_CLK_SRC_DEFAULT,
@@ -516,7 +545,7 @@ int mcpwm_esp32_init(const struct device *dev)
 
 	channel_init(dev);
 
-	mcpwm_ll_group_set_clock_prescale(config->index, config->prescale);
+	mcpwm_ll_group_set_clock_prescale(config->index, config->prescale + 1);
 	mcpwm_ll_group_enable_shadow_mode(data->hal.dev);
 	mcpwm_ll_group_flush_shadow(data->hal.dev);
 

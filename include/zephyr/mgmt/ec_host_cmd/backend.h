@@ -7,16 +7,14 @@
 /**
  * @file
  * @brief Public APIs for Host Command backends that respond to host commands
- * @ingroup ec_host_cmd_backend
+ * @ingroup ec_host_cmd_interface_backend
  */
 
 #ifndef ZEPHYR_INCLUDE_MGMT_EC_HOST_CMD_BACKEND_H_
 #define ZEPHYR_INCLUDE_MGMT_EC_HOST_CMD_BACKEND_H_
 
 /**
- * @brief Interface to EC Host Command backends
- * @defgroup ec_host_cmd_backend Backends
- * @ingroup ec_host_cmd_interface
+ * @def_driverbackendgroup{Host Command,ec_host_cmd_interface}
  * @{
  */
 
@@ -107,8 +105,13 @@ typedef int (*ec_host_cmd_backend_api_init)(const struct ec_host_cmd_backend *ba
  */
 typedef int (*ec_host_cmd_backend_api_send)(const struct ec_host_cmd_backend *backend);
 
+/**
+ * @driver_ops{Host Command}
+ */
 struct ec_host_cmd_backend_api {
+	/** @driver_ops_mandatory @copybrief ec_host_cmd_backend_api_init */
 	ec_host_cmd_backend_api_init init;
+	/** @driver_ops_mandatory @copybrief ec_host_cmd_backend_api_send */
 	ec_host_cmd_backend_api_send send;
 };
 
@@ -161,6 +164,13 @@ struct ec_host_cmd_backend *ec_host_cmd_backend_get_uart(const struct device *de
  * @retval The SPI backend pointer.
  */
 struct ec_host_cmd_backend *ec_host_cmd_backend_get_spi(struct gpio_dt_spec *cs);
+
+/**
+ * @brief Get the USB Host Command backend pointer
+ *
+ * @retval The USB backend pointer.
+ */
+struct ec_host_cmd_backend *ec_host_cmd_backend_get_usb(void);
 
 /**
  * @brief Signal event over USB

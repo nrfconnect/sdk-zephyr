@@ -46,6 +46,8 @@ paths of a target library.
 When introducing build system code using CMake or adding new CMake files,
 please follow the style guidelines outlined :ref:`here <cmake-style>`.
 
+The :ref:`cmake-reference` section provides a reference for all CMake commands,
+variables, and modules used by Zephyr and available to application developers.
 
 Build and Configuration Phases
 ==============================
@@ -180,7 +182,7 @@ Build-time constants generation
    ``$<TARGET_OBJECTS:offsets>`` in linker scripts).
 
 System call boilerplate
-   The *gen_syscall.py* and *parse_syscalls.py*  scripts work
+   The *gen_syscalls.py* and *parse_syscalls.py*  scripts work
    together to bind potential system call functions with their
    implementations.
 

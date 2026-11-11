@@ -7,6 +7,7 @@
 /**
  * @file
  * @brief FIDO2 user presence abstraction API.
+ * @ingroup fido2
  */
 
 #ifndef ZEPHYR_INCLUDE_AUTHENTICATION_FIDO2_FIDO2_UP_H_
@@ -37,9 +38,20 @@ extern "C" {
 int fido2_up_wait(void);
 
 /**
+ * @brief Reset the user-presence state for a new request.
+ *
+ * Clears pending cancellation and user-presence state before starting
+ * a new request.
+ */
+void fido2_up_reset(void);
+
+/**
  * @brief Cancel a pending user presence wait.
  *
  * Called when the cancel command is received from a transport.
+ *
+ * Application-provided implementations using CONFIG_FIDO2_UP_CUSTOM
+ * must not block.
  */
 void fido2_up_cancel(void);
 

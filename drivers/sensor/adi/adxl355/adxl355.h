@@ -143,6 +143,7 @@
 #define ADXL355_PARTID_VAL    0xEDu /* PART ID */
 #define ADXL355_REVID_VAL     0x01u /* REV ID */
 #define ADXL355_RESET_CMD     0x52u /* RESET command */
+#define ADXL355_RESET_POLL_ATTEMPTS 100 /* 1 ms apart, for NVM_BUSY after a reset */
 
 /* Sensitivity Values */
 #define ADXL355_SENSITIVITY_2G 256000 /* in LSB/g */
@@ -269,11 +270,11 @@ struct adxl355_extra_attr {
  *
  */
 struct adxl355_sample {
+	uint8_t is_fifo: 1;
 	int32_t x;
 	int32_t y;
 	int32_t z;
 	enum adxl355_range range;
-	uint8_t is_fifo: 1;
 };
 
 /**
@@ -291,7 +292,6 @@ struct adxl355_data {
 #ifdef CONFIG_ADXL355_TRIGGER
 	const struct device *dev;
 	struct gpio_callback gpio_cb;
-	bool route_to_int2;
 
 	sensor_trigger_handler_t drdy_handler;
 	const struct sensor_trigger *drdy_trigger;

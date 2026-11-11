@@ -1,6 +1,6 @@
 .. _lwm2m_interface:
 
-Lightweight M2M (LWM2M)
+Lightweight M2M (LwM2M)
 #######################
 
 .. contents::
@@ -527,8 +527,7 @@ engine.
 Data caches depends on one of the SenML data formats
 :kconfig:option:`CONFIG_LWM2M_RW_SENML_CBOR_SUPPORT` or
 :kconfig:option:`CONFIG_LWM2M_RW_SENML_JSON_SUPPORT` and needs :kconfig:option:`CONFIG_POSIX_TIMERS`
-so it can request a timestamp from the system and :kconfig:option:`CONFIG_RING_BUFFER` for ring
-buffer.
+so it can request a timestamp from the system.
 
 Read and Write operations
 =========================
@@ -551,7 +550,7 @@ Send scheduler helper objects
 
 The optional SEND scheduler extension exposes two objects (Send scheduler Control ``10523`` and
 Sampling Rules ``10524``) that sit on top of cached resources to decide when samples should be kept
-and when the client should trigger a LWM2M SEND.
+and when the client should trigger a LwM2M SEND.
 
 Enabling and wiring
 ===================

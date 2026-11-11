@@ -3,8 +3,7 @@ common:
     - dns
     - net
   depends_on: netif
-  timeout: 600
-  min_ram: 21
+  min_ram: 24
 tests:
   net.dns.resolve:
     extra_configs:
@@ -14,13 +13,25 @@ tests:
       - CONFIG_NET_TC_THREAD_PREEMPTIVE=y
   net.dns.resolve.no_ipv6:
     extra_args: CONF_FILE=prj-no-ipv6.conf
-    min_ram: 16
+    min_ram: 18
   net.mdns.resolve:
     extra_configs:
       - CONFIG_MDNS_RESOLVER=y
       - CONFIG_MDNS_RESPONDER=n
       - CONFIG_NET_IPV6_MLD=y
       - CONFIG_NET_IPV4_IGMP=y
+  net.mdns.resolve.query_all_servers:
+    extra_configs:
+      - CONFIG_MDNS_RESOLVER=y
+      - CONFIG_MDNS_RESPONDER=n
+      - CONFIG_NET_IPV6_MLD=y
+      - CONFIG_NET_IPV4_IGMP=y
+      - CONFIG_DNS_RESOLVER_QUERY_ALL_AVAILABLE_SERVERS=y
+  net.llmnr.resolve.query_all_servers:
+    extra_configs:
+      - CONFIG_LLMNR_RESOLVER=y
+      - CONFIG_DNS_RESOLVER_QUERY_ALL_AVAILABLE_SERVERS=y
+      - CONFIG_WARN_DEPRECATED=n
   net.dns.resolve.hostname:
     extra_configs:
       - CONFIG_NET_HOSTNAME_ENABLE=y
@@ -36,3 +47,13 @@ tests:
   net.dns.resolve.query_all_servers:
     extra_configs:
       - CONFIG_DNS_RESOLVER_QUERY_ALL_AVAILABLE_SERVERS=y
+  net.dns.resolve.fixed_source_port:
+    extra_configs:
+      - CONFIG_DNS_RESOLVER_RANDOMIZE_SOURCE_PORT=n
+  net.dns.resolve.no_additional_bufs:
+    extra_configs:
+      - CONFIG_DNS_RESOLVER_ADDITIONAL_BUF_CTR=0
+  net.dns.resolve.query_all_servers.concurrent:
+    extra_configs:
+      - CONFIG_DNS_RESOLVER_QUERY_ALL_AVAILABLE_SERVERS=y
+      - CONFIG_DNS_NUM_CONCUR_QUERIES=2

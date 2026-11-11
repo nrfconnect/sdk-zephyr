@@ -6,13 +6,13 @@
  */
 /dts-v1/;
 
-#include <espressif/esp32s3/esp32s3_wroom_n8.dtsi>
+#include <espressif/esp32s3/esp32s3.dtsi>
 #include <espressif/partitions_0x0_amp.dtsi>
 #include "adafruit_feather_esp32s3-pinctrl.dtsi"
 
 / {
-	model = "Adafruit Feather ESP32S3 APPCPU";
 	compatible = "adafruit,feather_esp32s3", "espressif,esp32s3";
+	model = "Adafruit Feather ESP32S3 APPCPU";
 
 	chosen {
 		zephyr,sram = &sram1;
@@ -21,6 +21,11 @@
 		zephyr,flash = &flash0;
 		zephyr,code-partition = &slot0_appcpu_partition;
 	};
+};
+
+&flash0 {
+	reg = <0x0 DT_SIZE_M(8)>;
+	ranges = <0x0 0x0 DT_SIZE_M(8)>;
 };
 
 &trng0 {

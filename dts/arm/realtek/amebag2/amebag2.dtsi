@@ -12,6 +12,7 @@
 #include <zephyr/dt-bindings/gpio/gpio.h>
 #include <zephyr/dt-bindings/i2c/i2c.h>
 #include <zephyr/dt-bindings/adc/adc.h>
+#include <zephyr/dt-bindings/pwm/pwm.h>
 
 / {
 	cpus {
@@ -19,9 +20,9 @@
 		#size-cells = <0>;
 
 		cpu0: cpu@0 {
-			device_type = "cpu";
 			compatible = "arm,cortex-m55";
 			reg = <0>;
+			device_type = "cpu";
 			d-cache-line-size = <32>;
 			#address-cells = <1>;
 			#size-cells = <1>;
@@ -33,15 +34,15 @@
 		#size-cells = <1>;
 
 		clk_sys: clk_sys {
-			#clock-cells = <0>;
 			compatible = "fixed-clock";
+			#clock-cells = <0>;
 			clock-frequency = <DT_FREQ_M(240)>;
 		};
 
 		rcc: rcc@4080a000 {
 			compatible = "realtek,ameba-rcc";
-			#clock-cells = <1>;
 			reg = <0x4080a000 0x400>;
+			#clock-cells = <1>;
 		};
 	};
 
@@ -158,6 +159,54 @@
 			status = "disabled";
 		};
 
+		uart0: serial@4080c000 {
+			compatible = "realtek,ameba-uart";
+			reg = <0x4080c000 0x64>;
+			clocks = <&rcc AMEBA_UART0_CLK>;
+			interrupts = <20 0>;
+			current-speed = <115200>;
+			dmas = <&dma 2 1 0xa>,
+			       <&dma 3 0 0x214a1>;
+			dma-names = "rx", "tx";
+			status = "disabled";
+		};
+
+		uart1: serial@4080d000 {
+			compatible = "realtek,ameba-uart";
+			reg = <0x4080d000 0x64>;
+			clocks = <&rcc AMEBA_UART1_CLK>;
+			interrupts = <21 0>;
+			current-speed = <115200>;
+			dmas = <&dma 2 3 0xa>,
+			       <&dma 3 2 0x214a1>;
+			dma-names = "rx", "tx";
+			status = "disabled";
+		};
+
+		uart2: serial@4080e000 {
+			compatible = "realtek,ameba-uart";
+			reg = <0x4080e000 0x64>;
+			clocks = <&rcc AMEBA_UART2_CLK>;
+			interrupts = <22 0>;
+			current-speed = <115200>;
+			dmas = <&dma 2 5 0xa>,
+			       <&dma 3 4 0x214a1>;
+			dma-names = "rx", "tx";
+			status = "disabled";
+		};
+
+		uart3: serial@4080f000 {
+			compatible = "realtek,ameba-uart";
+			reg = <0x4080f000 0x64>;
+			clocks = <&rcc AMEBA_UART3_CLK>;
+			interrupts = <23 0>;
+			current-speed = <115200>;
+			dmas = <&dma 2 25 0xa>,
+			       <&dma 3 24 0x214a1>;
+			dma-names = "rx", "tx";
+			status = "disabled";
+		};
+
 		loguart: serial@40810000 {
 			compatible = "realtek,ameba-loguart";
 			reg = <0x40810000 0x100>;
@@ -237,6 +286,58 @@
 			clocks = <&rcc AMEBA_LTIM3_CLK>;
 			interrupts = <10 0>;
 			clock-frequency = <32768>;
+			status = "disabled";
+		};
+
+		/* The PWM Timer (TIM4) support Input Capture Mode or PWM Mode */
+		pwm0: pwm@41000000 {
+			compatible = "realtek,ameba-pwm";
+			reg = <0x41000000 0x88>;
+			interrupts = <11 0>;
+			clocks = <&rcc AMEBA_PWM0_CLK>;
+			prescale = <39>;
+			index = <0>;
+			#pwm-cells = <3>;
+			channel-count = <4>;
+			status = "disabled";
+		};
+
+		/* The PWM Timer (TIM5) support Input Capture Mode or PWM Mode */
+		pwm1: pwm@41000200 {
+			compatible = "realtek,ameba-pwm";
+			reg = <0x41000200 0x88>;
+			interrupts = <12 0>;
+			clocks = <&rcc AMEBA_PWM1_CLK>;
+			prescale = <39>;
+			index = <1>;
+			#pwm-cells = <3>;
+			channel-count = <4>;
+			status = "disabled";
+		};
+
+		/* The PWM Timer (TIM6) support Input Capture Mode or PWM Mode */
+		pwm2: pwm@41000400 {
+			compatible = "realtek,ameba-pwm";
+			reg = <0x41000400 0x88>;
+			interrupts = <13 0>;
+			clocks = <&rcc AMEBA_PWM2_CLK>;
+			prescale = <39>;
+			index = <2>;
+			channel-count = <4>;
+			#pwm-cells = <3>;
+			status = "disabled";
+		};
+
+		/* The PWM Timer (TIM7) support Input Capture Mode or PWM Mode */
+		pwm3: pwm@41000600 {
+			compatible = "realtek,ameba-pwm";
+			reg = <0x41000600 0x88>;
+			interrupts = <14 0>;
+			clocks = <&rcc AMEBA_PWM3_CLK>;
+			prescale = <39>;
+			index = <3>;
+			channel-count = <4>;
+			#pwm-cells = <3>;
 			status = "disabled";
 		};
 

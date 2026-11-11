@@ -10,7 +10,7 @@
 #define FLEXSPI_NOR_CONFIG_
 
 #include <zephyr/types.h>
-#include "fsl_common.h"
+#include <fsl_common.h>
 
 #define FLEXSPI_CFG_BLK_TAG     (0x42464346UL)
 #define FLEXSPI_CFG_BLK_VERSION (0x56010400UL)
@@ -89,7 +89,8 @@ enum {
 	FLEXSPI_SERIAL_CLK_100MHZ = 6,
 	FLEXSPI_SERIAL_CLK_133MHZ = 7,
 };
-#elif defined(CONFIG_SOC_MIMXRT1052) || defined(CONFIG_SOC_SERIES_IMXRT11XX)
+#elif defined(CONFIG_SOC_MIMXRT1051) || defined(CONFIG_SOC_MIMXRT1052) ||                          \
+	defined(CONFIG_SOC_SERIES_IMXRT11XX)
 enum {
 	FLEXSPI_SERIAL_CLK_30MHZ = 1,
 	FLEXSPI_SERIAL_CLK_50MHZ = 2,

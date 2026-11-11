@@ -1,9 +1,12 @@
 /*
- * SPDX-FileCopyrightText: <text>Copyright (c) 2026 Infineon Technologies AG,
- * or an affiliate of Infineon Technologies AG. All rights reserved.</text>
+ * SPDX-FileCopyrightText: Copyright (c) 2026 Infineon Technologies AG,
+ * SPDX-FileCopyrightText: or an affiliate of Infineon Technologies AG. All rights reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  */
+
+#ifndef ZEPHYR_INCLUDE_DT_BINDINGS_CLOCK_IFX_CLOCK_SOURCE_PSC3XX_H_
+#define ZEPHYR_INCLUDE_DT_BINDINGS_CLOCK_IFX_CLOCK_SOURCE_PSC3XX_H_
 
 #define IFX_CAT1_CLKPATH_IN_IMO    0 /**< Select the IMO as the output of the path mux */
 #define IFX_CAT1_CLKPATH_IN_EXT    1 /**< Select the EXT as the output of the path mux */
@@ -31,3 +34,5 @@
 #define IFX_CAT1_CLKPATH_IN_PILO   0x113
 /**< Select the ILO1 (20) as the output of the DSI mux and path mux */
 #define IFX_CAT1_CLKPATH_IN_ILO1   0x114
+
+#endif /* ZEPHYR_INCLUDE_DT_BINDINGS_CLOCK_IFX_CLOCK_SOURCE_PSC3XX_H_ */

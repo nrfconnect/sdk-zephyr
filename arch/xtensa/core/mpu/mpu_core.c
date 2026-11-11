@@ -81,6 +81,9 @@ static struct k_spinlock xtensa_mpu_lock;
  *
  * @param[in] start Start address of the region.
  * @param[in] end End address of the region.
+ *
+ * @return Memory type of the region, XTENSA_MPU_DEFAULT_MEMORY_TYPE if no
+ *         range in xtensa_mpu_mem_type_ranges[] covers the region.
  */
 static uint32_t find_memory_type(const uintptr_t start, const uintptr_t end)
 {
@@ -191,6 +194,9 @@ static int compare_entries(const void *a, const void *b)
  *
  * This sorts the MPU entries in ascending order of starting address.
  * After sorting, it rewrites the segment numbers of all entries.
+ *
+ * @param[in,out] entries Array of MPU entries with XTENSA_MPU_NUM_ENTRIES elements.
+ * @param[in] first_enabled_idx Index of the first enabled entry.
  */
 static void sort_entries(struct xtensa_mpu_entry *entries, uint8_t first_enabled_idx)
 {
@@ -301,6 +307,8 @@ static bool consolidate_entries(struct xtensa_mpu_entry *entries, uint8_t *first
  *
  * @retval 0 Successful in adding the region.
  * @retval -EINVAL Invalid values in function arguments.
+ * @retval -ENOSPC Not enough free entries in the MPU map.
+ * @retval -EFAULT Newly added entry not found after sorting.
  */
 static int mpu_map_region_add(struct xtensa_mpu_map *map,
 			      uintptr_t start_addr, uintptr_t end_addr,
@@ -414,7 +422,7 @@ static int mpu_map_region_add(struct xtensa_mpu_map *map,
 	/*
 	 * Entry for ending of the region.
 	 *
-	 * If the end address matches one of the entry (entry_slot_e != NULL), we resue
+	 * If the end address matches one of the entry (entry_slot_e != NULL), we reuse
 	 * this existing entry.
 	 *
 	 * If there is no exact address match in the map (entry_slot_e == NULL), we need to
@@ -490,7 +498,7 @@ static int mpu_map_region_add(struct xtensa_mpu_map *map,
 	/*
 	 * Entry for beginning of the region.
 	 *
-	 * If the start address matches one of the entry (entry_slot_s != NULL), we resue
+	 * If the start address matches one of the entry (entry_slot_s != NULL), we reuse
 	 * this existing entry.
 	 *
 	 * If there is no exact address match in the map (entry_slot_s == NULL), we need to
@@ -661,6 +669,9 @@ void xtensa_mpu_init(void)
  *
  * @param[in] start Start address of the region.
  * @param[in] end End address of the region.
+ *
+ * @return Access rights of the region at boot, XTENSA_MPU_ACCESS_P_RW_U_NA
+ *         if no range in xtensa_mpu_ranges[] covers the region.
  */
 static uint32_t find_boot_permission(const uintptr_t start, const uintptr_t end)
 {
@@ -692,10 +703,11 @@ static uint32_t find_boot_permission(const uintptr_t start, const uintptr_t end)
  * @param[in,out] map Pointer to MPU map.
  * @param[in] start_addr Start address of the region.
  * @param[in] end_addr End address of the region.
- * @param[in] access_rights Access rights of this region.
  *
  * @retval 0 Successful in adding the region.
  * @retval -EINVAL Invalid values in function arguments.
+ * @retval -ENOSPC Not enough free entries in the MPU map.
+ * @retval -EFAULT Newly added entry not found after sorting.
  */
 static int mpu_map_region_restore(struct xtensa_mpu_map *map,
 				  uintptr_t start_addr, uintptr_t end_addr)
@@ -858,7 +870,7 @@ int arch_mem_domain_thread_add(struct k_thread *thread)
 	 */
 	struct xtensa_mpu_map *old_map = thread->arch.mpu_map;
 
-	bool is_user = (thread->base.user_options & K_USER) != 0;
+	bool is_user = k_thread_is_user_thread(thread);
 	bool is_migration = (old_map != NULL) && is_user;
 
 	thread->arch.mpu_map = &domain->arch.mpu_map;
@@ -918,7 +930,7 @@ int arch_mem_domain_thread_remove(struct k_thread *thread)
 
 	struct k_mem_domain *domain = thread->mem_domain_info.mem_domain;
 
-	if ((thread->base.user_options & K_USER) == 0) {
+	if (!k_thread_is_user_thread(thread)) {
 		ret = 0;
 		goto out;
 	}
@@ -1030,6 +1042,76 @@ out:
 	return ret;
 }
 
+bool xtensa_buffer_is_kernel_readable(const void *addr, size_t size)
+{
+	uintptr_t aligned_addr;
+	size_t aligned_size, addr_offset;
+	bool ret = false;
+
+	/* addr/size arbitrary, fix this up into an aligned region */
+	aligned_addr = ROUND_DOWN((uintptr_t)addr, XCHAL_MPU_ALIGN);
+	addr_offset = (uintptr_t)addr - aligned_addr;
+
+	if (size_add_overflow(size, addr_offset, &aligned_size)) {
+		goto out;
+	}
+
+	aligned_size = ROUND_UP(size + addr_offset, XCHAL_MPU_ALIGN);
+
+	for (size_t offset = 0; offset < aligned_size; offset += XCHAL_MPU_ALIGN) {
+		uint32_t probed = xtensa_pptlb_probe(aligned_addr + offset);
+
+		if ((probed & XTENSA_MPU_PROBE_VALID_ENTRY_MASK) == 0U) {
+			/* There is no foreground or background entry associated
+			 * with the region.
+			 */
+			goto out;
+		}
+
+		uint8_t access_rights = (probed & XTENSA_MPU_PPTLB_ACCESS_RIGHTS_MASK) >>
+					XTENSA_MPU_PPTLB_ACCESS_RIGHTS_SHIFT;
+
+		/* The region must be readable in privileged (kernel) mode. */
+		switch (access_rights) {
+		case XTENSA_MPU_ACCESS_P_RO_U_NA:
+			__fallthrough;
+		case XTENSA_MPU_ACCESS_P_RX_U_NA:
+			__fallthrough;
+		case XTENSA_MPU_ACCESS_P_RW_U_NA:
+			__fallthrough;
+		case XTENSA_MPU_ACCESS_P_RWX_U_NA:
+			__fallthrough;
+		case XTENSA_MPU_ACCESS_P_RW_U_RWX:
+			__fallthrough;
+		case XTENSA_MPU_ACCESS_P_RW_U_RO:
+			__fallthrough;
+		case XTENSA_MPU_ACCESS_P_RWX_U_RX:
+			__fallthrough;
+		case XTENSA_MPU_ACCESS_P_RO_U_RO:
+			__fallthrough;
+		case XTENSA_MPU_ACCESS_P_RX_U_RX:
+			__fallthrough;
+		case XTENSA_MPU_ACCESS_P_RW_U_RW:
+			__fallthrough;
+		case XTENSA_MPU_ACCESS_P_RWX_U_RWX:
+			/* These permissions are okay. */
+			break;
+		default:
+			goto out;
+		}
+	}
+
+	ret = true;
+
+out:
+	return ret;
+}
+
+/**
+ * @brief Clear a user thread's stack and grant the thread access to it.
+ *
+ * @param thread User thread.
+ */
 void xtensa_user_stack_perms(struct k_thread *thread)
 {
 	int ret;

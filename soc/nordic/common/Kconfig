@@ -7,6 +7,9 @@ config HAS_NORDIC_DMM
 config HAS_NORDIC_RAM_CTRL
 	bool
 
+config HAS_NORDIC_MULTI_OPTION_CLOCKS
+	bool
+
 config NRF_FORCE_RAM_ON_REBOOT
 	bool "Force all RAM blocks to be powered on before rebooting"
 	depends on HAS_NORDIC_RAM_CTRL
@@ -17,6 +20,17 @@ config NRF_FORCE_RAM_ON_REBOOT
 	  Force all RAM blocks to be powered on before triggering soft reset
 	  to prevent this from happening.
 
+config SOC_SERIES_NRF71_TFM_RAM_CTRL_SERVICE
+	bool "TF-M RAM control service"
+	depends on HAS_NORDIC_RAM_CTRL
+	depends on SOC_SERIES_NRF71
+	depends on BUILD_WITH_TFM
+	default y
+	help
+	  Provide a TF-M secure service that lets the non-secure application
+	  drive MEMCONF (which is secure-only): power non-secure RAM up/down in
+	  System ON, and select RAM sections to retain across System OFF.
+
 config NRF_SYS_EVENT
 	bool "nRF system event support"
 	select NRFX_POWER if !SOC_SERIES_NRF54H && !SOC_SERIES_NRF92
@@ -26,7 +40,7 @@ if NRF_SYS_EVENT
 config NRF_SYS_EVENT_IRQ_LATENCY
 	bool "Register events to reduce interrupt handling latency"
 	default y
-	depends on HAS_HW_NRF_RRAMC && !TRUSTED_EXECUTION_NONSECURE
+	depends on (HAS_HW_NRF_RRAMC || HAS_HW_NRF_MRAMC) && !TRUSTED_EXECUTION_NONSECURE
 
 config NRF_SYS_EVENT_IRQ_LATENCY_MANUAL
 	def_bool !RISCV
@@ -37,6 +51,7 @@ config NRF_SYS_EVENT_IRQ_LATENCY_MANUAL
 
 config NRF_SYS_EVENT_GRTC_CHAN_CNT
 	int "GRTC channel for RRAMC wake up"
+	depends on !HAS_HW_NRF_MRAMC
 	default 1
 	range 0 16
 	depends on NRF_SYS_EVENT_IRQ_LATENCY
@@ -124,6 +139,51 @@ config SHELL_REMOTE_MULTI_CLI
 	default y if SHELL_REMOTE_FLPR && SHELL_REMOTE_RADIO
 
 endif # SHELL_REMOTE
+
+config GPPI_EXT_ALLOCATOR
+	bool "GPPI external allocator"
+	depends on IPC_SERVICE
+	depends on NRFX_GPPI
+	help
+	  Enable GPPI external allocator server role. Server registers an IPC
+	  endpoint used for cross-core GPPI resource allocation.
+
+config SOC_VENDOR_NORDIC_GPPI_EXT_ALLOCATOR_DEFER_CONN_REQ
+	bool
+	depends on GPPI_EXT_ALLOCATOR
+	depends on MULTITHREADING
+	depends on IRONSIDE_SE_CALL
+	default y
+	help
+	  Handle connection allocation and free requests in the system workqueue
+	  instead of directly in the IPC receive callback. Needed when connection
+	  management may block (for example when it results in IRONSIDE calls)
+	  because the IPC receive callback may run in the interrupt context.
+
+config SOC_VENDOR_NORDIC_GPPI_EXT_ALLOCATOR_DEFER_CONN_REQ_CNT
+	int "Number of GPPI external allocator connection requests pending in the queue"
+	default 4
+	depends on SOC_VENDOR_NORDIC_GPPI_EXT_ALLOCATOR_DEFER_CONN_REQ
+	help
+	  Number of connection requests that can be queued for the deferred
+	  handling. Requests received when the queue is full are dropped.
+
+config GPPI_EXT_ALLOCATOR_CLI
+	bool "GPPI external allocator client"
+	depends on IPC_SERVICE
+	depends on NRFX_GPPI
+	select NRFX_GPPI_EXT_ALLOCATOR
+	help
+	  Enable GPPI external allocator client role. Client core provides
+	  external GPPI allocation functions that delegate to the server over IPC.
+
+config GPPI_EXT_ALLOCATOR_TIMEOUT
+	int "GPPI external allocator IPC timeout (ms)"
+	default 1000
+	depends on GPPI_EXT_ALLOCATOR || GPPI_EXT_ALLOCATOR_CLI
+	help
+	  Timeout in milliseconds for GPPI external allocator IPC semaphore and
+	  mutex operations.
 
 rsource "vpr/Kconfig"
 rsource "uicr/Kconfig"

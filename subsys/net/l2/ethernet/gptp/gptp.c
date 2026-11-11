@@ -41,7 +41,11 @@ struct gptp_clock_data gptp_clock;
 int gptp_get_port_number(struct net_if *iface)
 {
 	struct ethernet_context *ctx = net_if_l2_data(iface);
-	int port = ctx->gptp_port;
+	int port;
+
+	NET_ASSERT(ctx != NULL);
+
+	port = ctx->gptp_port;
 
 	if (port >= GPTP_PORT_START && port <= GPTP_PORT_END) {
 		return port;
@@ -54,6 +58,8 @@ int gptp_set_port_number(struct net_if *iface, uint16_t port)
 	struct ethernet_context *ctx = net_if_l2_data(iface);
 	const struct device *clk;
 
+	NET_ASSERT(ctx != NULL);
+
 	clk = net_eth_get_ptp_clock(iface);
 	if (clk == NULL) {
 		return -ENODEV;
@@ -65,6 +71,10 @@ int gptp_set_port_number(struct net_if *iface, uint16_t port)
 	}
 
 	ctx->gptp_port = port;
+
+#if defined(CONFIG_NET_GPTP_USE_DEFAULT_CLOCK_UPDATE)
+	precision_clock_ptp_init(&gptp_clock.clocks[GPTP_PORT_INDEX(port)], clk);
+#endif
 
 	return 0;
 }
@@ -83,18 +93,23 @@ static void gptp_compute_clock_identity(int port)
 {
 	struct net_if *iface = GPTP_PORT_IFACE(port);
 	struct gptp_default_ds *default_ds;
+	struct net_linkaddr *ll_addr;
 
 	default_ds = GPTP_DEFAULT_DS();
 
 	if (iface) {
-		default_ds->clk_id[0] = net_if_get_link_addr(iface)->addr[0];
-		default_ds->clk_id[1] = net_if_get_link_addr(iface)->addr[1];
-		default_ds->clk_id[2] = net_if_get_link_addr(iface)->addr[2];
+		ll_addr = net_if_get_link_addr(iface);
+
+		NET_ASSERT(ll_addr != NULL);
+
+		default_ds->clk_id[0] = ll_addr->addr[0];
+		default_ds->clk_id[1] = ll_addr->addr[1];
+		default_ds->clk_id[2] = ll_addr->addr[2];
 		default_ds->clk_id[3] = 0xFF;
 		default_ds->clk_id[4] = 0xFE;
-		default_ds->clk_id[5] = net_if_get_link_addr(iface)->addr[3];
-		default_ds->clk_id[6] = net_if_get_link_addr(iface)->addr[4];
-		default_ds->clk_id[7] = net_if_get_link_addr(iface)->addr[5];
+		default_ds->clk_id[5] = ll_addr->addr[3];
+		default_ds->clk_id[6] = ll_addr->addr[4];
+		default_ds->clk_id[7] = ll_addr->addr[5];
 	}
 }
 
@@ -145,6 +160,11 @@ static bool gptp_handle_critical_msg(struct net_if *iface, struct net_pkt *pkt)
 
 static void gptp_handle_msg(struct net_pkt *pkt)
 {
+	if (GPTP_PACKET_LEN(pkt) < sizeof(struct gptp_hdr)) {
+		NET_DBG("gPTP packet too short (%zu)", GPTP_PACKET_LEN(pkt));
+		return;
+	}
+
 	struct gptp_hdr *hdr = GPTP_HDR(pkt);
 	struct gptp_pdelay_req_state *pdelay_req_state;
 	struct gptp_sync_rcv_state *sync_rcv_state;
@@ -541,7 +561,14 @@ static void gptp_state_machine(void)
 
 	/* Manage port states. */
 	for (port = GPTP_PORT_START; port <= GPTP_PORT_END; port++) {
-		struct gptp_port_ds *port_ds = GPTP_PORT_DS(port);
+		struct gptp_port_ds *port_ds;
+
+		/* gptp_add_port() never registers more ports than the per-port
+		 * arrays can hold, so this only makes that bound explicit.
+		 */
+		NET_ASSERT(GPTP_PORT_INDEX(port) < CONFIG_NET_GPTP_NUM_PORTS);
+
+		port_ds = GPTP_PORT_DS(port);
 
 		/* If interface is down, don't move forward */
 		if (net_if_flag_is_set(GPTP_PORT_IFACE(port), NET_IF_UP)) {
@@ -603,15 +630,28 @@ static void gptp_thread(void *p1, void *p2, void *p3)
 static void gptp_add_port(struct net_if *iface, void *user_data)
 {
 	uint16_t *num_ports = user_data;
+	int ret;
 
 	if (*num_ports >= CONFIG_NET_GPTP_NUM_PORTS) {
 		return;
 	}
 
-	if (gptp_set_port_number(iface, GPTP_PORT_START + *num_ports) == 0) {
-		gptp_domain.iface[*num_ports] = iface;
-		(*num_ports)++;
+	if (gptp_set_port_number(iface, GPTP_PORT_START + *num_ports) != 0) {
+		return;
 	}
+
+	/* A device that filters multicast frames in hardware drops the
+	 * gPTP messages unless it is told to listen to the group address.
+	 * The port is never removed, so the group is never left either.
+	 */
+	ret = net_eth_mcast_addr_add(iface, &gptp_multicast_eth_addr);
+	if (ret < 0) {
+		NET_WARN("Cannot join gPTP multicast group on iface %d (%d)",
+			 net_if_get_by_iface(iface), ret);
+	}
+
+	gptp_domain.iface[*num_ports] = iface;
+	(*num_ports)++;
 }
 
 void gptp_set_time_itv(struct gptp_uscaled_ns *interval,
@@ -923,18 +963,6 @@ int gptp_get_port_data(struct gptp_domain *domain,
 	return 0;
 }
 
-double gptp_servo_pi(int64_t nanosecond_diff)
-{
-	double kp = 0.7;
-	double ki = 0.3;
-	double ppb;
-
-	gptp_clock.pi_drift += ki * nanosecond_diff;
-	ppb = kp * nanosecond_diff + gptp_clock.pi_drift;
-
-	return ppb;
-}
-
 static void init_ports(void)
 {
 	net_if_foreach(gptp_add_port, &gptp_domain.default_ds.nb_ports);
@@ -954,7 +982,13 @@ void net_gptp_init(void)
 	gptp_domain.default_ds.nb_ports = 0U;
 
 	gptp_clock.domain = &gptp_domain;
-	gptp_clock.pi_drift = 0.0;
+#if defined(CONFIG_NET_GPTP_USE_DEFAULT_CLOCK_UPDATE)
+	precision_pi_init(&gptp_clock.pi, (double)CONFIG_PRECISION_TIMING_PI_KP / 1000.0,
+			  (double)CONFIG_PRECISION_TIMING_PI_KI / 1000.0);
+	precision_pi_set_limits(&gptp_clock.pi,
+				(double)CONFIG_PRECISION_TIMING_PI_INTEGRAL_LIMIT_PPM * 1000.0,
+				(double)CONFIG_PRECISION_TIMING_PI_OUTPUT_LIMIT_PPM * 1000.0);
+#endif
 
 	init_ports();
 }

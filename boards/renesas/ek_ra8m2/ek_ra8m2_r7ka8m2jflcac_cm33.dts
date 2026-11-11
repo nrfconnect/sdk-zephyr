@@ -9,8 +9,8 @@
 #include "ek_ra8m2.dtsi"
 
 / {
-	model = "Renesas EK-RA8M2";
 	compatible = "renesas,ra8m2", "renesas,ra8";
+	model = "Renesas EK-RA8M2";
 
 	chosen {
 		zephyr,sram = &sram1;
@@ -23,6 +23,7 @@
 	aliases {
 		led0 = &led2;
 		sw0 = &button1;
+		i2c-0 = &iic1;
 	};
 };
 
@@ -70,6 +71,7 @@
 	pinctrl-names = "default";
 	interrupts = <52 1>, <53 1>, <54 1>, <55 1>;
 	interrupt-names = "rxi", "txi", "tei", "eri";
+	status = "okay";
 };
 
 &canfd_global {

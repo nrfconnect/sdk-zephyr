@@ -3,10 +3,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include "soc/soc.h"
-#include "soc/interrupt_reg.h"
-#include "riscv/rvruntime-frames.h"
-#include "soc/soc_caps.h"
+#include <soc/soc.h>
+#include <soc/interrupt_reg.h>
+#include <riscv/rvruntime-frames.h>
+#include <soc/soc_caps.h>
 #include <zephyr/toolchain.h>
 
 /* Imports */
@@ -14,7 +14,7 @@ GTEXT(_isr_wrapper)
 
 	/* This is the vector table. MTVEC points here.
 	 *
-	 * Use 4-byte intructions here. 1 instruction = 1 entry of the table.
+	 * Use 4-byte instructions here. 1 instruction = 1 entry of the table.
 	 * The CPU jumps to MTVEC (i.e. the first entry) in case of an exception,
 	 * and (MTVEC & 0xfffffffc) + (mcause & 0x7fffffff) * 4, in case of an interrupt.
 	 *

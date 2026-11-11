@@ -11,8 +11,8 @@
 #include "frdm_imx91-pinctrl.dtsi"
 
 / {
-	model = "NXP FRDM-IMX91 A55";
 	compatible = "fsl,mimx91";
+	model = "NXP FRDM-IMX91 A55";
 
 	chosen {
 		zephyr,console = &lpuart1;
@@ -21,12 +21,9 @@
 		zephyr,canbus = &flexcan2;
 	};
 
-	dram: memory@80000000 {
-		reg = <0x80000000 DT_SIZE_M(1)>;
-	};
-
 	aliases {
 		watchdog0 = &wdog4;
+		sdhc0 = &usdhc1;
 	};
 
 	keys {
@@ -47,6 +44,10 @@
 		#phy-cells = <0>;
 		status = "okay";
 	};
+
+	dram: memory@80000000 {
+		reg = <0x80000000 DT_SIZE_M(1)>;
+	};
 };
 
 &gpio3 {
@@ -54,10 +55,10 @@
 };
 
 &lpuart1 {
-	status = "okay";
 	current-speed = <115200>;
 	pinctrl-0 = <&uart1_default>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &edma4_2 {
@@ -65,9 +66,9 @@
 };
 
 &sai3_2 {
-	status = "disabled";
 	pinctrl-0 = <&sai3_default>;
 	pinctrl-names = "default";
+	status = "disabled";
 };
 
 &tpm2 {
@@ -83,12 +84,12 @@
 	mmc-hs400-1_8v;
 	read-watermark = <0x10>;
 	write-watermark = <0x80>;
-	status = "disabled";
+	status = "okay";
 
 	mmc {
 		compatible = "zephyr,mmc-disk";
 		disk-name = "SD2";
-		status = "disabled";
+		status = "okay";
 	};
 };
 
@@ -114,15 +115,15 @@
 };
 
 &enet {
-	status = "okay";
 	pinctrl-0 = <&pinmux_enet>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &enet_mac {
 	phy-handle = <&phy>;
-	zephyr,random-mac-address;
 	phy-connection-type = "rgmii";
+	zephyr,random-mac-address;
 	status = "okay";
 };
 
@@ -134,9 +135,9 @@
 	phy: phy@2 {
 		compatible = "motorcomm,yt8521";
 		reg = <2>;
-		status = "okay";
 		motorcomm,rx-delay-sel = <13>;
 		motorcomm,tx-delay-sel = <13>;
+		status = "okay";
 	};
 };
 
@@ -184,3 +185,7 @@
 	phys = <&can_phy0>;
 	status = "okay";
 };
+
+m2_hci_bt_uart: &lpuart5 {};
+
+m2_wifi_sdio: &usdhc3 {};

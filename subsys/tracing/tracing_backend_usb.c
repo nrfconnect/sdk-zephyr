@@ -19,8 +19,8 @@
 #include <tracing_buffer.h>
 #include <tracing_backend.h>
 
-/* Single bounce buffer for bulk IN transfer */
-UDC_BUF_POOL_DEFINE(tracing_data_pool, 1, CONFIG_TRACING_BUFFER_SIZE,
+/* Two bounce buffers, so one fills while the other is on the wire */
+UDC_BUF_POOL_DEFINE(tracing_data_pool, 2, CONFIG_TRACING_BUFFER_SIZE / 2,
 		    sizeof(struct udc_buf_info), NULL);
 
 struct tracing_func_desc {
@@ -33,9 +33,8 @@ struct tracing_func_desc {
 
 struct tracing_func_data {
 	struct tracing_func_desc *const desc;
-	const struct usb_desc_header **const fs_desc;
-	const struct usb_desc_header **const hs_desc;
-	struct k_sem sync_sem;
+	const struct usb_desc_header *const *const fs_desc;
+	const struct usb_desc_header *const *const hs_desc;
 	atomic_t state;
 };
 
@@ -101,7 +100,6 @@ static int tracing_func_request_handler(struct usbd_class_data *const c_data,
 					struct net_buf *const buf, const int err)
 {
 	struct usbd_context *uds_ctx = usbd_class_get_ctx(c_data);
-	struct tracing_func_data *data = usbd_class_get_private(c_data);
 	struct udc_buf_info *bi = NULL;
 
 	bi = (struct udc_buf_info *)net_buf_user_data(buf);
@@ -117,14 +115,13 @@ static int tracing_func_request_handler(struct usbd_class_data *const c_data,
 
 	if (bi->ep == tracing_func_get_bulk_in(c_data)) {
 		usbd_ep_buf_free(uds_ctx, buf);
-		k_sem_give(&data->sync_sem);
 	}
 
 	return 0;
 }
 
-static void *tracing_func_get_desc(struct usbd_class_data *const c_data,
-				   const enum usbd_speed speed)
+static const void *tracing_func_get_desc(struct usbd_class_data *const c_data,
+					 const enum usbd_speed speed)
 {
 	struct tracing_func_data *data = usbd_class_get_private(c_data);
 
@@ -158,7 +155,7 @@ static int tracing_func_init(struct usbd_class_data *c_data)
 	return 0;
 }
 
-struct usbd_class_api tracing_func_api = {
+static const struct usbd_class_api tracing_func_api = {
 	.request = tracing_func_request_handler,
 	.get_desc = tracing_func_get_desc,
 	.enable = tracing_func_enable,
@@ -218,14 +215,14 @@ static struct tracing_func_desc func_desc = {
 	},
 };
 
-const static struct usb_desc_header *tracing_func_fs_desc[] = {
+const static struct usb_desc_header *const tracing_func_fs_desc[] = {
 	(struct usb_desc_header *) &func_desc.if0,
 	(struct usb_desc_header *) &func_desc.if0_in_ep,
 	(struct usb_desc_header *) &func_desc.if0_out_ep,
 	NULL,
 };
 
-const static __maybe_unused struct usb_desc_header *tracing_func_hs_desc[] = {
+const static __maybe_unused struct usb_desc_header *const tracing_func_hs_desc[] = {
 	(struct usb_desc_header *) &func_desc.if0,
 	(struct usb_desc_header *) &func_desc.if0_hs_in_ep,
 	(struct usb_desc_header *) &func_desc.if0_hs_out_ep,
@@ -236,7 +233,6 @@ static struct tracing_func_data func_data = {
 	.desc = &func_desc,
 	.fs_desc = tracing_func_fs_desc,
 	.hs_desc = COND_CODE_1(USBD_SUPPORTS_HIGH_SPEED, (tracing_func_hs_desc), (NULL)),
-	.sync_sem = Z_SEM_INITIALIZER(func_data.sync_sem, 0, 1),
 };
 
 USBD_DEFINE_CLASS(tracing_func, &tracing_func_api, &func_data, NULL);
@@ -246,7 +242,8 @@ struct net_buf *tracing_func_buf_alloc(struct usbd_class_data *const c_data)
 	struct udc_buf_info *bi;
 	struct net_buf *buf;
 
-	buf = net_buf_alloc(&tracing_data_pool, K_NO_WAIT);
+	/* Blocks while both buffers are in flight */
+	buf = net_buf_alloc(&tracing_data_pool, K_FOREVER);
 	if (!buf) {
 		return NULL;
 	}
@@ -286,7 +283,6 @@ static void tracing_backend_usb_output(const struct tracing_backend *backend,
 
 		data += bytes;
 		length -= bytes;
-		k_sem_take(&func_data.sync_sem, K_FOREVER);
 	}
 }
 

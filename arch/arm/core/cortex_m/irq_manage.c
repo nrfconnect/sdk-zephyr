@@ -68,6 +68,29 @@ int arm_irq_is_enabled(unsigned int irq)
 	return NVIC->ISER[REG_FROM_IRQ(irq)] & BIT(BIT_FROM_IRQ(irq));
 }
 
+#if defined(CONFIG_ARCH_HAS_IRQ_PENDING_OPS)
+void arm_irq_clear_pending(unsigned int irq)
+{
+	__ASSERT(irq < CONFIG_NUM_IRQS, "IRQ %u out of range", irq);
+
+	NVIC_ClearPendingIRQ((IRQn_Type)irq);
+}
+
+void arm_irq_set_pending(unsigned int irq)
+{
+	__ASSERT(irq < CONFIG_NUM_IRQS, "IRQ %u out of range", irq);
+
+	NVIC_SetPendingIRQ((IRQn_Type)irq);
+}
+
+bool arm_irq_is_pending(unsigned int irq)
+{
+	__ASSERT(irq < CONFIG_NUM_IRQS, "IRQ %u out of range", irq);
+
+	return NVIC_GetPendingIRQ((IRQn_Type)irq) != 0U;
+}
+#endif
+
 /**
  * @internal
  *
@@ -210,7 +233,7 @@ int irq_target_state_is_secure(unsigned int irq)
  * @brief Disable and set all interrupt lines to target Non-Secure state.
  *
  * The function is used to set all HW NVIC interrupt lines to target the
- * Non-Secure state. The function shall only be called fron Secure state.
+ * Non-Secure state. The function shall only be called from Secure state.
  *
  * Notes:
  * - All NVIC interrupts are disabled before being routed to Non-Secure.

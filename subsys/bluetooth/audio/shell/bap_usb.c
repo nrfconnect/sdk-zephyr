@@ -29,14 +29,16 @@
 #include <zephyr/sys/ring_buffer.h>
 #include <zephyr/sys/util.h>
 #include <zephyr/sys/util_macro.h>
-#include <zephyr/sys_clock.h>
+#include <zephyr/sys/clock.h>
 #include <zephyr/toolchain.h>
 #include <zephyr/usb/usb_device.h>
 #include <zephyr/usb/class/usbd_uac2.h>
 #include <zephyr/usb/usbd.h>
 
 #if defined(CONFIG_SOC_NRF5340_CPUAPP)
-#include <nrfx_clock.h>
+#include <zephyr/drivers/clock_control/nrf_clock_control.h>
+
+#define HFCLK_REQUESTED_FREQUENCY MHZ(128)
 #include <drivers/nrfx_errors.h>
 #include <hal/nrf_clock.h>
 #endif /* CONFIG_SOC_NRF5340_CPUAPP */
@@ -759,8 +761,9 @@ int bap_usb_init(void)
 		 * This may not be required, but reduces the risk of not decoding fast enough
 		 * to keep up with USB
 		 */
-		err = nrfx_clock_divider_set(NRF_CLOCK_DOMAIN_HFCLK, NRF_CLOCK_HFCLK_DIV_1);
-
+		err = clock_control_set_rate(
+			DEVICE_DT_GET_ONE(nordic_nrf_clock_hfclk), NULL,
+			(clock_control_subsys_rate_t)HFCLK_REQUESTED_FREQUENCY);
 		if (err != 0) {
 			LOG_WRN("Failed to set 128 MHz: %d", err);
 		}

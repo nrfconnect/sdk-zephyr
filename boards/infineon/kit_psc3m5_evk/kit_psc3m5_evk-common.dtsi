@@ -1,6 +1,6 @@
 /*
- * SPDX-FileCopyrightText: <text>Copyright (c) 2026 Infineon Technologies AG,
- * or an affiliate of Infineon Technologies AG. All rights reserved.</text>
+ * SPDX-FileCopyrightText: Copyright (c) 2026 Infineon Technologies AG,
+ * SPDX-FileCopyrightText: or an affiliate of Infineon Technologies AG. All rights reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -12,8 +12,8 @@
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 
 / {
-	model = "The Infineon PSOC™ Control C3M5 Evaluation Kit";
 	compatible = "infineon,kit_psc3m5_evk", "infineon,PSC3M5";
+	model = "The Infineon PSOC™ Control C3M5 Evaluation Kit";
 
 	aliases {
 		led0 = &user_led0;
@@ -52,6 +52,21 @@
 			zephyr,code = <INPUT_KEY_1>;
 		};
 	};
+
+	/*
+	 * Onboard TLE9251VLEXUMA1 CAN transceiver feeding the CAN screw
+	 * terminals. STB (standby) is wired to P7.6 and has an internal
+	 * pull-up, so without this node the transceiver powers up in
+	 * standby, the transmitter stays disabled, and can1 goes bus-off
+	 * within about 1 ms of the first can_send() (-ENETUNREACH), with
+	 * the error counters still reading zero.
+	 */
+	can_phy: can-phy {
+		compatible = "can-transceiver-gpio";
+		standby-gpios = <&gpio_prt7 6 GPIO_ACTIVE_HIGH>;
+		max-bitrate = <5000000>;
+		#phy-cells = <0>;
+	};
 };
 
 &gpio_prt0 {
@@ -78,29 +93,34 @@
 	status = "okay";
 };
 
+/* Drives the onboard CAN transceiver's STB pin (P7.6). */
+&gpio_prt7 {
+	status = "okay";
+};
+
 &gpio_prt8 {
 	status = "okay";
 };
 
 uart3: &scb3 {
 	compatible = "infineon,uart";
-	status = "okay";
 	current-speed = <115200>;
 
 	clocks = <&peri0_group4_8bit_0>;
 
 	pinctrl-0 = <&p6_3_scb3_uart_tx &p6_2_scb3_uart_rx &p6_1_scb3_uart_rts &p6_0_scb3_uart_cts>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &peri0_group4_8bit_0 {
-	status = "okay";
 	clock-div = <86>;
+	status = "okay";
 };
 
 &peri0_group4_16_5bit_0 {
-	status = "okay";
 	clock-div = <1>;
+	status = "okay";
 };
 
 &canfd0 {
@@ -108,10 +128,11 @@ uart3: &scb3 {
 };
 
 &can1 {
-	status = "okay";
 	clocks = <&peri0_group4_16_5bit_0>;
 	pinctrl-0 = <&p5_2_can1_rx &p5_3_can1_tx>;
 	pinctrl-names = "default";
+	phys = <&can_phy>;
+	status = "okay";
 };
 
 &watchdog0 {
@@ -141,7 +162,6 @@ uart3: &scb3 {
  * dpll_lp0 is set to "okay".
  */
 &dpll_lp0 {
-	status = "okay";
 	clock-frequency = <180000000>;
 
 	feedback-div = <45>;
@@ -149,6 +169,7 @@ uart3: &scb3 {
 	output-div = <2>;
 	fraction-div = <0>;
 	dco-mode-enable;
+	status = "okay";
 };
 
 /* This dpll_lp1 is on "clock path" 2. So HF clocks sourced
@@ -156,7 +177,6 @@ uart3: &scb3 {
  * dpll_lp1 is set to "okay".
  */
 &dpll_lp1 {
-	status = "okay";
 	clock-frequency = <240000000>;
 
 	feedback-div = <60>;
@@ -164,6 +184,7 @@ uart3: &scb3 {
 	output-div = <2>;
 	fraction-div = <0>;
 	dco-mode-enable;
+	status = "okay";
 };
 
 &path_mux0 {
@@ -237,13 +258,17 @@ uart3: &scb3 {
 };
 
 &peri0_group5_16bit_0 {
-	status = "okay";
 	clock-div = <2>;
+	status = "okay";
+};
+
+&adc0 {
+	status = "okay";
 };
 
 &csg0 {
-	status = "okay";
 	clocks = <&peri0_group5_16bit_0>;
+	status = "okay";
 };
 
 &dac0 {
@@ -267,31 +292,31 @@ uart3: &scb3 {
 };
 
 &comp0 {
-	status = "okay";
 	positive-input = "ain-pa";
 	negative-input = "dac";
+	status = "okay";
 };
 
 &comp1 {
-	status = "okay";
 	positive-input = "ain-pa";
 	negative-input = "dac";
+	status = "okay";
 };
 
 &comp2 {
-	status = "okay";
 	positive-input = "ain-pa";
 	negative-input = "dac";
+	status = "okay";
 };
 
 &comp3 {
-	status = "okay";
 	positive-input = "ain-pa";
 	negative-input = "dac";
+	status = "okay";
 };
 
 &comp4 {
-	status = "okay";
 	positive-input = "ain-pa";
 	negative-input = "dac";
+	status = "okay";
 };

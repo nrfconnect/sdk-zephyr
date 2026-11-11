@@ -16,12 +16,13 @@
 #include "rssk_ra2l1-pinctrl.dtsi"
 
 / {
-	model = "Renesas RSSK-RA2L1";
 	compatible = "renesas,r7fa2l1abxxfp", "renesas,ra2l1";
+	model = "Renesas RSSK-RA2L1";
 
 	chosen {
 		zephyr,sram = &sram0;
-		zephyr,flash = &flash0;
+		zephyr,flash-controller = &code_flash_ctrl;
+		zephyr,flash = &code_flash;
 		zephyr,console = &uart9;
 		zephyr,shell-uart = &uart9;
 	};
@@ -132,6 +133,20 @@
 
 &wdt {
 	status = "okay";
+};
+
+&data_flash {
+	partitions {
+		ranges;
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		storage_partition: partition@0 {
+			compatible = "zephyr,mapped-partition";
+			reg = <0x0 DT_SIZE_K(8)>;
+			label = "storage";
+		};
+	};
 };
 
 &ctsu {

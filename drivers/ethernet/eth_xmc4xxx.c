@@ -36,6 +36,9 @@ LOG_MODULE_REGISTER(eth_xmc4xxx);
 #define NUM_TX_DMA_DESCRIPTORS CONFIG_ETH_XMC4XXX_NUM_TX_DMA_DESCRIPTORS
 #define NUM_RX_DMA_DESCRIPTORS CONFIG_ETH_XMC4XXX_NUM_RX_DMA_DESCRIPTORS
 
+/* Checksum insertion control value for the IPv4 header checksum only */
+#define ETH_MAC_DMA_TDES0_CIC_IP_HDR 0x00400000U
+
 #define ETH_NODE DT_NODELABEL(eth)
 #define PHY_NODE DT_PHANDLE_BY_IDX(ETH_NODE, phy, 0)
 
@@ -230,138 +233,6 @@ static inline void eth_xmc4xxx_trigger_dma_rx(ETH_GLOBAL_TypeDef *regs)
 	regs->RECEIVE_POLL_DEMAND = 0U;
 }
 
-static inline void pkt_hexdump(struct net_pkt *pkt, const char *str)
-{
-	struct net_buf *buf = pkt->buffer;
-
-	while (buf) {
-		LOG_HEXDUMP_DBG(buf->data, buf->len, str);
-		buf = buf->frags;
-	}
-}
-
-/* Clears the checksum field of an ICMPv4 packet. */
-static int eth_xmc4xxx_clear_checksum_icmpv4(struct net_pkt *pkt)
-{
-	NET_PKT_DATA_ACCESS_DEFINE(icmpv4_access, struct net_icmp_hdr);
-	struct net_icmp_hdr *icmp_hdr;
-
-	if (IS_ENABLED(CONFIG_NET_IPV4_HDR_OPTIONS)) {
-		if (net_pkt_skip(pkt, net_pkt_ipv4_opts_len(pkt))) {
-			return -ENOBUFS;
-		}
-	}
-
-	icmp_hdr = (struct net_icmp_hdr *)net_pkt_get_data(pkt, &icmpv4_access);
-	if (!icmp_hdr) {
-		return -ENOBUFS;
-	}
-
-	icmp_hdr->chksum = 0;
-	net_pkt_set_chksum_done(pkt, true);
-
-	return net_pkt_set_data(pkt, &icmpv4_access);
-}
-
-/* Clears the checksum value in packets that will go through checksum
- * offloading.
- */
-static int eth_xmc4xxx_clear_checksum(struct net_pkt *pkt)
-{
-	int ret = 0;
-	uint16_t p_type = 0xFFFF;
-	uint8_t next_header = 0xFF;
-	struct net_eth_hdr *eth_hdr;
-	struct net_pkt_cursor backup;
-	bool overwrite;
-	const char *msg = NULL;
-	const char *msg_does_not_apply = "<does not apply>";
-	const char *p_type_str = msg_does_not_apply;
-	const char *next_header_str = msg_does_not_apply;
-	const char *msg_error_skipping_pkt = "Error skipping pkt";
-
-	overwrite = net_pkt_is_being_overwritten(pkt);
-	net_pkt_cursor_backup(pkt, &backup);
-	net_pkt_cursor_init(pkt);
-	net_pkt_set_overwrite(pkt, true);
-	eth_hdr = NET_ETH_HDR(pkt);
-	ret = net_pkt_skip(pkt, sizeof(struct net_eth_hdr));
-	if (ret) {
-		msg = msg_error_skipping_pkt;
-		goto end;
-	}
-	p_type = net_ntohs(eth_hdr->type);
-	switch (p_type) {
-	case NET_ETH_PTYPE_IP: {
-		NET_PKT_DATA_ACCESS_DEFINE(ip_access, struct net_ipv4_hdr);
-		struct net_ipv4_hdr *ip_hdr;
-
-		p_type_str = "IPv4";
-		ip_hdr = (struct net_ipv4_hdr *)net_pkt_get_data(pkt, &ip_access);
-		next_header = ip_hdr->proto;
-		ret = net_pkt_skip(pkt, sizeof(struct net_ipv4_hdr));
-		if (ret) {
-			msg = msg_error_skipping_pkt;
-			goto end;
-		}
-
-		break;
-	}
-	case NET_ETH_PTYPE_IPV6: {
-		NET_PKT_DATA_ACCESS_DEFINE(ip_access, struct net_ipv6_hdr);
-		struct net_ipv6_hdr *ip_hdr;
-
-		p_type_str = "IPv6";
-		ip_hdr = (struct net_ipv6_hdr *)net_pkt_get_data(pkt, &ip_access);
-		next_header = ip_hdr->nexthdr;
-		ret = net_pkt_skip(pkt, sizeof(struct net_ipv6_hdr));
-		if (ret) {
-			msg = msg_error_skipping_pkt;
-			goto end;
-		}
-
-		break;
-	}
-	case NET_ETH_PTYPE_ARP:
-		p_type_str = "ARP";
-		goto end;
-	default:
-		p_type_str = "Unknown";
-		msg = "Unknown protocol type";
-		goto end;
-	}
-
-	switch (next_header) {
-	case NET_IPPROTO_TCP:
-		next_header_str = "TCP";
-		break;
-	case NET_IPPROTO_UDP:
-		next_header_str = "UDP";
-		break;
-	case NET_IPPROTO_ICMP:
-		next_header_str = "ICMPv4";
-		ret = eth_xmc4xxx_clear_checksum_icmpv4(pkt);
-		break;
-	case NET_IPPROTO_ICMPV6:
-		next_header_str = "ICMPv6";
-		break;
-	default:
-		next_header_str = "Unknown";
-		msg = "Unknown next header";
-		break;
-	}
-
-end:
-	net_pkt_cursor_restore(pkt, &backup);
-	net_pkt_set_overwrite(pkt, overwrite);
-	if (msg) {
-		LOG_DBG("p_type = 0x%04x (%s), next_header = 0x%02x (%s)", /**/
-			p_type, p_type_str, next_header, next_header_str);
-		pkt_hexdump(pkt, msg);
-	}
-	return ret;
-}
-
 static int eth_xmc4xxx_send(const struct device *dev, struct net_pkt *pkt)
 {
 	struct eth_xmc4xxx_data *dev_data = dev->data;
@@ -371,6 +242,12 @@ static int eth_xmc4xxx_send(const struct device *dev, struct net_pkt *pkt)
 	uint16_t frag_len;
 	int ret = 0;
 	XMC_ETH_MAC_DMA_DESC_t *dma_desc = NULL;
+	/* The MAC computes the ICMPv4 checksum over the field as it is, so a
+	 * packet that carries its transport layer checksum already, a forwarded
+	 * one for example, gets the IPv4 header checksum only.
+	 */
+	uint32_t cic = net_pkt_is_chksum_done(pkt) ? ETH_MAC_DMA_TDES0_CIC_IP_HDR
+						   : ETH_MAC_DMA_TDES0_CIC;
 	struct eth_xmc4xxx_tx_frame *tx_frame;
 	int num_frags = 0;
 	bool first_descriptor = false;
@@ -434,7 +311,7 @@ static int eth_xmc4xxx_send(const struct device *dev, struct net_pkt *pkt)
 
 		/* give ownership of descriptor back to dma and set checksum offload */
 		/* TCH we are using a circular list */
-		dma_desc->status = ETH_MAC_DMA_TDES0_CIC | ETH_MAC_DMA_TDES0_TCH;
+		dma_desc->status = cic | ETH_MAC_DMA_TDES0_TCH;
 
 		if (!first_descriptor) {
 			/* Delay giving ownership of first frag to DMA. Prevents race condition */
@@ -444,9 +321,7 @@ static int eth_xmc4xxx_send(const struct device *dev, struct net_pkt *pkt)
 			dma_desc->status |= ETH_MAC_DMA_TDES0_FS;
 
 #if defined(CONFIG_NET_GPTP)
-			struct net_eth_hdr *hdr = NET_ETH_HDR(pkt);
-
-			if (net_ntohs(hdr->type) == NET_ETH_PTYPE_PTP) {
+			if (net_pkt_is_tx_timestamping(pkt)) {
 				dma_desc->status |= ETH_MAC_DMA_TDES0_TTSE;
 			}
 #endif
@@ -470,23 +345,6 @@ static int eth_xmc4xxx_send(const struct device *dev, struct net_pkt *pkt)
 #endif
 		LOG_DBG("Dropping frame. Buffered Tx frames were flushed in ISR.");
 		return -EIO;
-	}
-
-	/* Due to checksum offloading, the checksum field must be zero before
-	 * sending the packet to the ethernet controller, otherwise the computed
-	 * checksum will be incorrect.
-	 *
-	 * If the packet is bridged, it already has the correct checksum in
-	 * place, which will cause the automatically computed checksum to
-	 * incorrectly become zero.
-	 *
-	 * Here we give bridged packets the special attention they need.
-	 */
-	if (net_pkt_is_l2_bridged(pkt)) {
-		ret = eth_xmc4xxx_clear_checksum(pkt);
-		if (ret) {
-			return ret;
-		}
 	}
 
 	unsigned int key = irq_lock();
@@ -623,6 +481,7 @@ static struct net_pkt *eth_xmc4xxx_rx_pkt(const struct device *dev)
 						.nanosecond = dma_desc->time_stamp_nanoseconds};
 
 					net_pkt_set_timestamp(pkt, &timestamp);
+					net_pkt_set_rx_timestamping(pkt, true);
 					net_pkt_set_priority(pkt, NET_PRIORITY_CA);
 				}
 			}
@@ -670,12 +529,15 @@ static struct net_pkt *eth_xmc4xxx_rx_pkt(const struct device *dev)
 			}
 		}
 
-prepare_dma_descriptor:
+prepare_dma_descriptor: {
+		struct net_buf *rx_buf = dev_data->rx_frag_list[tail];
+
 		/* Prepare the current DMA descriptor for the next reception. */
-		dma_desc->buffer1 = (uint32_t)dev_data->rx_frag_list[tail]->data;
-		dma_desc->length = dev_data->rx_frag_list[tail]->size |
+		dma_desc->buffer1 = (uint32_t)rx_buf->data;
+		dma_desc->length = rx_buf->size |
 				   ETH_RX_DMA_DESC_SECOND_ADDR_CHAINED_MASK;
 		dma_desc->status = ETH_MAC_DMA_RDES0_OWN;
+	}
 
 		if (tail == frame_end_index) {
 			/* Time to leave the loop. */
@@ -1022,20 +884,10 @@ static int eth_xmc4xxx_init(const struct device *dev)
 {
 	struct eth_xmc4xxx_data *dev_data = dev->data;
 	const struct eth_xmc4xxx_config *dev_cfg = dev->config;
-	XMC_ETH_MAC_PORT_CTRL_t port_ctrl;
 	int ret;
 
 	sys_slist_init(&dev_data->tx_frame_list);
 	k_sem_init(&dev_data->tx_desc_sem, NUM_TX_DMA_DESCRIPTORS, NUM_TX_DMA_DESCRIPTORS);
-
-	if (!device_is_ready(dev_cfg->phy_dev)) {
-		LOG_ERR("Phy device not ready");
-		return -ENODEV;
-	}
-
-	/* get the port control initialized by MDIO driver */
-	port_ctrl.raw = ETH0_CON->CON;
-	port_ctrl.raw |= dev_cfg->port_ctrl.raw;
 
 	XMC_ETH_MAC_Disable(NULL);
 	ret = pinctrl_apply_state(dev_cfg->pcfg, PINCTRL_STATE_DEFAULT);
@@ -1043,7 +895,7 @@ static int eth_xmc4xxx_init(const struct device *dev)
 		return ret;
 	}
 
-	XMC_ETH_MAC_SetPortControl(NULL, port_ctrl);
+	XMC_ETH_MAC_SetPortControl(NULL, dev_cfg->port_ctrl);
 	XMC_ETH_MAC_Enable(NULL);
 
 	ret = eth_xmc4xxx_reset(dev);
@@ -1112,10 +964,6 @@ static enum ethernet_hw_caps eth_xmc4xxx_capabilities(const struct device *dev _
 	ARG_UNUSED(dev);
 	enum ethernet_hw_caps caps = ETHERNET_LINK_10BASE | ETHERNET_LINK_100BASE |
 				     ETHERNET_HW_TX_CHKSUM_OFFLOAD | ETHERNET_HW_RX_CHKSUM_OFFLOAD;
-
-#if defined(CONFIG_PTP_CLOCK_XMC4XXX)
-	caps |= ETHERNET_PTP;
-#endif
 
 #if defined(CONFIG_NET_VLAN)
 	caps |= ETHERNET_HW_VLAN;
@@ -1224,16 +1072,12 @@ static const struct ethernet_api eth_xmc4xxx_api = {
 
 PINCTRL_DT_INST_DEFINE(0);
 
-#if defined(CONFIG_PTP_CLOCK_XMC4XXX)
-DEVICE_DECLARE(xmc4xxx_ptp_clock_0);
-#endif
-
 static struct eth_xmc4xxx_config eth_xmc4xxx_config = {
-	.regs = (ETH_GLOBAL_TypeDef *)DT_REG_ADDR(DT_INST_PARENT(0)),
+	.regs = (ETH_GLOBAL_TypeDef *)DT_INST_REG_ADDR(0),
 	.irq_config_func = eth_xmc4xxx_irq_config,
 	.phy_dev = DEVICE_DT_GET(DT_INST_PHANDLE(0, phy_handle)),
 #if defined(CONFIG_PTP_CLOCK_XMC4XXX)
-	.ptp_clock = DEVICE_GET(xmc4xxx_ptp_clock_0),
+	.ptp_clock = DEVICE_DT_GET_ONE(snps_dwmac_ptp_clock),
 #endif
 	.pcfg = PINCTRL_DT_INST_DEV_CONFIG_GET(0),
 	.port_ctrl = {
@@ -1248,6 +1092,7 @@ static struct eth_xmc4xxx_config eth_xmc4xxx_config = {
 		.col = DT_INST_ENUM_IDX_OR(0, col_port_ctrl, 0),
 		.clk_tx = DT_INST_ENUM_IDX_OR(0, tx_clk_port_ctrl, 0),
 		.mode = DT_INST_ENUM_IDX_OR(0, phy_connection_type, 0),
+		.mdio = DT_INST_ENUM_IDX_OR(0, mdi_port_ctrl, 0),
 	}};
 
 static struct eth_xmc4xxx_data eth_xmc4xxx_data = {
@@ -1258,6 +1103,8 @@ ETH_NET_DEVICE_DT_INST_DEFINE(0, eth_xmc4xxx_init, NULL, &eth_xmc4xxx_data, &eth
 			      CONFIG_ETH_INIT_PRIORITY, &eth_xmc4xxx_api, NET_ETH_MTU);
 
 #if defined(CONFIG_PTP_CLOCK_XMC4XXX)
+#undef DT_DRV_COMPAT
+#define DT_DRV_COMPAT snps_dwmac_ptp_clock
 
 static int eth_xmc4xxx_ptp_clock_set(const struct device *dev, struct net_ptp_time *tm)
 {
@@ -1360,8 +1207,7 @@ static DEVICE_API(ptp_clock, ptp_api_xmc4xxx) = {
 	.rate_adjust = eth_xmc4xxx_ptp_clock_rate_adjust,
 };
 
-DEVICE_DEFINE(xmc4xxx_ptp_clock_0, PTP_CLOCK_NAME, NULL,  NULL,
-	      &eth_xmc4xxx_data, &eth_xmc4xxx_config, POST_KERNEL, CONFIG_ETH_INIT_PRIORITY,
-	      &ptp_api_xmc4xxx);
+DEVICE_DT_INST_DEFINE(0, NULL, NULL, &eth_xmc4xxx_data, &eth_xmc4xxx_config, POST_KERNEL,
+		      CONFIG_PTP_CLOCK_INIT_PRIORITY, &ptp_api_xmc4xxx);
 
 #endif /* CONFIG_PTP_CLOCK_XMC4XXX */

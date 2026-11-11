@@ -362,10 +362,14 @@ success:
 	net_buf_reset(buf);
 
 #if defined(CONFIG_NET_BUF_POOL_USAGE)
-	atomic_dec(&pool->avail_count);
-	__ASSERT_NO_MSG(atomic_get(&pool->avail_count) >= 0);
-	pool->max_used = max(pool->max_used,
-			     pool->buf_count - atomic_get(&pool->avail_count));
+	atomic_val_t avail = atomic_dec(&pool->avail_count) - 1;
+
+	__ASSERT_NO_MSG(avail >= 0);
+
+	/* A concurrent allocation must not overwrite a higher value with its own */
+	key = k_spin_lock(&pool->lock);
+	pool->max_used = max(pool->max_used, pool->buf_count - avail);
+	k_spin_unlock(&pool->lock, key);
 #endif
 	return buf;
 }
@@ -445,6 +449,57 @@ struct net_buf *net_buf_slist_get(sys_slist_t *list)
 }
 
 #if defined(CONFIG_NET_BUF_LOG)
+void net_buf_slist_purge_debug(sys_slist_t *list, const char *func, int line)
+#else
+void net_buf_slist_purge(sys_slist_t *list)
+#endif
+{
+	k_spinlock_key_t key;
+	sys_snode_t *node;
+
+	__ASSERT_NO_MSG(list != NULL);
+
+	/* Destroy callbacks may use the list functions, so they must not run under the lock */
+	key = k_spin_lock(&net_buf_slist_lock);
+	node = sys_slist_peek_head(list);
+	sys_slist_init(list);
+	k_spin_unlock(&net_buf_slist_lock, key);
+
+	while (node != NULL) {
+		struct net_buf *buf = CONTAINER_OF(node, struct net_buf, node);
+
+		/* Read the link before the buffer may go back to its pool */
+		node = sys_slist_peek_next_no_check(node);
+#if defined(CONFIG_NET_BUF_LOG)
+		net_buf_unref_debug(buf, func, line);
+#else
+		net_buf_unref(buf);
+#endif
+	}
+}
+
+#if defined(CONFIG_NET_BUF_LOG)
+void net_buf_fifo_purge_debug(struct k_fifo *fifo, const char *func, int line)
+#else
+void net_buf_fifo_purge(struct k_fifo *fifo)
+#endif
+{
+	struct net_buf *buf;
+
+	__ASSERT_NO_MSG(fifo != NULL);
+
+	buf = k_fifo_get(fifo, K_NO_WAIT);
+	while (buf != NULL) {
+#if defined(CONFIG_NET_BUF_LOG)
+		net_buf_unref_debug(buf, func, line);
+#else
+		net_buf_unref(buf);
+#endif
+		buf = k_fifo_get(fifo, K_NO_WAIT);
+	}
+}
+
+#if defined(CONFIG_NET_BUF_LOG)
 void net_buf_unref_debug(struct net_buf *buf, const char *func, int line)
 #else
 void net_buf_unref(struct net_buf *buf)
@@ -459,12 +514,25 @@ void net_buf_unref(struct net_buf *buf)
 		 * decrement is performed on `ref_word` (the atomic_t view of
 		 * the slot shared with flags/pool_id/user_data_size) and the
 		 * uint8_t narrowing extracts just the ref byte from the
-		 * returned prior word value.
+		 * prior word value.
 		 */
 		struct net_buf *frags = buf->frags;
 		__maybe_unused uint8_t pool_id = buf->pool_id;
 		struct net_buf_pool *pool;
-		uint8_t old_ref = atomic_dec(&buf->ref_word);
+		atomic_val_t old_word;
+		uint8_t old_ref;
+
+		/* A zero count must not be decremented, not even by an unref
+		 * racing with the last one: the borrow would go into the other
+		 * bytes of ref_word of a buffer that has already been freed.
+		 */
+		do {
+			old_word = atomic_get(&buf->ref_word);
+			old_ref = (uint8_t)old_word;
+			if (old_ref == 0U) {
+				break;
+			}
+		} while (!atomic_cas(&buf->ref_word, old_word, old_word - 1));
 
 		NET_BUF_DBG("buf %p ref %u pool_id %u frags %p", buf, old_ref,
 			    pool_id, frags);
@@ -692,7 +760,8 @@ size_t net_buf_append_bytes(struct net_buf *buf, size_t len,
 			    const void *value, k_timeout_t timeout,
 			    net_buf_allocator_cb allocate_cb, void *user_data)
 {
-	struct net_buf *frag = net_buf_frag_last(buf);
+	struct net_buf *tail = net_buf_frag_last(buf);
+	struct net_buf *frag = tail;
 	size_t added_len = 0;
 	const uint8_t *value8 = value;
 	size_t max_size;
@@ -728,7 +797,15 @@ size_t net_buf_append_bytes(struct net_buf *buf, size_t len,
 			return added_len;
 		}
 
-		net_buf_frag_add(buf, frag);
+		/* The tail is already known, so link the new fragment behind
+		 * it instead of walking the chain from the head again: a
+		 * single append spanning n fragments would otherwise cost
+		 * O(n^2) traversal steps. Re-derive the tail from the
+		 * returned fragment, in case the allocator handed back a
+		 * chain rather than a single buffer.
+		 */
+		net_buf_frag_insert(tail, frag);
+		tail = net_buf_frag_last(frag);
 	} while (1);
 
 	/* Unreachable */

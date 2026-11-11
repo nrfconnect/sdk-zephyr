@@ -4,7 +4,6 @@ common:
     - mcuboot
   platform_allow:
     - mps2/an521/cpu0/ns
-    - v2m_musca_s1/musca_s1/ns
     - nrf5340dk/nrf5340/cpuapp/ns
     - nrf9160dk/nrf9160/ns
     - lpcxpresso55s69/lpc55s69/cpu0/ns
@@ -31,5 +30,7 @@ tests:
     extra_configs:
       - CONFIG_TFM_IPC=y
   sample.tfm.secure_partition.sfn:
+    platform_exclude:
+      - lpcxpresso55s69/lpc55s69/cpu0/ns
     extra_configs:
       - CONFIG_TFM_SFN=y

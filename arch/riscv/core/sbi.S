@@ -13,8 +13,6 @@
 #include <zephyr/devicetree.h>
 #include "asm_macros.inc"
 
-#ifdef CONFIG_RISCV_S_MODE
-
 #ifdef CONFIG_64BIT
 #define REGBYTES 8
 #else
@@ -172,7 +170,7 @@ m_mode_srst_loop:
 
 m_mode_srst_unsupported:
     li a0, SBI_ERR_NOT_SUPPORTED
-    sr a0, 3 * REGBYTES(sp)
+    sr a0, OFF_A0(sp)
     j m_mode_return
 
 m_mode_handle_interrupt:
@@ -221,5 +219,3 @@ m_mode_return:
     csrrw sp, mscratch, sp
 
     mret
-
-#endif /* CONFIG_RISCV_S_MODE */

@@ -588,17 +588,23 @@ int net_route_packet_if(struct net_pkt *pkt, struct net_if *iface)
 	net_pkt_set_orig_iface(pkt, net_pkt_iface(pkt));
 	net_pkt_set_iface(pkt, iface);
 
+	/* Re-sending a received packet is forwarding even on the ingress
+	 * interface; the flag drives the TTL and hop limit decrement.
+	 */
 	if ((IS_ENABLED(CONFIG_NET_IPV4_FORWARDING) &&
 	     net_pkt_family(pkt) == NET_PF_INET) ||
 	    (IS_ENABLED(CONFIG_NET_IPV6_FORWARDING) &&
 	     net_pkt_family(pkt) == NET_PF_INET6)) {
-		forwarding = net_pkt_orig_iface(pkt) != iface;
+		forwarding = true;
 	}
 
 	net_pkt_set_forwarding(pkt, forwarding);
 
 	if (forwarding) {
 		int ret = 0;
+
+		/* The transport layer checksum is the sender's */
+		net_pkt_set_chksum_done(pkt, true);
 
 		if (IS_ENABLED(CONFIG_NET_IPV4_FORWARDING) &&
 		    net_pkt_family(pkt) == NET_PF_INET) {
@@ -614,12 +620,22 @@ int net_route_packet_if(struct net_pkt *pkt, struct net_if *iface)
 	}
 
 	if (net_route_ll_addr_supported(iface)) {
-		memcpy(net_pkt_lladdr_src(pkt)->addr,
-		       net_pkt_lladdr_if(pkt)->addr,
-		       net_pkt_lladdr_if(pkt)->len);
-		net_pkt_lladdr_src(pkt)->type = net_pkt_lladdr_if(pkt)->type;
-		net_pkt_lladdr_src(pkt)->len = net_pkt_lladdr_if(pkt)->len;
+		struct net_linkaddr *lladdr_if = net_pkt_lladdr_if(pkt);
+
+		NET_ASSERT(lladdr_if != NULL);
+
+		memcpy(net_pkt_lladdr_src(pkt)->addr, lladdr_if->addr,
+		       lladdr_if->len);
+		net_pkt_lladdr_src(pkt)->type = lladdr_if->type;
+		net_pkt_lladdr_src(pkt)->len = lladdr_if->len;
 	}
+
+	/* The RX path left the router's own MAC in lladdr_dst, and L2 takes a
+	 * non-empty lladdr_dst as "already resolved". Clear it so the
+	 * destination gets resolved on the outgoing interface, the same way
+	 * net_route_ipv4_packet() does on the route table path.
+	 */
+	(void)net_linkaddr_clear(net_pkt_lladdr_dst(pkt));
 
 	return net_send_data(pkt);
 }

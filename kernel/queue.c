@@ -22,6 +22,8 @@
 #include <kernel_internal.h>
 #include <zephyr/sys/check.h>
 
+BUILD_ASSERT(SYS_SFLIST_FLAG_BITS >= 1, "k_queue needs one sflist flag bit");
+
 struct alloc_node {
 	sys_sfnode_t node;
 	void *data;
@@ -56,6 +58,23 @@ static void *z_queue_node_peek(sys_sfnode_t *node, bool needs_free)
 	return ret;
 }
 
+#ifdef CONFIG_OBJ_CORE_QUEUE
+/* The queues embedded in statically defined FIFOs and LIFOs are permanent
+ * objects of the queue type too.
+ */
+BUILD_ASSERT(offsetof(struct k_fifo, _queue) == 0);
+BUILD_ASSERT(offsetof(struct k_lifo, _queue) == 0);
+STRUCT_SECTION_START_EXTERN(k_fifo);
+STRUCT_SECTION_END_EXTERN(k_fifo);
+STRUCT_SECTION_START_EXTERN(k_lifo);
+STRUCT_SECTION_END_EXTERN(k_lifo);
+STRUCT_SECTION_START_EXTERN(k_queue);
+STRUCT_SECTION_END_EXTERN(k_queue);
+K_OBJ_TYPE_DEFINE_RANGES(obj_type_queue, k_queue, K_OBJ_TYPE_QUEUE_ID, NULL,
+			 K_OBJ_RANGE_SECTION(k_queue), K_OBJ_RANGE_SECTION(k_fifo),
+			 K_OBJ_RANGE_SECTION(k_lifo));
+#endif /* CONFIG_OBJ_CORE_QUEUE */
+
 void z_impl_k_queue_init(struct k_queue *queue)
 {
 	sys_sflist_init(&queue->data_q);
@@ -68,6 +87,10 @@ void z_impl_k_queue_init(struct k_queue *queue)
 	SYS_PORT_TRACING_OBJ_INIT(k_queue, queue);
 
 	k_object_init(queue);
+
+#ifdef CONFIG_OBJ_CORE_QUEUE
+	k_obj_core_init_and_link(K_OBJ_CORE(queue), &obj_type_queue);
+#endif /* CONFIG_OBJ_CORE_QUEUE */
 }
 
 #ifdef CONFIG_USERSPACE
@@ -269,11 +292,11 @@ int k_queue_append_list(struct k_queue *queue, void *head, void *tail)
 
 	if (head != NULL) {
 		sys_sflist_append_list(&queue->data_q, head, tail);
+
+		resched = queue_handle_poll_events(queue, K_POLL_STATE_DATA_AVAILABLE) || resched;
 	}
 
 	SYS_PORT_TRACING_OBJ_FUNC_EXIT(k_queue, append_list, queue, 0);
-
-	resched = queue_handle_poll_events(queue, K_POLL_STATE_DATA_AVAILABLE) || resched;
 
 	if (resched) {
 		z_reschedule(&queue->lock, key);
@@ -338,8 +361,6 @@ void *z_impl_k_queue_get(struct k_queue *queue, k_timeout_t timeout)
 		return data;
 	}
 
-	SYS_PORT_TRACING_OBJ_FUNC_BLOCKING(k_queue, get, queue, timeout);
-
 	if (K_TIMEOUT_EQ(timeout, K_NO_WAIT)) {
 		k_spin_unlock(&queue->lock, key);
 
@@ -347,6 +368,8 @@ void *z_impl_k_queue_get(struct k_queue *queue, k_timeout_t timeout)
 
 		return NULL;
 	}
+
+	SYS_PORT_TRACING_OBJ_FUNC_BLOCKING(k_queue, get, queue, timeout);
 
 	int ret = z_pend_curr(&queue->lock, key, &queue->wait_q, timeout);
 
@@ -356,11 +379,27 @@ void *z_impl_k_queue_get(struct k_queue *queue, k_timeout_t timeout)
 	return (ret != 0) ? NULL : _current->base.swap_data;
 }
 
+/* Remove a queue item by its data pointer and free any wrapper node. */
 bool k_queue_remove(struct k_queue *queue, void *data)
 {
 	SYS_PORT_TRACING_OBJ_FUNC_ENTER(k_queue, remove, queue);
 	k_spinlock_key_t key = k_spin_lock(&queue->lock);
-	bool ret = sys_sflist_find_and_remove(&queue->data_q, (sys_sfnode_t *)data);
+	sys_sfnode_t *prev = NULL;
+	sys_sfnode_t *node = sys_sflist_peek_head(&queue->data_q);
+	bool ret = false;
+
+	while (node != NULL) {
+		void *peeked = z_queue_node_peek(node, false);
+
+		if (peeked == data) {
+			sys_sflist_remove(&queue->data_q, prev, node);
+			(void)z_queue_node_peek(node, true);
+			ret = true;
+			break;
+		}
+		prev = node;
+		node = sys_sflist_peek_next(node);
+	}
 
 	k_spin_unlock(&queue->lock, key);
 
@@ -449,11 +488,19 @@ static inline void *z_vrfy_k_queue_peek_tail(struct k_queue *queue)
 #endif /* CONFIG_USERSPACE */
 
 #ifdef CONFIG_OBJ_CORE_FIFO
-struct k_obj_type _obj_type_fifo;
-K_OBJ_TYPE_DEFINE(_obj_type_fifo, k_fifo, K_OBJ_TYPE_FIFO_ID, NULL);
+/* Referenced by k_fifo_init() in kernel.h, so not file-local */
+STRUCT_SECTION_START_EXTERN(k_fifo);
+STRUCT_SECTION_END_EXTERN(k_fifo);
+STRUCT_SECTION_ITERABLE(k_obj_type, _obj_type_fifo) =
+	K_OBJ_TYPE_INITIALIZER(k_fifo, K_OBJ_TYPE_FIFO_ID, NULL, 0, 0,
+			       K_OBJ_RANGE_SECTION(k_fifo));
 #endif /* CONFIG_OBJ_CORE_FIFO */
 
 #ifdef CONFIG_OBJ_CORE_LIFO
-struct k_obj_type _obj_type_lifo;
-K_OBJ_TYPE_DEFINE(_obj_type_lifo, k_lifo, K_OBJ_TYPE_LIFO_ID, NULL);
+/* Referenced by k_lifo_init() in kernel.h, so not file-local */
+STRUCT_SECTION_START_EXTERN(k_lifo);
+STRUCT_SECTION_END_EXTERN(k_lifo);
+STRUCT_SECTION_ITERABLE(k_obj_type, _obj_type_lifo) =
+	K_OBJ_TYPE_INITIALIZER(k_lifo, K_OBJ_TYPE_LIFO_ID, NULL, 0, 0,
+			       K_OBJ_RANGE_SECTION(k_lifo));
 #endif /* CONFIG_OBJ_CORE_LIFO */

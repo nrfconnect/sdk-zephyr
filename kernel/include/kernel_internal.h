@@ -133,12 +133,9 @@ z_thread_return_value_set_with_data(struct k_thread *thread,
 	thread->base.swap_data = data;
 }
 
-#ifdef CONFIG_SMP
-extern void z_smp_init(void);
-#ifdef CONFIG_SYS_CLOCK_EXISTS
+#if defined(CONFIG_SMP) && defined(CONFIG_SYS_CLOCK_EXISTS)
 extern void smp_timer_init(void);
-#endif /* CONFIG_SYS_CLOCK_EXISTS */
-#endif /* CONFIG_SMP */
+#endif /* CONFIG_SMP && CONFIG_SYS_CLOCK_EXISTS */
 
 extern void z_early_rand_get(uint8_t *buf, size_t length);
 
@@ -146,7 +143,9 @@ extern void z_early_rand_get(uint8_t *buf, size_t length);
 extern int z_stack_adjust_initialized;
 #endif /* CONFIG_STACK_POINTER_RANDOM */
 
+#ifdef CONFIG_MULTITHREADING
 extern struct k_thread z_main_thread;
+#endif /* CONFIG_MULTITHREADING */
 
 
 K_KERNEL_STACK_ARRAY_DECLARE(z_interrupt_stacks, CONFIG_MP_MAX_NUM_CPUS,

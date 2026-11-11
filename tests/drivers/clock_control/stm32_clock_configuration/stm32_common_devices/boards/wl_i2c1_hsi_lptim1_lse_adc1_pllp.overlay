@@ -47,8 +47,8 @@
 
 &clk_hse {
 	hse-tcxo;
-	status = "okay";
 	clock-frequency = <DT_FREQ_M(32)>;
+	status = "okay";
 };
 
 &clk_hsi {
@@ -96,9 +96,13 @@
 	status = "okay";
 };
 
-&adc1 {
+&adc1_common {
 	clocks = <&rcc STM32_CLOCK_BUS_APB2 0x00000200>,
 		 <&rcc STM32_SRC_PLL_P ADC_SEL(2)>;
 	clock-names = "adcx", "adc_ker";
+	status = "okay";
+};
+
+&adc1 {
 	status = "okay";
 };

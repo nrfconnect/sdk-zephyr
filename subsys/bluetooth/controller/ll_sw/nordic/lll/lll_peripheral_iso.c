@@ -275,10 +275,10 @@ static int prepare_cb(struct lll_prepare_param *p)
 	radio_tmr_tifs_set(cis_lll->tifs_us);
 
 #if defined(CONFIG_BT_CTLR_PHY)
-	radio_switch_complete_and_tx(cis_lll->rx.phy, 0U, cis_lll->tx.phy,
+	radio_switch_complete_and_tx(cis_lll->rx.phy, PHY_FLAGS_UNUSED, cis_lll->tx.phy,
 				     cis_lll->tx.phy_flags);
 #else /* !CONFIG_BT_CTLR_PHY */
-	radio_switch_complete_and_tx(0U, 0U, 0U, 0U);
+	radio_switch_complete_and_tx(PHY_LEGACY, PHY_FLAGS_UNUSED, PHY_LEGACY, PHY_FLAGS_UNUSED);
 #endif /* !CONFIG_BT_CTLR_PHY */
 
 	ticks_at_event = p->ticks_at_expire;
@@ -314,9 +314,9 @@ static int prepare_cb(struct lll_prepare_param *p)
 	hcto += addr_us_get(cis_lll->rx.phy);
 	hcto += radio_rx_chain_delay_get(cis_lll->rx.phy, PHY_FLAGS_S8);
 #else /* !CONFIG_BT_CTLR_PHY */
-	hcto += radio_rx_ready_delay_get(0U, 0U);
+	hcto += radio_rx_ready_delay_get(PHY_LEGACY, PHY_FLAGS_UNUSED);
 	hcto += addr_us_get(0U);
-	hcto += radio_rx_chain_delay_get(0U, 0U);
+	hcto += radio_rx_chain_delay_get(PHY_LEGACY, PHY_FLAGS_UNUSED);
 #endif /* !CONFIG_BT_CTLR_PHY */
 
 	radio_tmr_hcto_configure(hcto);
@@ -331,7 +331,7 @@ static int prepare_cb(struct lll_prepare_param *p)
 				 HAL_RADIO_GPIO_LNA_OFFSET);
 #else /* !CONFIG_BT_CTLR_PHY */
 	radio_gpio_pa_lna_enable(start_us +
-				 radio_rx_ready_delay_get(0U, 0U) -
+				 radio_rx_ready_delay_get(PHY_LEGACY, PHY_FLAGS_UNUSED) -
 				 HAL_RADIO_GPIO_LNA_OFFSET);
 #endif /* !CONFIG_BT_CTLR_PHY */
 #endif /* HAL_RADIO_GPIO_HAVE_LNA_PIN */
@@ -642,6 +642,18 @@ static void isr_rx(void *param)
 			}
 #endif /* CONFIG_BT_CTLR_LE_ENC */
 
+			/* Discard the received PDU, whether unencrypted or the
+			 * decrypted, with length that exceeds the configured
+			 * maximum receive data length used to setup the radio
+			 * packet reception.
+			 */
+			if (pdu_rx->len > cis_lll->rx.max_pdu) {
+				radio_isr_set(isr_done, param);
+				radio_disable();
+
+				return;
+			}
+
 			/* Enqueue Rx ISO PDU */
 			node_rx->hdr.type = NODE_RX_TYPE_ISO_PDU;
 			node_rx->hdr.handle = cis_lll->handle;
@@ -794,7 +806,7 @@ static void isr_rx(void *param)
 	pa_lna_enable_us -= radio_rx_chain_delay_get(cis_lll->rx.phy,
 						     PHY_FLAGS_S8);
 #else /* !CONFIG_BT_CTLR_PHY */
-	pa_lna_enable_us -= radio_rx_chain_delay_get(0U, 0U);
+	pa_lna_enable_us -= radio_rx_chain_delay_get(PHY_LEGACY, PHY_FLAGS_UNUSED);
 #endif /* !CONFIG_BT_CTLR_PHY */
 	radio_gpio_pa_lna_enable(pa_lna_enable_us);
 #endif /* HAL_RADIO_GPIO_HAVE_PA_PIN */
@@ -879,8 +891,8 @@ static void isr_rx(void *param)
 	subevent_us -= radio_rx_chain_delay_get(cis_lll->rx.phy,
 						PHY_FLAGS_S8);
 #else /* !CONFIG_BT_CTLR_PHY */
-	subevent_us -= radio_rx_ready_delay_get(0U, 0U);
-	subevent_us -= radio_rx_chain_delay_get(0U, 0U);
+	subevent_us -= radio_rx_ready_delay_get(PHY_LEGACY, PHY_FLAGS_UNUSED);
+	subevent_us -= radio_rx_chain_delay_get(PHY_LEGACY, PHY_FLAGS_UNUSED);
 #endif /* !CONFIG_BT_CTLR_PHY */
 
 	start_us = radio_tmr_start_us(0U, subevent_us);
@@ -974,10 +986,10 @@ static void isr_tx(void *param)
 	radio_tmr_tifs_set(cis_lll->tifs_us);
 
 #if defined(CONFIG_BT_CTLR_PHY)
-	radio_switch_complete_and_tx(cis_lll->rx.phy, 0U, cis_lll->tx.phy,
+	radio_switch_complete_and_tx(cis_lll->rx.phy, PHY_FLAGS_UNUSED, cis_lll->tx.phy,
 				     cis_lll->tx.phy_flags);
 #else /* !CONFIG_BT_CTLR_PHY */
-	radio_switch_complete_and_tx(0U, 0U, 0U, 0U);
+	radio_switch_complete_and_tx(PHY_LEGACY, PHY_FLAGS_UNUSED, PHY_LEGACY, PHY_FLAGS_UNUSED);
 #endif /* !CONFIG_BT_CTLR_PHY */
 
 	cig_lll = ull_conn_iso_lll_group_get_by_stream(cis_lll);
@@ -993,8 +1005,8 @@ static void isr_tx(void *param)
 	subevent_us -= radio_rx_chain_delay_get(cis_lll->rx.phy,
 						PHY_FLAGS_S8);
 #else /* !CONFIG_BT_CTLR_PHY */
-	subevent_us -= radio_rx_ready_delay_get(0U, 0U);
-	subevent_us -= radio_rx_chain_delay_get(0U, 0U);
+	subevent_us -= radio_rx_ready_delay_get(PHY_LEGACY, PHY_FLAGS_UNUSED);
+	subevent_us -= radio_rx_chain_delay_get(PHY_LEGACY, PHY_FLAGS_UNUSED);
 #endif /* !CONFIG_BT_CTLR_PHY */
 
 #if defined(CONFIG_BT_CTLR_SW_SWITCH_SINGLE_TIMER)
@@ -1016,9 +1028,9 @@ static void isr_tx(void *param)
 	hcto += addr_us_get(cis_lll->rx.phy);
 	hcto += radio_rx_chain_delay_get(cis_lll->rx.phy, PHY_FLAGS_S8);
 #else /* !CONFIG_BT_CTLR_PHY */
-	hcto += radio_rx_ready_delay_get(0U, 0U);
+	hcto += radio_rx_ready_delay_get(PHY_LEGACY, PHY_FLAGS_UNUSED);
 	hcto += addr_us_get(0U);
-	hcto += radio_rx_chain_delay_get(0U, 0U);
+	hcto += radio_rx_chain_delay_get(PHY_LEGACY, PHY_FLAGS_UNUSED);
 #endif /* !CONFIG_BT_CTLR_PHY */
 
 	radio_tmr_hcto_configure_abs(hcto);
@@ -1037,7 +1049,7 @@ static void isr_tx(void *param)
 				 HAL_RADIO_GPIO_LNA_OFFSET);
 #else /* !CONFIG_BT_CTLR_PHY */
 	radio_gpio_pa_lna_enable(start_us +
-				 radio_rx_ready_delay_get(0U, 0U) -
+				 radio_rx_ready_delay_get(PHY_LEGACY, PHY_FLAGS_UNUSED) -
 				 HAL_RADIO_GPIO_LNA_OFFSET);
 #endif /* !CONFIG_BT_CTLR_PHY */
 #endif /* HAL_RADIO_GPIO_HAVE_LNA_PIN */
@@ -1207,10 +1219,10 @@ static void isr_prepare_subevent_common(void *param)
 	radio_tmr_tifs_set(cis_lll->tifs_us);
 
 #if defined(CONFIG_BT_CTLR_PHY)
-	radio_switch_complete_and_tx(cis_lll->rx.phy, 0U, cis_lll->tx.phy,
+	radio_switch_complete_and_tx(cis_lll->rx.phy, PHY_FLAGS_UNUSED, cis_lll->tx.phy,
 				     cis_lll->tx.phy_flags);
 #else /* !CONFIG_BT_CTLR_PHY */
-	radio_switch_complete_and_tx(0U, 0U, 0U, 0U);
+	radio_switch_complete_and_tx(PHY_LEGACY, PHY_FLAGS_UNUSED, PHY_LEGACY, PHY_FLAGS_UNUSED);
 #endif /* !CONFIG_BT_CTLR_PHY */
 
 	/* Anchor point sync-ed */
@@ -1226,8 +1238,8 @@ static void isr_prepare_subevent_common(void *param)
 		subevent_us -= radio_rx_chain_delay_get(cis_lll->rx.phy,
 							PHY_FLAGS_S8);
 #else /* !CONFIG_BT_CTLR_PHY */
-		subevent_us -= radio_rx_ready_delay_get(0U, 0U);
-		subevent_us -= radio_rx_chain_delay_get(0U, 0U);
+		subevent_us -= radio_rx_ready_delay_get(PHY_LEGACY, PHY_FLAGS_UNUSED);
+		subevent_us -= radio_rx_chain_delay_get(PHY_LEGACY, PHY_FLAGS_UNUSED);
 #endif /* !CONFIG_BT_CTLR_PHY */
 	} else {
 		subevent_us = radio_tmr_ready_restore();
@@ -1257,9 +1269,9 @@ static void isr_prepare_subevent_common(void *param)
 	hcto += addr_us_get(cis_lll->rx.phy);
 	hcto += radio_rx_chain_delay_get(cis_lll->rx.phy, PHY_FLAGS_S8);
 #else /* !CONFIG_BT_CTLR_PHY */
-	hcto += radio_rx_ready_delay_get(0U, 0U);
+	hcto += radio_rx_ready_delay_get(PHY_LEGACY, PHY_FLAGS_UNUSED);
 	hcto += addr_us_get(0U);
-	hcto += radio_rx_chain_delay_get(0U, 0U);
+	hcto += radio_rx_chain_delay_get(PHY_LEGACY, PHY_FLAGS_UNUSED);
 #endif /* !CONFIG_BT_CTLR_PHY */
 
 	radio_tmr_hcto_configure_abs(hcto);
@@ -1274,7 +1286,7 @@ static void isr_prepare_subevent_common(void *param)
 				 HAL_RADIO_GPIO_LNA_OFFSET);
 #else /* !CONFIG_BT_CTLR_PHY */
 	radio_gpio_pa_lna_enable(start_us +
-				 radio_rx_ready_delay_get(0U, 0U) -
+				 radio_rx_ready_delay_get(PHY_LEGACY, PHY_FLAGS_UNUSED) -
 				 HAL_RADIO_GPIO_LNA_OFFSET);
 #endif /* !CONFIG_BT_CTLR_PHY */
 #endif /* HAL_RADIO_GPIO_HAVE_LNA_PIN */

@@ -31,13 +31,15 @@
 #include <zephyr/sys/printk.h>
 #include <zephyr/sys/util.h>
 #include <zephyr/sys/util_macro.h>
-#include <zephyr/sys_clock.h>
+#include <zephyr/sys/clock.h>
 #include <zephyr/toolchain.h>
 #include <zephyr/usb/class/usbd_uac2.h>
 #include <zephyr/usb/usbd.h>
 
 #if defined(CONFIG_SOC_NRF5340_CPUAPP)
-#include <nrfx_clock.h>
+#include <zephyr/drivers/clock_control/nrf_clock_control.h>
+
+#define HFCLK_REQUESTED_FREQUENCY MHZ(128)
 #endif /* CONFIG_SOC_NRF5340_CPUAPP */
 
 BUILD_ASSERT(strlen(CONFIG_BROADCAST_CODE) <= BT_ISO_BROADCAST_CODE_SIZE, "Invalid broadcast code");
@@ -276,10 +278,10 @@ static void init_lc3_thread(void *arg1, void *arg2, void *arg3)
 	}
 
 	ret = bt_audio_codec_cfg_get_frame_dur(codec_cfg);
-	if (ret > 0) {
+	if (ret >= 0) {
 		frame_duration_us = bt_audio_codec_cfg_frame_dur_to_frame_dur_us(ret);
 	} else {
-		printk("Error: Frame duration not set, cannot start codec.");
+		printk("Error: Frame duration not set, cannot start codec: %d", ret);
 		return;
 	}
 
@@ -551,10 +553,10 @@ int main(void)
 
 #if defined(CONFIG_SOC_NRF5340_CPUAPP)
 	/* Use this to turn on 128 MHz clock for the nRF5340 cpu_app */
-	err = nrfx_clock_divider_set(NRF_CLOCK_DOMAIN_HFCLK, NRF_CLOCK_HFCLK_DIV_1);
+	err = clock_control_set_rate(DEVICE_DT_GET_ONE(nordic_nrf_clock_hfclk), NULL,
+				     (clock_control_subsys_rate_t)HFCLK_REQUESTED_FREQUENCY);
 	if (err != 0) {
-		printk("Failed to set 128 MHz: %d\n", err);
-		return 0;
+		printk("Failed to set 128 MHz (err %d)\n", err);
 	}
 #endif /* CONFIG_SOC_NRF5340_CPUAPP */
 

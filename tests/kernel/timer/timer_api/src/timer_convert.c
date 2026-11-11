@@ -42,7 +42,8 @@ struct test_rec {
 			(void *)test_##src##_to_##dst##_##round##prec	\
 	}								\
 
-#ifdef CONFIG_TIMER_READS_ITS_FREQUENCY_AT_RUNTIME
+#if defined(CONFIG_TIMER_READS_ITS_FREQUENCY_AT_RUNTIME) || \
+	defined(CONFIG_SYSTEM_CLOCK_HW_CYCLES_PER_SEC_RUNTIME_UPDATE)
 #define TESTVAR(src, dst, round, prec)
 #else
 #define TESTVAR(src, dst, round, prec)					\
@@ -319,6 +320,16 @@ static const struct ztest_param_values conversion_vals = {
 	.name_cb = conversion_name,
 };
 
+/**
+ * @brief Test conversion between time units
+ *
+ * @details Exercise the kernel time-unit conversion routines over a large set
+ * of source/target frequencies, bit widths and rounding modes, converting
+ * values between milliseconds, microseconds, nanoseconds, system ticks and
+ * hardware cycles and verifying each result is within the rounding-mode bound.
+ *
+ * @ingroup kernel_timer_tests
+ */
 ZTEST_P(timer_api, test_time_conversions)
 {
 	const struct test_rec *t = ZTEST_GET_PARAM_PTR(struct test_rec);

@@ -11,8 +11,8 @@
 #include "rzg2ul_smarc-pinctrl.dtsi"
 
 / {
-	model = "Renesas RZ/G2UL SMARC";
 	compatible = "renesas,rzg2ul-smarc";
+	model = "Renesas RZ/G2UL SMARC";
 
 	chosen {
 		zephyr,sram = &ddr;
@@ -30,6 +30,12 @@
 
 &i2c1 {
 	pinctrl-0 = <&i2c1_pins>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
+&spi1 {
+	pinctrl-0 = <&spi1_pins>;
 	pinctrl-names = "default";
 	status = "okay";
 };

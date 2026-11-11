@@ -34,7 +34,7 @@ The following is an example of a CoAP client initialization and request sending:
 
 .. code-block:: c
 
-    static struct coap_client;
+    static struct coap_client client;
     struct coap_client_request req = { 0 };
 
     coap_client_init(&client, NULL);
@@ -72,6 +72,14 @@ application through the response callback registered in the request structure.
 As the response can be a blockwise transfer and the client calls the callback once per each
 block, the application should be to process all of the blocks to be able to process the response.
 
+During a blockwise transfer the client compares the ETag option of the received blocks, as
+required by :rfc:`7959`. When the resource representation changes in the middle of the transfer,
+the transfer is aborted and the callback is invoked with ``result_code`` set to ``-EBADMSG``.
+Stricter than the RFC minimum, which only mandates comparing ETags the server provides, the
+transfer is also aborted when the ETag option appears or disappears between blocks, as such a
+mix of tagged and untagged blocks cannot be verified. The application should discard the partial
+data it received and may retry the request.
+
 The following is an example of a very simple response handling function:
 
 .. code-block:: c
@@ -95,7 +103,7 @@ the server for a resource that it expects to be large enough to require a blockw
 
 .. code-block:: c
 
-    static struct coap_client;
+    static struct coap_client client;
     struct coap_client_request req = { 0 };
 
     coap_client_init(&client, NULL);
@@ -153,7 +161,7 @@ The callback can then be registered for the PUT/POST request instead of a payloa
     strcpy(req.path, "lorem-ipsum");
     req.fmt = COAP_CONTENT_FORMAT_TEXT_PLAIN;
     req.cb = response_cb;
-    req.payload_cb = lore_ipsum_cb,
+    req.payload_cb = lorem_ipsum_cb,
 
     ret = coap_client_req(&client, sock, &address, &req, -1);
 

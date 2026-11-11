@@ -10,8 +10,8 @@
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 
 / {
-	model = "STMicroelectronics STM32F0DISCOVERY board";
 	compatible = "st,stm32f058r8-discovery";
+	model = "STMicroelectronics STM32F0DISCOVERY board";
 
 	chosen {
 		zephyr,console = &usart1;
@@ -53,11 +53,15 @@
 	};
 };
 
+&adc1_common {
+	st,adc-clock-source = "SYNC";
+	st,adc-prescaler = <4>;
+	status = "okay";
+};
+
 &adc1 {
 	pinctrl-0 = <&adc_in0_pa0 &adc_in1_pa1>;
 	pinctrl-names = "default";
-	st,adc-clock-source = "SYNC";
-	st,adc-prescaler = <4>;
 	status = "okay";
 };
 
@@ -109,38 +113,31 @@
 
 &flash0 {
 	partitions {
+		ranges;
 		#address-cells = <1>;
 		#size-cells = <1>;
-		ranges;
 
 		boot_partition: partition@0 {
 			compatible = "zephyr,mapped-partition";
-			label = "mcuboot";
 			reg = <0x00000000 DT_SIZE_K(8)>;
+			label = "mcuboot";
 			read-only;
 		};
 
-		/*
-		 * The flash starting at offset 0x2000 and ending at
-		 * offset 0x3fff is reserved for use by the application.
-		 */
-
-		slot0_partition: partition@4000 {
-			compatible = "zephyr,mapped-partition";
+		slot0_partition: partition@2000 {
+			reg = <0x00002000 DT_SIZE_K(20)>;
 			label = "image-0";
-			reg = <0x00004000 DT_SIZE_K(16)>;
 		};
 
 		slot1_partition: partition@8000 {
 			compatible = "zephyr,mapped-partition";
+			reg = <0x00008000 DT_SIZE_K(24)>;
 			label = "image-1";
-			reg = <0x00008000 DT_SIZE_K(16)>;
 		};
 
-		scratch_partition: partition@c000 {
-			compatible = "zephyr,mapped-partition";
-			label = "image-scratch";
-			reg = <0x0000c000 DT_SIZE_K(16)>;
+		storage_partition: partition@e000 {
+			reg = <0x0000e000 DT_SIZE_K(12)>;
+			label = "storage";
 		};
 	};
 };

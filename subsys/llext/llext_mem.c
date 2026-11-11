@@ -25,6 +25,13 @@ LOG_MODULE_DECLARE(llext, CONFIG_LLEXT_LOG_LEVEL);
 bool llext_heap_inited;
 #endif
 
+/* PMP granularity is only defined when RISC-V PMP is built in. */
+#ifdef CONFIG_PMP_GRANULARITY
+#define LLEXT_PMP_GRANULARITY CONFIG_PMP_GRANULARITY
+#else
+#define LLEXT_PMP_GRANULARITY 1
+#endif
+
 /*
  * Initialize the memory partition associated with the specified memory region
  */
@@ -99,6 +106,21 @@ static int llext_copy_region(struct llext_loader *ldr, struct llext *ext,
 				/* ARMv8-M and newer ARC MPUs use 32-byte alignment. */
 				region_alloc = ROUND_UP(region_alloc, LLEXT_PAGE_SIZE);
 				region_align = MAX(region_align, LLEXT_PAGE_SIZE);
+			} else if (IS_ENABLED(CONFIG_RISCV_PMP)) {
+				/*
+				 * RISC-V PMP regions only need to be sized and
+				 * aligned to the PMP granularity; TOR matching
+				 * removes any power-of-two requirement.
+				 */
+				region_alloc = ROUND_UP(region_alloc, LLEXT_PMP_GRANULARITY);
+				region_align = MAX(region_align, LLEXT_PMP_GRANULARITY);
+			} else if (IS_ENABLED(CONFIG_XTENSA_MPU)) {
+				region_alloc = ROUND_UP(region_alloc, LLEXT_PAGE_SIZE);
+				region_align = MAX(region_align, LLEXT_PAGE_SIZE);
+			} else {
+				LOG_ERR("region %d: no memory protection alignment "
+					"rule for this architecture", mem_idx);
+				return -ENOTSUP;
 			}
 		}
 	}
@@ -116,10 +138,6 @@ static int llext_copy_region(struct llext_loader *ldr, struct llext *ext,
 			/* Region has data in the file, check if peek() is supported */
 			ext->mem[mem_idx] = llext_peek(ldr, region->sh_offset);
 			if (ext->mem[mem_idx]) {
-				if (mem_idx == LLEXT_MEM_TEXT) {
-					ext->text_in_elf = ext->mem[mem_idx];
-				}
-
 				if ((IS_ALIGNED(ext->mem[mem_idx], region_align) ||
 				     ldr_parm->pre_located) &&
 				    ((mem_idx != LLEXT_MEM_TEXT) ||
@@ -281,12 +299,10 @@ int llext_copy_regions(struct llext_loader *ldr, struct llext *ext,
 				if (name == NULL) {
 					LOG_WRN("-s (out of bounds section name string table "
 						"index) %#zx",
-						(size_t)ext->mem[mem_idx] +
-							ldr->sect_map[i].offset);
+						(size_t)llext_loaded_sect_ptr(ldr, ext, i));
 				} else {
 					LOG_DBG("-s %s %#zx", name,
-						(size_t)ext->mem[mem_idx] +
-							ldr->sect_map[i].offset);
+						(size_t)llext_loaded_sect_ptr(ldr, ext, i));
 				}
 			}
 		}
@@ -313,7 +329,6 @@ void llext_adjust_mmu_permissions(struct llext *ext)
 #ifdef CONFIG_LLEXT_VENEERS
 		case LLEXT_MEM_VENEER:
 #endif
-			sys_cache_instr_invd_range(addr, size);
 			flags = K_MEM_PERM_EXEC;
 			break;
 		case LLEXT_MEM_DATA:
@@ -327,6 +342,12 @@ void llext_adjust_mmu_permissions(struct llext *ext)
 			continue;
 		}
 		sys_cache_data_flush_range(addr, size);
+		if ((flags & K_MEM_PERM_EXEC) != 0) {
+			/* new code must reach PoU (flush above) before the
+			 * stale instruction lines are dropped
+			 */
+			sys_cache_instr_invd_range(addr, size);
+		}
 		k_mem_update_flags(addr, size, flags);
 	}
 

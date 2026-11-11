@@ -64,6 +64,8 @@ void akm09918c_submit(const struct device *dev, struct rtio_iodev_sqe *iodev_sqe
 		writeByte_sqe->flags |= RTIO_SQE_CHAINED;
 		rtio_sqe_prep_callback_no_cqe(cb_sqe, akm09918_after_start_cb, (void *)iodev_sqe,
 					      NULL);
+		/* The device returns to power-down mode after a single measurement */
+		data->mode = AKM09918C_CNTL2_PWR_DOWN;
 		rtio_submit(data->rtio_ctx, 0);
 	} else {
 		rtio_sqe_drop_all(data->rtio_ctx);
@@ -158,9 +160,10 @@ void akm09918_complete_cb(struct rtio *rtio_ctx, const struct rtio_sqe *sqe, int
 	ARG_UNUSED(result);
 
 	struct rtio_iodev_sqe *parent_iodev_sqe = (struct rtio_iodev_sqe *)arg0;
-	struct rtio_sqe *parent_sqe = &parent_iodev_sqe->sqe;
-	struct akm09918c_encoded_data *edata =
-		(struct akm09918c_encoded_data *)(parent_sqe->rx.buf);
+	uint32_t req_buf_len = sizeof(struct akm09918c_encoded_data);
+	struct akm09918c_encoded_data *edata;
+	uint32_t buf_len;
+	uint8_t *buf;
 	int rc;
 
 	rc = akm09918c_flush_cqes(rtio_ctx);
@@ -168,6 +171,16 @@ void akm09918_complete_cb(struct rtio *rtio_ctx, const struct rtio_sqe *sqe, int
 		rtio_iodev_sqe_err(parent_iodev_sqe, rc);
 		return;
 	}
+
+	/* Fetch the same buffer bound during the burst read. The sqe no longer
+	 * holds the mempool pointer, so ask the wrapper for it.
+	 */
+	rc = rtio_sqe_rx_buf(parent_iodev_sqe, req_buf_len, req_buf_len, &buf, &buf_len);
+	if (rc != 0) {
+		rtio_iodev_sqe_err(parent_iodev_sqe, rc);
+		return;
+	}
+	edata = (struct akm09918c_encoded_data *)buf;
 
 	if (FIELD_GET(AKM09918C_ST1_DRDY, edata->reading.st1) == 0) {
 		LOG_ERR("Data not ready, st1=0x%02x", edata->reading.st1);

@@ -27,7 +27,7 @@
 #include <zephyr/sys/ring_buffer.h>
 #include <zephyr/sys/util.h>
 #include <zephyr/sys/util_macro.h>
-#include <zephyr/sys_clock.h>
+#include <zephyr/sys/clock.h>
 #include <zephyr/toolchain.h>
 #include <zephyr/usb/usb_device.h>
 #include <zephyr/usb/class/usb_audio.h>
@@ -58,7 +58,7 @@ int lc3_enable(struct stream_rx *stream);
  * @param stream The stream to disable LC3 for
 
  * @retval 0 Success
- * @retval -EINVAL The stream is LC3 initialized
+ * @retval -EALREADY LC3 is not enabled for the stream
  */
 int lc3_disable(struct stream_rx *stream);
 
