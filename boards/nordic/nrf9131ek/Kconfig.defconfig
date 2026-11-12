@@ -9,6 +9,9 @@ config HW_STACK_PROTECTION
 config BOARD_NRF9131EK
 	select USE_DT_CODE_PARTITION if BOARD_NRF9131EK_NRF9131_NS
 
+configdefault BUILD_WITH_TFM
+	default y if BOARD_NRF9131EK_NRF9131_NS
+
 if BOARD_NRF9131EK_NRF9131 || BOARD_NRF9131EK_NRF9131_NS
 
 # By default, if we build for a Non-Secure version of the board,
