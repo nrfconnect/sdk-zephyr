@@ -32,12 +32,30 @@ LOG_MODULE_REGISTER(hci_ipc, CONFIG_BT_LOG_LEVEL);
 BUILD_ASSERT(!IS_ENABLED(CONFIG_BT_CONN) || IS_ENABLED(CONFIG_BT_HCI_ACL_FLOW_CONTROL),
 	     "HCI IPC driver can drop ACL data without Controller-to-Host ACL flow control");
 
+#define HCI_IPC_NODE DT_CHOSEN(zephyr_bt_hci_ipc)
+
+/* The icbmsg backend invokes the endpoint receive callback from the IPC interrupt handler. */
+#if DT_NODE_HAS_COMPAT(HCI_IPC_NODE, zephyr_ipc_icbmsg)
+#define RECV_IN_IRQ_CONTEXT 1
+#endif
+
 static struct ipc_ept hci_ept;
 
 static K_THREAD_STACK_DEFINE(tx_thread_stack, CONFIG_BT_HCI_TX_STACK_SIZE);
 static struct k_thread tx_thread_data;
 static K_FIFO_DEFINE(tx_queue);
 static K_SEM_DEFINE(ipc_bound_sem, 0, 1);
+#ifdef RECV_IN_IRQ_CONTEXT
+struct ipc_block_item {
+	const void *ptr;
+	size_t len;
+};
+
+static K_THREAD_STACK_DEFINE(rx_thread_stack, CONFIG_HCI_IPC_RX_STACK_SIZE);
+static struct k_thread rx_thread_data;
+K_MSGQ_DEFINE(rx_msgq, sizeof(struct ipc_block_item), DT_PROP(HCI_IPC_NODE, rx_blocks),
+	      sizeof(void *));
+#endif /* RECV_IN_IRQ_CONTEXT */
 #if defined(CONFIG_BT_CTLR_ASSERT_HANDLER) || defined(CONFIG_BT_HCI_VS_FATAL_ERROR)
 /* A flag used to store information if the IPC endpoint has already been bound. The end point can't
  * be used before that happens.
@@ -356,10 +374,62 @@ static void hci_ept_bound(void *priv)
 #endif /* CONFIG_BT_CTLR_ASSERT_HANDLER || CONFIG_BT_HCI_VS_FATAL_ERROR */
 }
 
+#ifdef RECV_IN_IRQ_CONTEXT
+/* Function defers processing of the received data to a thread.
+ * It utilizes RX buffer holding feature of the IPC service API.
+ */
+static void recv_defer_to_thread(const void *data, size_t len)
+{
+	struct ipc_block_item block;
+	int err;
+
+	block.ptr = data;
+	block.len = len;
+
+	err = ipc_service_hold_rx_buffer(&hci_ept, (void *)data);
+	if (err < 0) {
+		LOG_ERR("Failed to hold rx buffer: %d.", err);
+		return;
+	}
+
+	err = k_msgq_put(&rx_msgq, &block, K_NO_WAIT);
+	if (err < 0) {
+		LOG_ERR("Failed to put data into msgq: %d.", err);
+		err = ipc_service_release_rx_buffer(&hci_ept, (void *)block.ptr);
+		__ASSERT(err == 0, "Failed to release rx buffer: %d.", err);
+	}
+}
+
+static void rx_thread(void *p1, void *p2, void *p3)
+{
+	struct ipc_block_item block;
+	int err;
+
+	while (1) {
+		err = k_msgq_get(&rx_msgq, &block, K_FOREVER);
+		if (err < 0) {
+			LOG_ERR("Failed to get data from msgq: %d.", err);
+			continue;
+		}
+
+		hci_ipc_rx((uint8_t *)block.ptr, block.len);
+
+		err = ipc_service_release_rx_buffer(&hci_ept, (void *)block.ptr);
+		if (err < 0) {
+			LOG_ERR("Failed to release rx buffer: %d.", err);
+		}
+	}
+}
+#endif /* RECV_IN_IRQ_CONTEXT */
+
 static void hci_ept_recv(const void *data, size_t len, void *priv)
 {
 	LOG_INF("Received message of %u bytes.", len);
-	hci_ipc_rx((uint8_t *) data, len);
+#ifdef RECV_IN_IRQ_CONTEXT
+	recv_defer_to_thread(data, len);
+#else
+	hci_ipc_rx((uint8_t *)data, len);
+#endif
 }
 
 static struct ipc_ept_cfg hci_ept_cfg = {
@@ -391,6 +461,16 @@ int main(void)
 			K_THREAD_STACK_SIZEOF(tx_thread_stack), tx_thread,
 			NULL, NULL, NULL, K_PRIO_COOP(7), 0, K_NO_WAIT);
 	k_thread_name_set(&tx_thread_data, "HCI ipc TX");
+
+#ifdef RECV_IN_IRQ_CONTEXT
+	/* Spawn the thread processing the data received over IPC. It has to be ready before the
+	 * endpoint is registered, because the first message can arrive right after binding.
+	 */
+	k_thread_create(&rx_thread_data, rx_thread_stack,
+			K_THREAD_STACK_SIZEOF(rx_thread_stack), rx_thread,
+			NULL, NULL, NULL, K_PRIO_COOP(7), 0, K_NO_WAIT);
+	k_thread_name_set(&rx_thread_data, "HCI ipc RX");
+#endif
 
 	/* Initialize IPC service instance and register endpoint. */
 	err = ipc_service_open_instance(hci_ipc_instance);
