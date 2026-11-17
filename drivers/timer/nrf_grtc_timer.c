@@ -65,6 +65,9 @@
  */
 #define LATENCY_THR_TICKS 200
 
+/* Maximum distance between last announcement and scheduled timeout (in ticks). */
+#define MAX_UNANNOUNCED_TICKS (uint64_t)(INT32_MAX - LATENCY_THR_TICKS)
+
 #if defined(CONFIG_TEST)
 const int32_t z_sys_timer_irq_for_test = DT_IRQN(GRTC_NODE);
 #endif
@@ -659,6 +662,16 @@ void sys_clock_set_timeout(int32_t ticks, bool idle)
 		}
 		nrfx_grtc_syscounter_cc_rel_set(ch, cyc, NRFX_GRTC_CC_RELATIVE_COMPARE);
 		return;
+	}
+
+	uint64_t exp_unannounced_ticks = last_elapsed / CYC_PER_TICK + ticks;
+
+	/* Clamp ticks if expected timeout would be too far in the future (counting from last
+	 * announcement) which may result in invalid value returned by sys_clock_elapsed() as it is
+	 * casted to int32_t by the caller.
+	 */
+	if (exp_unannounced_ticks > MAX_UNANNOUNCED_TICKS) {
+		ticks = (uint32_t)(MAX_UNANNOUNCED_TICKS - last_elapsed / CYC_PER_TICK);
 	}
 
 	uint64_t cyc = (uint64_t)ticks * CYC_PER_TICK;
