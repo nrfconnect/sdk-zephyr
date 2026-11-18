@@ -4,8 +4,8 @@
  */
 
 &cpuapp_sram {
-	reg = <0x20000000 DT_SIZE_K(188)>;
-	ranges = <0x0 0x20000000 DT_SIZE_K(188)>;
+	reg = <0x20000000 DT_SIZE_K(187)>;
+	ranges = <0x0 0x20000000 DT_SIZE_K(187)>;
 };
 
 &cpuapp_rram {
