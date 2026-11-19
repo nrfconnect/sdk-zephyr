@@ -69,6 +69,33 @@ tests:
     tags:
       - uart
       - bluetooth
+  sample.bluetooth.hci_uart.nrf54l15.df:
+    harness: bluetooth
+    platform_allow: nrf54l15dk/nrf54l15/cpuapp
+    integration_platforms:
+      - nrf54l15dk/nrf54l15/cpuapp
+    extra_args:
+      - DTC_OVERLAY_FILE=./boards/nrf54l15dk_nrf54l15_cpuapp_df.overlay
+      - SNIPPET="bt-ll-sw-split"
+    extra_configs:
+      - CONFIG_BT_CTLR_DF=y
+    tags:
+      - uart
+      - bluetooth
+  sample.bluetooth.hci_uart.nrf54l15.df.iq_report:
+    harness: bluetooth
+    platform_allow: nrf54l15dk/nrf54l15/cpuapp
+    integration_platforms:
+      - nrf54l15dk/nrf54l15/cpuapp
+    extra_args:
+      - DTC_OVERLAY_FILE=./boards/nrf54l15dk_nrf54l15_cpuapp_df.overlay
+      - SNIPPET="bt-ll-sw-split"
+    extra_configs:
+      - CONFIG_BT_CTLR_DF=y
+      - CONFIG_BT_CTLR_DTM_HCI_DF_IQ_REPORT=y
+    tags:
+      - uart
+      - bluetooth
   sample.bluetooth.hci_uart.nrf5340dk_cpuapp:
     harness: bluetooth
     platform_allow:
@@ -84,7 +111,8 @@ tests:
       - nrf5340_audio_dk/nrf5340/cpuapp
     integration_platforms:
       - nrf5340_audio_dk/nrf5340/cpuapp
-    extra_args: DTC_OVERLAY_FILE=./boards/nrf5340_audio_dk_nrf5340_cpuapp_nrf21540_ek.overlay
+    extra_args:
+      - DTC_OVERLAY_FILE=./boards/nrf5340_audio_dk_nrf5340_cpuapp_nrf21540_ek.overlay
     tags:
       - uart
       - bluetooth
@@ -120,6 +148,7 @@ tests:
     extra_args:
       - EXTRA_CONF_FILE=overlay-all-bt_ll_sw_split.conf
       - DTC_OVERLAY_FILE=./boards/nrf54lm20dk_nrf54lm20a_cpuapp_df.overlay
+      - SNIPPET="bt-ll-sw-split"
     tags:
       - uart
       - bluetooth
