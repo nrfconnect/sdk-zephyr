@@ -28,13 +28,16 @@
 LOG_MODULE_REGISTER(soc, CONFIG_SOC_LOG_LEVEL);
 
 #if (defined(NRF_APPLICATION) && !defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)) || \
-	!defined(__ZEPHYR__)
+	!defined(__ZEPHYR__) || defined(CONFIG_IRONSIDE_TE_CLIENT)
 
 #include <hal/nrf_oscillators.h>
 #include <hal/nrf_power.h>
 #include <hal/nrf_regulators.h>
 #include <hal/nrf_ficr.h>
 #include <zephyr/dt-bindings/regulator/nrf5x.h>
+#if defined(CONFIG_IRONSIDE_TE_CLIENT)
+#include <ironside_client/services/platform.h>
+#endif
 
 #define LFXO_NODE DT_NODELABEL(lfxo)
 #define HFXO_NODE DT_NODELABEL(hfxo)
@@ -48,6 +51,14 @@ BUILD_ASSERT(DT_ENUM_HAS_VALUE(LFXO_NODE, load_capacitors, internal) == 0,
 	     "external clock source");
 #endif
 
+#if DT_ENUM_HAS_VALUE(LFXO_NODE, load_capacitors, internal)
+BUILD_ASSERT(DT_PROP(LFXO_NODE, load_capacitance_femtofarad) >= LFXO_CAP_MIN_FF &&
+	     DT_PROP(LFXO_NODE, load_capacitance_femtofarad) <= LFXO_CAP_MAX_FF,
+	     "LFXO load capacitance must be between "
+	     STRINGIFY(LFXO_CAP_MIN_FF) " and " STRINGIFY(LFXO_CAP_MAX_FF)
+	     " femtofarads");
+#endif
+
 static inline void power_and_clock_configuration(void)
 {
 /* NRF_REGULATORS and NRF_OSCILLATORS are configured to be secure
@@ -57,13 +68,41 @@ static inline void power_and_clock_configuration(void)
  * NRF_OSCILLATORS is also configured as secure because of a HW limitation
  * that requires them to be configured with the same security property.
  */
+#if defined(CONFIG_IRONSIDE_TE_CLIENT)
+	/* IronSide TE has applied the board configuration of its own image. Write
+	 * the devicetree one over it through the register write service, or it
+	 * would have no effect. A refused write leaves IronSide TE's in place.
+	 */
+	const struct ironside_client_platform_mem_write_pair pairs[] = {
+		{
+			.addr = (uint32_t)&NRF_OSCILLATORS_S->XOSC32KI.INTCAP,
 #if DT_ENUM_HAS_VALUE(LFXO_NODE, load_capacitors, internal)
-	BUILD_ASSERT(DT_PROP(LFXO_NODE, load_capacitance_femtofarad) >= LFXO_CAP_MIN_FF &&
-		     DT_PROP(LFXO_NODE, load_capacitance_femtofarad) <= LFXO_CAP_MAX_FF,
-		     "LFXO load capacitance must be between "
-		     STRINGIFY(LFXO_CAP_MIN_FF) " and " STRINGIFY(LFXO_CAP_MAX_FF)
-		     " femtofarads");
+			.value = nrf_ficr_lfxo_cap_calculate(
+				NRF_FICR, DT_PROP(LFXO_NODE, load_capacitance_femtofarad)),
+#endif
+		},
+		{
+			.addr = (uint32_t)&NRF_OSCILLATORS_S->XOSC32M.CONFIG.INTCAP,
+#if DT_ENUM_HAS_VALUE(HFXO_NODE, load_capacitors, internal)
+			.value = nrf_ficr_hfxo_cap_calculate(
+				NRF_FICR, DT_PROP(HFXO_NODE, load_capacitance_femtofarad)),
+#endif
+		},
+		{
+			.addr = (uint32_t)&NRF_OSCILLATORS_S->XOSC32KI.BYPASS,
+			.value = DT_PROP(LFXO_NODE, external_clock_source),
+		},
+#if (DT_PROP(DT_NODELABEL(vregmain), regulator_initial_mode) == NRF5X_REG_MODE_DCDC)
+		{
+			.addr = (uint32_t)&NRF_REGULATORS_S->VREGMAIN.DCDCEN,
+			.value = REGULATORS_VREGMAIN_DCDCEN_VAL_Enabled,
+		},
+#endif
+	};
 
+	(void)ironside_platform_mem_write(pairs, ARRAY_SIZE(pairs), NULL, 0U);
+#else /* CONFIG_IRONSIDE_TE_CLIENT */
+#if DT_ENUM_HAS_VALUE(LFXO_NODE, load_capacitors, internal)
 	nrf_oscillators_lfxo_cap_set(NRF_OSCILLATORS,
 				nrf_ficr_lfxo_cap_calculate(NRF_FICR,
 					DT_PROP(LFXO_NODE, load_capacitance_femtofarad)));
@@ -88,6 +127,7 @@ static inline void power_and_clock_configuration(void)
 #if (DT_PROP(DT_NODELABEL(vregmain), regulator_initial_mode) == NRF5X_REG_MODE_DCDC)
 	nrf_regulators_vreg_enable_set(NRF_REGULATORS, NRF_REGULATORS_VREG_MAIN, true);
 #endif
+#endif /* CONFIG_IRONSIDE_TE_CLIENT */
 
 }
 #endif /* NRF_APPLICATION && !CONFIG_TRUSTED_EXECUTION_NONSECURE */
@@ -106,7 +146,7 @@ int nordicsemi_nrf54l_init(void)
 #endif
 
 #if (defined(NRF_APPLICATION) && !defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)) || \
-	!defined(__ZEPHYR__)
+	!defined(__ZEPHYR__) || defined(CONFIG_IRONSIDE_TE_CLIENT)
 	power_and_clock_configuration();
 #endif
 
