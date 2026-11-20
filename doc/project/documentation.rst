@@ -20,9 +20,8 @@ Reference to Requirements
 APIs for the most part document the implementation of requirements or advertised
 features and can be traced back to features. We use the API documentation as the
 main interface to trace implementation back to documented features. This is done
-using doxygen's native requirements traceability commands (``@satisfies`` and
-``@verifies``) that reference requirements maintained somewhere else in a
-requirement catalogue.
+using custom _doxygen_ tags that reference requirements maintained somewhere
+else in a requirement catalogue.
 
 Test Documentation
 *******************
@@ -59,27 +58,7 @@ for traceability reports. Here are a few guidelines to be followed:
 - All test documentation should be under doxygen groups that are prefixed
   with tests\_
 
-Documenting a Requirement
-=========================
-
-A requirement is documented with the doxygen ``@requirement`` command, which
-takes a unique identifier and an optional title. Doxygen collects all
-requirements on a single page and allows them to be referenced from anywhere by
-their identifier. Use a comment block dedicated to the requirement, typically
-maintained in the requirement catalogue::
-
-    /**
-    * @requirement ZEPH-015 (Give a semaphore)
-    *
-    * The kernel shall provide a mechanism to give a semaphore, increasing its
-    * count up to its configured maximum.
-    */
-
-The identifier used here (for example ``ZEPH-015``) is the same one referenced by
-the ``@satisfies`` and ``@verifies`` commands below, which is what links the
-implementation and tests back to the requirement.
-
-The doxygen ``@verifies`` command signifies that a test verifies a
+The custom doxygen ``@verify`` directive signifies that a test verifies a
 requirement::
 
     /**
@@ -95,7 +74,7 @@ requirement::
     * Some details about the test
     * more details
     *
-    * @verifies ZEPH-015
+    * @verify{@req{1111}}
     */
     void test_sema_thread2thread(void)
     {
@@ -108,7 +87,7 @@ requirement::
     */
 
 To get coverage of how an implementation or a piece of code satisfies a
-requirement, we use the doxygen ``@satisfies`` command::
+requirements, we use the ``satisfy`` alias in doxygen::
 
     /**
     * @brief Give a semaphore.
@@ -120,7 +99,7 @@ requirement, we use the doxygen ``@satisfies`` command::
     *
     * @param sem Address of the semaphore.
     *
-    * @satisfies ZEPH-015
+    * @satisfy{@req{015}}
     */
     __syscall void k_sem_give(struct k_sem *sem);
 
