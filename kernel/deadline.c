@@ -17,7 +17,6 @@
  */
 
 #include <zephyr/kernel.h>
-#include <kspinlock.h>
 #include <ksched.h>
 #include <run_q.h>
 #include <zephyr/internal/syscall_handler.h>
@@ -37,7 +36,7 @@
  */
 void z_sched_prio_deadline_set(struct k_thread *thread, int deadline)
 {
-	Z_SCHED_SPINLOCK {
+	K_SPINLOCK(&_sched_spinlock) {
 		if (z_is_thread_queued(thread)) {
 			dequeue_thread(thread);
 			thread->base.prio_deadline = deadline;
