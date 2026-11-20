@@ -13,9 +13,13 @@ LOG_MODULE_DECLARE(conn_mgr, CONFIG_NET_CONNECTION_MANAGER_LOG_LEVEL);
 #include <zephyr/net/net_mgmt.h>
 #include "conn_mgr_private.h"
 
-static void conn_mgr_iface_events_handler(uint64_t mgmt_event, struct net_if *iface,
-					  void *info __unused, size_t info_length __unused,
-					  void *user_data __unused)
+static struct net_mgmt_event_callback iface_events_cb;
+static struct net_mgmt_event_callback ipv6_events_cb;
+static struct net_mgmt_event_callback ipv4_events_cb;
+
+static void conn_mgr_iface_events_handler(struct net_mgmt_event_callback *cb,
+					  uint64_t mgmt_event,
+					  struct net_if *iface)
 {
 	uint16_t *iface_states = conn_mgr_if_state_internal();
 	int idx;
@@ -49,13 +53,10 @@ done:
 	k_mutex_unlock(&conn_mgr_mon_lock);
 }
 
-NET_MGMT_REGISTER_EVENT_HANDLER(conn_mgr_iface_events, CONN_MGR_IFACE_EVENTS_MASK,
-				conn_mgr_iface_events_handler, NULL);
-
 #if defined(CONFIG_NET_IPV6)
-static void conn_mgr_ipv6_events_handler(uint64_t mgmt_event, struct net_if *iface,
-					 void *info __unused, size_t info_length __unused,
-					 void *user_data __unused)
+static void conn_mgr_ipv6_events_handler(struct net_mgmt_event_callback *cb,
+					 uint64_t mgmt_event,
+					 struct net_if *iface)
 {
 	uint16_t *iface_states = conn_mgr_if_state_internal();
 	int idx;
@@ -98,15 +99,22 @@ static void conn_mgr_ipv6_events_handler(uint64_t mgmt_event, struct net_if *ifa
 done:
 	k_mutex_unlock(&conn_mgr_mon_lock);
 }
-
-NET_MGMT_REGISTER_EVENT_HANDLER(conn_mgr_ipv6_events, CONN_MGR_IPV6_EVENTS_MASK,
-				conn_mgr_ipv6_events_handler, NULL);
+#else
+static inline
+void conn_mgr_ipv6_events_handler(struct net_mgmt_event_callback *cb,
+				  uint64_t mgmt_event,
+				  struct net_if *iface)
+{
+	ARG_UNUSED(cb);
+	ARG_UNUSED(mgmt_event);
+	ARG_UNUSED(iface);
+}
 #endif /* CONFIG_NET_IPV6 */
 
 #if defined(CONFIG_NET_IPV4)
-static void conn_mgr_ipv4_events_handler(uint64_t mgmt_event, struct net_if *iface,
-					 void *info __unused, size_t info_length __unused,
-					 void *user_data __unused)
+static void conn_mgr_ipv4_events_handler(struct net_mgmt_event_callback *cb,
+					 uint64_t mgmt_event,
+					 struct net_if *iface)
 {
 	uint16_t *iface_states = conn_mgr_if_state_internal();
 	int idx;
@@ -150,7 +158,36 @@ static void conn_mgr_ipv4_events_handler(uint64_t mgmt_event, struct net_if *ifa
 done:
 	k_mutex_unlock(&conn_mgr_mon_lock);
 }
-
-NET_MGMT_REGISTER_EVENT_HANDLER(conn_mgr_ipv4_events, CONN_MGR_IPV4_EVENTS_MASK,
-				conn_mgr_ipv4_events_handler, NULL);
+#else
+static inline
+void conn_mgr_ipv4_events_handler(struct net_mgmt_event_callback *cb,
+				  uint64_t mgmt_event,
+				  struct net_if *iface)
+{
+	ARG_UNUSED(cb);
+	ARG_UNUSED(mgmt_event);
+	ARG_UNUSED(iface);
+}
 #endif /* CONFIG_NET_IPV4 */
+
+void conn_mgr_init_events_handler(void)
+{
+	net_mgmt_init_event_callback(&iface_events_cb,
+				     conn_mgr_iface_events_handler,
+				     CONN_MGR_IFACE_EVENTS_MASK);
+	net_mgmt_add_event_callback(&iface_events_cb);
+
+	if (IS_ENABLED(CONFIG_NET_IPV6)) {
+		net_mgmt_init_event_callback(&ipv6_events_cb,
+					     conn_mgr_ipv6_events_handler,
+					     CONN_MGR_IPV6_EVENTS_MASK);
+		net_mgmt_add_event_callback(&ipv6_events_cb);
+	}
+
+	if (IS_ENABLED(CONFIG_NET_IPV4)) {
+		net_mgmt_init_event_callback(&ipv4_events_cb,
+					     conn_mgr_ipv4_events_handler,
+					     CONN_MGR_IPV4_EVENTS_MASK);
+		net_mgmt_add_event_callback(&ipv4_events_cb);
+	}
+}
