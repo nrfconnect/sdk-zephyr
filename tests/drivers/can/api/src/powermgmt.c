@@ -5,7 +5,6 @@
 
 #include <zephyr/drivers/can.h>
 #include <zephyr/pm/device.h>
-#include <zephyr/pm/device_runtime.h>
 #include <zephyr/ztest.h>
 
 #include "common.h"
@@ -110,11 +109,6 @@ static bool can_powermgmt_predicate(const void *state)
 
 	if (!device_is_ready(can_dev)) {
 		TC_PRINT("CAN device not ready");
-		return false;
-	}
-
-	if (pm_device_runtime_is_enabled(can_dev)) {
-		TC_PRINT("CAN device uses runtime device power management");
 		return false;
 	}
 
