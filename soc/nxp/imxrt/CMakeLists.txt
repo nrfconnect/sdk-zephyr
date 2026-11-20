@@ -1,11 +1,11 @@
 # Copyright 2024 NXP
 # SPDX-License-Identifier: Apache-2.0
 
-add_subdirectory(${SOC_SERIES})
+add_subdirectory(${CONFIG_SOC_SERIES})
 
 zephyr_include_directories(.)
 zephyr_include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../common)
-zephyr_include_directories(${SOC_SERIES})
+zephyr_include_directories(${CONFIG_SOC_SERIES})
 
 zephyr_linker_sources_ifdef(CONFIG_NXP_IMXRT_BOOT_HEADER
   ROM_START SORT_KEY 0 boot_header.ld)
@@ -17,7 +17,13 @@ if(CONFIG_SOC_SERIES_IMXRT10XX OR CONFIG_SOC_SERIES_IMXRT11XX)
   if(CONFIG_EXTERNAL_MEM_CONFIG_DATA)
     set(boot_hdr_xmcd_data_section ".boot_hdr.xmcd_data")
   endif()
-  zephyr_sources_ifdef(CONFIG_ARM_MPU mpu_regions.c)
+  # Boards that provide their own comprehensive MPU region table (see
+  # CONFIG_BOARD_NXP_SPECIFIC_MPU_SETTINGS) source it themselves; skip the
+  # generic fallback for those targets to avoid a duplicate mpu_config
+  # definition.
+  if(CONFIG_ARM_MPU AND NOT CONFIG_BOARD_NXP_SPECIFIC_MPU_SETTINGS)
+    zephyr_sources(mpu_regions.c)
+  endif()
   zephyr_linker_section_configure(
     SECTION .rom_start
     INPUT ".boot_hdr.conf"

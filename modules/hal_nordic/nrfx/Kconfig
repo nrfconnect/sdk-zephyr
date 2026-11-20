@@ -55,34 +55,31 @@ if NRFX_CLOCK_LFCLK
 if CLOCK_CONTROL_NRF
 
 config NRFX_CLOCK_LF_CAL_ENABLED
-	bool "LFRC Calibration enabled"
+	bool "LFRC Calibration [DEPRECATED]"
 	select DEPRECATED
 
 config NRFX_CLOCK_LF_SRC_RC
-	bool "RC Oscillator"
+	bool "RC Oscillator [DEPRECATED]"
 	select DEPRECATED
 
 config NRFX_CLOCK_LF_SRC_XTAL
-	bool "Crystal Oscillator"
+	bool "Crystal Oscillator [DEPRECATED]"
 	select DEPRECATED
 
 config NRFX_CLOCK_LF_SRC_SYNTH
-	depends on !SOC_SERIES_NRF91X
-	bool "Synthesized from HFCLK"
+	bool "Synthesized from HFCLK [DEPRECATED]"
 	select DEPRECATED
 
 config NRFX_CLOCK_LF_SRC_LOW_SWING
-	depends on SOC_SERIES_NRF52X
-	bool "External low swing"
+	bool "External low swing [DEPRECATED]"
 	select DEPRECATED
 
 config NRFX_CLOCK_LF_SRC_FULL_SWING
-	depends on SOC_SERIES_NRF52X
-	bool "External full swing"
+	bool "External full swing [DEPRECATED]"
 	select DEPRECATED
 
 config NRFX_CLOCK_LFXO_TWO_STAGE_ENABLED
-	bool "Two stage start sequence of the low frequency clock"
+	bool "Two stage start sequence of the low frequency clock [DEPRECATED]"
 	select DEPRECATED
 
 endif # CLOCK_CONTROL_NRF

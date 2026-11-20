@@ -41,9 +41,12 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #include <zephyr/net/ieee802154_radio.h>
 #include <zephyr/irq.h>
 
+#include <zephyr/pm/policy.h>
+
 #include "ieee802154_esp32.h"
 #include <esp_ieee802154.h>
 #include <esp_ieee802154_dev.h>
+#include <esp_timer.h>
 #include <esp_mac.h>
 
 #define IEEE802154_ESP32_TX_TIMEOUT_MS (100)
@@ -56,8 +59,75 @@ struct ieee802154_esp32_rx_msg {
 
 static struct ieee802154_esp32_data esp32_data;
 
-K_MSGQ_DEFINE(ieee802154_esp32_rx_msgq, sizeof(struct ieee802154_esp32_rx_msg),
-	      CONFIG_IEEE802154_ESP32_RX_BUFFER_SIZE, 4);
+#if defined(CONFIG_IEEE802154_ESP32_SLEEP_ENABLE)
+static void esp32_ieee802154_pm_policy_state_lock_get(const struct device *dev)
+{
+	struct ieee802154_esp32_data *data = dev->data;
+	unsigned int key = irq_lock();
+
+	if (!data->pm_lock_held) {
+		data->pm_lock_held = true;
+		pm_policy_state_all_lock_get();
+	}
+
+	irq_unlock(key);
+}
+
+static void esp32_ieee802154_pm_policy_state_lock_put(const struct device *dev)
+{
+	struct ieee802154_esp32_data *data = dev->data;
+	unsigned int key = irq_lock();
+
+	if (data->pm_lock_held) {
+		data->pm_lock_held = false;
+		pm_policy_state_all_lock_put();
+	}
+
+	irq_unlock(key);
+}
+
+static void esp32_ieee802154_pm_policy_update(const struct device *dev)
+{
+	struct ieee802154_esp32_data *data = dev->data;
+
+	/* Hold the PM lock while OpenThread is not attached. */
+	if (data->iface != NULL && net_if_is_dormant(data->iface)) {
+		esp32_ieee802154_pm_policy_state_lock_get(dev);
+		(void)k_work_cancel_delayable(&data->pm_work);
+		return;
+	}
+
+	if (esp_ieee802154_get_state() == ESP_IEEE802154_RADIO_SLEEP) {
+		esp32_ieee802154_pm_policy_state_lock_put(dev);
+		(void)k_work_cancel_delayable(&data->pm_work);
+	} else {
+		esp32_ieee802154_pm_policy_state_lock_get(dev);
+	}
+}
+
+/*
+ * HAL may call ieee802154_sleep() from next_operation() at the end of the MAC
+ * ISR, after receive_done / transmit_done return. Defer the lock update to
+ * thread context so esp_ieee802154_get_state() reflects the final state.
+ */
+static void esp32_ieee802154_pm_schedule_update(void)
+{
+	if (!k_work_delayable_is_pending(&esp32_data.pm_work)) {
+		(void)k_work_schedule(&esp32_data.pm_work, K_NO_WAIT);
+	}
+}
+
+static void esp32_ieee802154_pm_work_handler(struct k_work *work)
+{
+	ARG_UNUSED(work);
+
+	esp32_ieee802154_pm_policy_update(DEVICE_DT_INST_GET(0));
+}
+
+#endif /* CONFIG_IEEE802154_ESP32_SLEEP_ENABLE */
+
+K_MSGQ_DEFINE_STATIC_TYPE(ieee802154_esp32_rx_msgq, struct ieee802154_esp32_rx_msg,
+			  CONFIG_IEEE802154_ESP32_RX_BUFFER_SIZE);
 
 static void ieee802154_esp32_rx_deliver(const struct ieee802154_esp32_rx_msg *rx)
 {
@@ -79,6 +149,14 @@ static void ieee802154_esp32_rx_deliver(const struct ieee802154_esp32_rx_msg *rx
 	 * the end of a valid frame is replaced with RSSI and LQI values.
 	 * Zephyr L2 expects only valid frames, so checksum is not needed for a re-check.
 	 */
+	/* raw[0] is the PHR; reject a length that cannot hold the FCS before
+	 * subtracting it.
+	 */
+	if (raw[0] < IEEE802154_FCS_LENGTH) {
+		LOG_ERR("Invalid frame length %u", raw[0]);
+		return;
+	}
+
 	if (IS_ENABLED(CONFIG_IEEE802154_L2_PKT_INCL_FCS)) {
 		len = raw[0];
 	} else {
@@ -86,7 +164,10 @@ static void ieee802154_esp32_rx_deliver(const struct ieee802154_esp32_rx_msg *rx
 	}
 
 #ifdef CONFIG_NET_BUF_DATA_SIZE
-	__ASSERT_NO_MSG(len <= CONFIG_NET_BUF_DATA_SIZE);
+	if (len > CONFIG_NET_BUF_DATA_SIZE) {
+		LOG_ERR("Frame too long: %u", len);
+		return;
+	}
 #endif
 
 	payload = raw + 1;
@@ -109,6 +190,9 @@ static void ieee802154_esp32_rx_deliver(const struct ieee802154_esp32_rx_msg *rx
 	net_pkt_set_ieee802154_lqi(pkt, frame_info->lqi);
 	net_pkt_set_ieee802154_rssi_dbm(pkt, frame_info->rssi);
 	net_pkt_set_ieee802154_ack_fpb(pkt, frame_info->pending);
+#if defined(CONFIG_NET_PKT_TIMESTAMP)
+	net_pkt_set_timestamp_ns(pkt, frame_info->timestamp * NSEC_PER_USEC);
+#endif
 
 	err = net_recv_data(data->iface, pkt);
 	if (err != 0) {
@@ -154,6 +238,10 @@ void IRAM_ATTR esp_ieee802154_receive_done(uint8_t *frame, esp_ieee802154_frame_
 
 done:
 	esp_ieee802154_receive_handle_done(frame);
+
+#if defined(CONFIG_IEEE802154_ESP32_SLEEP_ENABLE)
+	esp32_ieee802154_pm_schedule_update();
+#endif
 }
 
 static enum ieee802154_hw_caps esp32_get_capabilities(const struct device *dev)
@@ -167,9 +255,22 @@ static enum ieee802154_hw_caps esp32_get_capabilities(const struct device *dev)
 	 * Not advertised until driver support is complete:
 	 * TXTIME, RXTIME (CSL), TX_SEC, RETRANSMISSION, SELECTIVE_TXCHANNEL.
 	 */
-	return IEEE802154_HW_FCS | IEEE802154_HW_FILTER | IEEE802154_HW_PROMISC |
-	       IEEE802154_HW_CSMA | IEEE802154_HW_TX_RX_ACK | IEEE802154_HW_RX_TX_ACK |
-	       IEEE802154_HW_ENERGY_SCAN | IEEE802154_RX_ON_WHEN_IDLE;
+	enum ieee802154_hw_caps caps = IEEE802154_HW_FCS | IEEE802154_HW_FILTER |
+				       IEEE802154_HW_PROMISC | IEEE802154_HW_CSMA |
+				       IEEE802154_HW_TX_RX_ACK | IEEE802154_HW_RX_TX_ACK |
+				       IEEE802154_HW_ENERGY_SCAN;
+
+	/*
+	 * Do not advertise Rx-on-when-idle when 802.15.4 light sleep is on.
+	 * That capability lets the radio interrupt turn the receiver on or off
+	 * after each frame, and that switching prevents a reliable attach.
+	 * Omitting it leaves Sleep/Receive to OpenThread.
+	 */
+	if (!IS_ENABLED(CONFIG_IEEE802154_ESP32_SLEEP_ENABLE)) {
+		caps |= IEEE802154_RX_ON_WHEN_IDLE;
+	}
+
+	return caps;
 }
 
 /* override weak function in components/ieee802154/esp_ieee802154.c of ESP-IDF */
@@ -184,18 +285,32 @@ static int esp32_cca(const struct device *dev)
 	struct ieee802154_esp32_data *data = dev->data;
 	int err;
 
+#if defined(CONFIG_IEEE802154_ESP32_SLEEP_ENABLE)
+	esp32_ieee802154_pm_policy_state_lock_get(dev);
+#endif
+
 	if (ieee802154_cca() != 0) {
 		LOG_DBG("CCA failed");
+#if defined(CONFIG_IEEE802154_ESP32_SLEEP_ENABLE)
+		esp32_ieee802154_pm_policy_update(dev);
+#endif
 		return -EBUSY;
 	}
 
 	err = k_sem_take(&data->cca_wait, K_MSEC(1000));
 	if (err == -EAGAIN) {
 		LOG_DBG("CCA timed out");
+#if defined(CONFIG_IEEE802154_ESP32_SLEEP_ENABLE)
+		esp32_ieee802154_pm_policy_update(dev);
+#endif
 		return -EIO;
 	}
 
 	LOG_DBG("Channel free? %d", data->channel_free);
+
+#if defined(CONFIG_IEEE802154_ESP32_SLEEP_ENABLE)
+	esp32_ieee802154_pm_policy_update(dev);
+#endif
 
 	return data->channel_free ? 0 : -EBUSY;
 }
@@ -305,7 +420,7 @@ static int handle_ack(struct ieee802154_esp32_data *data)
 	net_pkt_set_ieee802154_rssi_dbm(ack_pkt, data->ack_frame_info->rssi);
 
 #if defined(CONFIG_NET_PKT_TIMESTAMP)
-	net_pkt_set_timestamp_ns(ack_pkt, data->ack_frame_info->time * NSEC_PER_USEC);
+	net_pkt_set_timestamp_ns(ack_pkt, data->ack_frame_info->timestamp * NSEC_PER_USEC);
 #endif
 
 	net_pkt_cursor_init(ack_pkt);
@@ -320,6 +435,7 @@ free_net_ack:
 free_esp_ack:
 	esp_ieee802154_receive_handle_done(data->ack_frame);
 	data->ack_frame = NULL;
+	data->ack_frame_info = NULL;
 
 	return err;
 }
@@ -330,14 +446,25 @@ void IRAM_ATTR esp_ieee802154_transmit_done(const uint8_t *tx_frame, const uint8
 {
 	esp32_data.ack_frame = ack_frame;
 	esp32_data.ack_frame_info = ack_frame_info;
+	esp32_data.tx_error = ESP_IEEE802154_TX_ERR_NONE;
 
 	k_sem_give(&esp32_data.tx_wait);
+
+#if defined(CONFIG_IEEE802154_ESP32_SLEEP_ENABLE)
+	esp32_ieee802154_pm_schedule_update();
+#endif
 }
 
 /* override weak function in components/ieee802154/esp_ieee802154.c of ESP-IDF */
 void IRAM_ATTR esp_ieee802154_transmit_failed(const uint8_t *frame, esp_ieee802154_tx_error_t error)
 {
+	esp32_data.tx_error = error;
+
 	k_sem_give(&esp32_data.tx_wait);
+
+#if defined(CONFIG_IEEE802154_ESP32_SLEEP_ENABLE)
+	esp32_ieee802154_pm_schedule_update();
+#endif
 }
 
 static int esp32_tx(const struct device *dev, enum ieee802154_tx_mode tx_mode, struct net_pkt *pkt,
@@ -360,6 +487,18 @@ static int esp32_tx(const struct device *dev, enum ieee802154_tx_mode tx_mode, s
 	memcpy(data->tx_psdu + 1, payload, payload_len);
 
 	k_sem_reset(&data->tx_wait);
+	data->tx_error = ESP_IEEE802154_TX_ERR_NONE;
+
+#if defined(CONFIG_IEEE802154_ESP32_SLEEP_ENABLE)
+	esp32_ieee802154_pm_policy_state_lock_get(dev);
+#endif
+
+	/* Start from a clean state: a transmission that times out never reaches
+	 * handle_ack(), so pointers from the previous transmission would
+	 * otherwise stay live and be released a second time.
+	 */
+	data->ack_frame = NULL;
+	data->ack_frame_info = NULL;
 
 	switch (tx_mode) {
 	case IEEE802154_TX_MODE_DIRECT:
@@ -392,25 +531,64 @@ static int esp32_tx(const struct device *dev, enum ieee802154_tx_mode tx_mode, s
 		break;
 	default:
 		LOG_ERR("TX mode %d not supported", tx_mode);
-		return -ENOTSUP;
+		err = -ENOTSUP;
+		goto done;
+	}
+
+	if (err != 0) {
+		LOG_ERR("TX start failed: %d", err);
+		err = -EIO;
+		goto done;
 	}
 
 	err = k_sem_take(&data->tx_wait, K_MSEC(IEEE802154_ESP32_TX_TIMEOUT_MS));
-
 	if (err != 0) {
 		LOG_ERR("TX timeout");
-	} else {
+		err = -EIO;
+		goto done;
+	}
+
+	switch (data->tx_error) {
+	case ESP_IEEE802154_TX_ERR_NONE:
+		err = 0;
+		break;
+	case ESP_IEEE802154_TX_ERR_CCA_BUSY:
+	case ESP_IEEE802154_TX_ERR_COEXIST:
+		err = -EBUSY;
+		break;
+	case ESP_IEEE802154_TX_ERR_NO_ACK:
+	case ESP_IEEE802154_TX_ERR_INVALID_ACK:
+		err = -ENOMSG;
+		break;
+	case ESP_IEEE802154_TX_ERR_SECURITY:
+		err = -EINVAL;
+		break;
+	default:
+		err = -EIO;
+		break;
+	}
+
+	if (err == 0) {
 		handle_ack(data);
 	}
 
-	return err == 0 ? 0 : -EIO;
+done:
+#if defined(CONFIG_IEEE802154_ESP32_SLEEP_ENABLE)
+	esp32_ieee802154_pm_policy_update(dev);
+#endif
+
+	return err;
 }
 
 static int esp32_start(const struct device *dev)
 {
-	ARG_UNUSED(dev);
+	int err = esp_ieee802154_receive();
 
-	if (esp_ieee802154_receive() != 0) {
+#if defined(CONFIG_IEEE802154_ESP32_SLEEP_ENABLE)
+	esp32_ieee802154_pm_policy_update(dev);
+#endif
+
+	if (err != 0) {
 		LOG_ERR("Failed to start radio");
 		return -EIO;
 	}
@@ -420,9 +598,13 @@ static int esp32_start(const struct device *dev)
 
 static int esp32_stop(const struct device *dev)
 {
-	ARG_UNUSED(dev);
+	int err = esp_ieee802154_sleep();
 
-	if (esp_ieee802154_sleep() != 0) {
+#if defined(CONFIG_IEEE802154_ESP32_SLEEP_ENABLE)
+	esp32_ieee802154_pm_policy_update(dev);
+#endif
+
+	if (err != 0) {
 		LOG_ERR("Failed to stop radio");
 		return -EIO;
 	}
@@ -430,49 +612,74 @@ static int esp32_stop(const struct device *dev)
 	return 0;
 }
 
-/* override weak function in components/ieee802154/esp_ieee802154.c of ESP-IDF */
+static net_time_t esp32_get_time(const struct device *dev)
+{
+	ARG_UNUSED(dev);
+
+	return (net_time_t)esp_timer_get_time() * NSEC_PER_USEC;
+}
+
+static void esp32_ed_scan_work_handler(struct k_work *work)
+{
+	energy_scan_done_cb_t callback = esp32_data.energy_scan_done;
+	int8_t power;
+
+	ARG_UNUSED(work);
+
+	if (callback == NULL) {
+		LOG_WRN("No callback available");
+	} else {
+		power = esp32_data.ed_scan_power;
+		esp32_data.energy_scan_done = NULL;
+		callback(net_if_get_device(esp32_data.iface), power);
+	}
+
+#if defined(CONFIG_IEEE802154_ESP32_SLEEP_ENABLE)
+	esp32_ieee802154_pm_policy_update(DEVICE_DT_INST_GET(0));
+#endif
+}
+
+/* Override weak function in components/ieee802154/esp_ieee802154.c of ESP-IDF */
 void IRAM_ATTR esp_ieee802154_energy_detect_done(int8_t power)
 {
-	energy_scan_done_cb_t callback;
-	const struct device *dev;
-
 	if (esp32_data.energy_scan_done == NULL) {
 		return;
 	}
 
-	callback = esp32_data.energy_scan_done;
-	esp32_data.energy_scan_done = NULL;
-	dev = net_if_get_device(esp32_data.iface);
-	callback(dev, power);
+	/* Defer the user callback so the caller stays responsive. */
+	esp32_data.ed_scan_power = power;
+	k_work_submit(&esp32_data.ed_scan_work);
 }
 
 static int esp32_ed_scan(const struct device *dev, uint16_t duration, energy_scan_done_cb_t done_cb)
 {
-	ARG_UNUSED(dev);
-
-	int err = 0;
-
-	if (esp32_data.energy_scan_done == NULL) {
-		esp32_data.energy_scan_done = done_cb;
-
-		/* The duration of energy detection, in symbol unit (16 us) */
-		if (esp_ieee802154_energy_detect(duration * USEC_PER_MSEC / US_PER_SYMBOL) != 0) {
-			esp32_data.energy_scan_done = NULL;
-			err = -EBUSY;
-		}
-	} else {
-		err = -EALREADY;
+	if (esp32_data.energy_scan_done) {
+		return -EALREADY;
 	}
 
-	return err;
+	esp32_data.energy_scan_done = done_cb;
+
+#if defined(CONFIG_IEEE802154_ESP32_SLEEP_ENABLE)
+	esp32_ieee802154_pm_policy_state_lock_get(dev);
+#endif
+
+	/* Duration in symbol units (16 us); the channel noise floor is reported
+	 * asynchronously via esp_ieee802154_energy_detect_done().
+	 */
+	if (esp_ieee802154_energy_detect(duration * USEC_PER_MSEC / US_PER_SYMBOL) != 0) {
+		esp32_data.energy_scan_done = NULL;
+#if defined(CONFIG_IEEE802154_ESP32_SLEEP_ENABLE)
+		esp32_ieee802154_pm_policy_update(dev);
+#endif
+		return -EBUSY;
+	}
+
+	return 0;
 }
 
 static int esp32_configure(const struct device *dev, enum ieee802154_config_type type,
 			   const struct ieee802154_config *config)
 {
-	ARG_UNUSED(dev);
-	ARG_UNUSED(config);
-
 	switch (type) {
 	/* IEEE802154_CONFIG_ACK_FPB */
 	/* IEEE802154_CONFIG_EVENT_HANDLER */
@@ -485,6 +692,10 @@ static int esp32_configure(const struct device *dev, enum ieee802154_config_type
 	default:
 		return -ENOTSUP;
 	}
+
+#if defined(CONFIG_IEEE802154_ESP32_SLEEP_ENABLE)
+	esp32_ieee802154_pm_policy_update(dev);
+#endif
 
 	return 0;
 }
@@ -508,6 +719,10 @@ static int esp32_init(const struct device *dev)
 
 	k_sem_init(&data->cca_wait, 0, 1);
 	k_sem_init(&data->tx_wait, 0, 1);
+	k_work_init(&data->ed_scan_work, esp32_ed_scan_work_handler);
+#if defined(CONFIG_IEEE802154_ESP32_SLEEP_ENABLE)
+	k_work_init_delayable(&data->pm_work, esp32_ieee802154_pm_work_handler);
+#endif
 
 	if (esp_ieee802154_enable() != 0) {
 		LOG_ERR("IEEE 802154 enabling failed!");
@@ -536,11 +751,15 @@ static void esp32_iface_init(struct net_if *iface)
 	ieee802154_init(iface);
 
 	LOG_INF("Iface initialized");
+
+#if defined(CONFIG_IEEE802154_ESP32_SLEEP_ENABLE)
+	esp32_ieee802154_pm_policy_update(dev);
+#endif
 }
 
 static const struct ieee802154_radio_api esp32_radio_api = {
 	.iface_api.init = esp32_iface_init,
-
+	.get_time         = esp32_get_time,
 	.get_capabilities = esp32_get_capabilities,
 	.cca              = esp32_cca,
 	.set_channel      = esp32_set_channel,

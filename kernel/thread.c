@@ -14,13 +14,14 @@
 #include <zephyr/kernel.h>
 #include <zephyr/spinlock.h>
 #include <zephyr/sys/math_extras.h>
-#include <zephyr/sys_clock.h>
+#include <zephyr/sys/clock.h>
 #include <ksched.h>
 #include <kthread.h>
 #include <wait_q.h>
 #include <timeout_q.h>
 #include <zephyr/internal/syscall_handler.h>
 #include <kernel_internal.h>
+#include <ksmp.h>
 #include <kswap.h>
 #include <zephyr/init.h>
 #include <zephyr/tracing/tracing.h>
@@ -39,8 +40,6 @@
 LOG_MODULE_DECLARE(os, CONFIG_KERNEL_LOG_LEVEL);
 
 #ifdef CONFIG_OBJ_CORE_THREAD
-static struct k_obj_type  obj_type_thread;
-
 #ifdef CONFIG_OBJ_CORE_STATS_THREAD
 static struct k_obj_core_stats_desc  thread_stats_desc = {
 	.raw_size = sizeof(struct k_cycle_stats),
@@ -852,16 +851,6 @@ static inline void init_thread_deadline(struct k_thread *thread)
 #endif /* CONFIG_SCHED_DEADLINE */
 }
 
-/* Initialize the wait queue used to synchronize SMP thread halt/abort. */
-static inline void init_thread_halt_queue(struct k_thread *thread)
-{
-#ifdef CONFIG_SMP
-	z_waitq_init(&thread->halt_queue);
-#else
-	ARG_UNUSED(thread);
-#endif /* CONFIG_SMP */
-}
-
 /* Initialize runtime CPU-usage tracking for the thread. */
 static inline void init_thread_usage(struct k_thread *thread)
 {
@@ -871,6 +860,30 @@ static inline void init_thread_usage(struct k_thread *thread)
 #else
 	ARG_UNUSED(thread);
 #endif /* CONFIG_SCHED_THREAD_USAGE */
+}
+
+/* Assert the thread wasn't already linked into the monitor list. */
+static inline void assert_thread_not_reused(struct k_thread *new_thread)
+{
+#ifdef CONFIG_THREAD_MONITOR
+#ifdef CONFIG_ASSERT
+	k_spinlock_key_t key = k_spin_lock(&z_thread_monitor_lock);
+	bool reused = false;
+
+	/* Check if the thread is already in the list */
+	for (struct k_thread *t = _kernel.threads; t; t = t->next_thread) {
+		if (t == new_thread) {
+			reused = true;
+			break;
+		}
+	}
+
+	k_spin_unlock(&z_thread_monitor_lock, key);
+
+	__ASSERT(!reused, "thread %p is already in the running list", new_thread);
+#endif /* CONFIG_ASSERT */
+#endif /* CONFIG_THREAD_MONITOR */
+	ARG_UNUSED(new_thread);
 }
 
 /*
@@ -887,6 +900,8 @@ char *z_setup_new_thread(struct k_thread *new_thread,
 	char *stack_ptr;
 
 	Z_ASSERT_VALID_PRIO(prio, entry);
+
+	assert_thread_not_reused(new_thread);
 
 	thread_abort_cleanup_check_reuse(new_thread);
 	init_thread_obj_core(new_thread);
@@ -928,7 +943,7 @@ char *z_setup_new_thread(struct k_thread *new_thread,
 	init_thread_userspace_perms(new_thread, options);
 	init_thread_deadline(new_thread);
 	new_thread->resource_pool = _current->resource_pool;
-	init_thread_halt_queue(new_thread);
+	z_smp_halt_queue_init(new_thread);
 	init_thread_usage(new_thread);
 
 	SYS_PORT_TRACING_OBJ_FUNC(k_thread, create, new_thread);
@@ -1010,9 +1025,7 @@ k_tid_t z_impl_k_thread_create(struct k_thread *new_thread,
 	z_setup_new_thread(new_thread, stack, stack_size, entry, p1, p2, p3,
 			  prio, options, NULL);
 
-	if (!K_TIMEOUT_EQ(delay, K_FOREVER)) {
-		thread_schedule_new(new_thread, delay);
-	}
+	thread_schedule_new(new_thread, delay);
 
 	return new_thread;
 }
@@ -1081,9 +1094,7 @@ k_tid_t z_vrfy_k_thread_create(struct k_thread *new_thread,
 	z_setup_new_thread(new_thread, stack, stack_size,
 			   entry, p1, p2, p3, prio, options, NULL);
 
-	if (!K_TIMEOUT_EQ(delay, K_FOREVER)) {
-		thread_schedule_new(new_thread, delay);
-	}
+	thread_schedule_new(new_thread, delay);
 
 	return new_thread;
 }
@@ -1102,22 +1113,17 @@ void z_init_thread_base(struct _thread_base *thread_base, int priority,
 
 	thread_base->sched_locked = 0U;
 
-#ifdef CONFIG_SMP
-	thread_base->is_idle = 0;
-
-	/*
-	 * Pretend that the thread was last executing on CPU0 to prevent
-	 * out-of-bounds memory accesses to the _kernel.cpus[] array.
-	 */
-	thread_base->cpu = 0;
-#endif /* CONFIG_SMP */
+	z_smp_thread_base_init(thread_base);
 
 #ifdef CONFIG_TIMESLICE_PER_THREAD
 	thread_base->slice_ticks = 0;
 	thread_base->slice_expired = NULL;
 #endif /* CONFIG_TIMESLICE_PER_THREAD */
 
-	/* swap_data does not need to be initialized */
+#ifdef CONFIG_SPIN_VALIDATE
+	thread_base->swap_data = NULL;
+	/* otherwise swap_data does not need to be initialized */
+#endif
 
 	z_init_thread_timeout(thread_base);
 }
@@ -1405,7 +1411,7 @@ int k_thread_runtime_stats_all_get(k_thread_runtime_stats_t *stats)
 
 	unsigned int num_cpus = arch_num_cpus();
 
-	for (uint8_t i = 0; i < num_cpus; i++) {
+	for (unsigned int i = 0; i < num_cpus; i++) {
 		z_sched_cpu_usage(i, &tmp_stats);
 
 		stats->execution_cycles += tmp_stats.execution_cycles;
@@ -1431,13 +1437,13 @@ int k_thread_runtime_stats_cpu_get(int cpu, k_thread_runtime_stats_t *stats)
 	*stats = (k_thread_runtime_stats_t) {};
 
 #ifdef CONFIG_SCHED_THREAD_USAGE_ALL
-#ifdef CONFIG_SMP
+	CHECKIF((cpu < 0) || ((unsigned int)cpu >= arch_num_cpus())) {
+		return -EINVAL;
+	}
+
 	z_sched_cpu_usage(cpu, stats);
 #else
-	__ASSERT(cpu == 0, "cpu filter out of bounds");
 	ARG_UNUSED(cpu);
-	z_sched_cpu_usage(0, stats);
-#endif
 #endif
 
 	return 0;
@@ -1664,7 +1670,8 @@ void z_impl_k_thread_suspend(k_tid_t thread)
 	/* Special case "suspend the current thread" as it doesn't
 	 * need the async complexity below.
 	 */
-	if (!IS_ENABLED(CONFIG_SMP) && (thread == _current) && !arch_is_in_isr()) {
+	if (!IS_ENABLED(CONFIG_SMP) &&
+	    likely((thread == _current) && !arch_is_in_isr())) {
 		z_thread_suspend_current(thread);
 		return;
 	}
@@ -1697,18 +1704,18 @@ void z_impl_k_thread_resume(k_tid_t thread)
 {
 	SYS_PORT_TRACING_OBJ_FUNC_ENTER(k_thread, resume, thread);
 
-	k_spinlock_key_t key = k_spin_lock(&_sched_spinlock);
+	k_spinlock_key_t key = z_sched_spinlock_lock();
 
 	/* Do not try to resume a thread that was not suspended */
 	if (unlikely(!z_is_thread_suspended(thread))) {
-		k_spin_unlock(&_sched_spinlock, key);
+		z_sched_spinlock_unlock(key);
 		return;
 	}
 
 	z_mark_thread_as_not_suspended(thread);
 	z_sched_ready_locked(thread);
 
-	z_reschedule(&_sched_spinlock, key);
+	z_reschedule_locked(key);
 
 	SYS_PORT_TRACING_OBJ_FUNC_EXIT(k_thread, resume, thread);
 }
@@ -1726,15 +1733,15 @@ void z_impl_k_wakeup(k_tid_t thread)
 {
 	SYS_PORT_TRACING_OBJ_FUNC(k_thread, wakeup, thread);
 
-	k_spinlock_key_t key = k_spin_lock(&_sched_spinlock);
+	k_spinlock_key_t key = z_sched_spinlock_lock();
 
 	if (z_is_thread_sleeping(thread)) {
 		(void)z_try_abort_thread_timeout(thread);
 		z_mark_thread_as_not_sleeping(thread);
 		z_sched_ready_locked(thread);
-		z_reschedule(&_sched_spinlock, key);
+		z_reschedule_locked(key);
 	} else {
-		k_spin_unlock(&_sched_spinlock, key);
+		z_sched_spinlock_unlock(key);
 	}
 }
 
@@ -1780,7 +1787,7 @@ void z_impl_k_thread_abort(k_tid_t thread)
 
 int z_impl_k_thread_join(struct k_thread *thread, k_timeout_t timeout)
 {
-	k_spinlock_key_t key = k_spin_lock(&_sched_spinlock);
+	k_spinlock_key_t key = z_sched_spinlock_lock();
 	int ret;
 
 	SYS_PORT_TRACING_OBJ_FUNC_ENTER(k_thread, join, thread, timeout);
@@ -1799,7 +1806,7 @@ int z_impl_k_thread_join(struct k_thread *thread, k_timeout_t timeout)
 		z_add_thread_timeout(_current, timeout);
 
 		SYS_PORT_TRACING_OBJ_FUNC_BLOCKING(k_thread, join, thread, timeout);
-		ret = z_swap(&_sched_spinlock, key);
+		ret = z_swap_locked(key);
 		SYS_PORT_TRACING_OBJ_FUNC_EXIT(k_thread, join, thread, timeout, ret);
 
 		return ret;

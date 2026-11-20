@@ -13,20 +13,21 @@
 };
 
 &lpspi0 {
+
+	transfer-delay = <100>;
+	sck-pcs-delay = <10>;
+	pcs-sck-delay = <10>;
+	/* lower the controller interrupt priority so peripheral can interrupt */
+	interrupts = <28 1>;
+	label = "spi_controller";
+
 	dut_spi_dt: test-spi-dev@0 {
 		compatible = "vnd,spi-device";
 		reg = <0>;
 		spi-max-frequency = <10000000>;
 	};
-
-	transfer-delay = <100>;
-	sck-pcs-delay = <10>;
-	pcs-sck-delay = <10>;
-	/* lower the master interrupt priority so slave can interrupt */
-	interrupts = <28 1>;
-	label = "spi_master";
 };
 
 dut_spis: &lpspi1 {
-	label = "spi_slave";
+	label = "spi_peripheral";
 };

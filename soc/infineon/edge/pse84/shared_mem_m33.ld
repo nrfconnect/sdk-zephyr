@@ -1,11 +1,11 @@
 /*
- * SPDX-FileCopyrightText: <text>Copyright (c) 2026 Infineon Technologies AG,
- * or an affiliate of Infineon Technologies AG. All rights reserved.</text>
+ * SPDX-FileCopyrightText: Copyright (c) 2026 Infineon Technologies AG,
+ * SPDX-FileCopyrightText: or an affiliate of Infineon Technologies AG. All rights reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
-GROUP_START(SHARED_MEMORY_M33)
+GROUP_START(M33SHARED)
 
 	SECTION_PROLOGUE(.cy_sharedmem,(NOLOAD),)
 	{
@@ -14,6 +14,6 @@ GROUP_START(SHARED_MEMORY_M33)
 		KEEP(*(.cy_sharedmem))
 		. = ALIGN(4);
 		__public_ram_end__ = .;
-	} GROUP_LINK_IN(SHARED_MEMORY_M33)
+	} GROUP_LINK_IN(M33SHARED)
 
-GROUP_END(SHARED_MEMORY_M33)
+GROUP_END(M33SHARED)

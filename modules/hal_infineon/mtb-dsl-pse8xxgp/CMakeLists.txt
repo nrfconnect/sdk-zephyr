@@ -1,5 +1,5 @@
-# SPDX-FileCopyrightText: <text>Copyright (c) 2026 Infineon Technologies AG,
-# or an affiliate of Infineon Technologies AG. All rights reserved.</text>
+# SPDX-FileCopyrightText: Copyright (c) 2026 Infineon Technologies AG,
+# SPDX-FileCopyrightText: or an affiliate of Infineon Technologies AG. All rights reserved.
 #
 # SPDX-License-Identifier: Apache-2.0
 
@@ -28,13 +28,14 @@ zephyr_include_directories(${pdl_dev_edge_dir}/include)
 zephyr_include_directories(${pdl_dev_edge_dir}/include/ip)
 zephyr_library_sources(${pdl_dev_edge_dir}/source/cy_device.c)
 
-if(${ZEPHYR_TOOLCHAIN_VARIANT} STREQUAL "armclang")
-  zephyr_library_sources(${pdl_drv_dir}/source/TOOLCHAIN_ARM/cy_syslib_ext.S)
-  zephyr_code_relocate(FILES ${pdl_drv_dir}/source/TOOLCHAIN_ARM/cy_syslib_ext.S LOCATION ${sram_code})
-else()
-  zephyr_library_sources(${pdl_drv_dir}/source/TOOLCHAIN_GCC_ARM/cy_syslib_ext.S)
-  zephyr_code_relocate(FILES ${pdl_drv_dir}/source/TOOLCHAIN_GCC_ARM/cy_syslib_ext.S LOCATION ${sram_code})
-endif()
+# The PDL's cy_syslib_ext.S (SysLib routines that must run from RAM) emits a single ".text"
+# section that zephyr_code_relocate() cannot capture. Additionally, the PDL holds copies
+# for each supported toolchain that are discovered through MTB's own build system.
+# Maintain a Zephyr copy with per-symbol .text.<fn> sections instead and relocate it into
+# the SRAM code region.
+zephyr_library_sources(${CMAKE_CURRENT_SOURCE_DIR}/cy_syslib_ext.S)
+zephyr_code_relocate(FILES ${CMAKE_CURRENT_SOURCE_DIR}/cy_syslib_ext.S LOCATION ${sram_code})
+
 
 # Peripheral drivers
 zephyr_library_sources_ifdef(CONFIG_USE_INFINEON_I2C ${pdl_drv_dir}/source/cy_scb_i2c.c)
@@ -57,11 +58,24 @@ endif()
 
 zephyr_library_sources_ifdef(CONFIG_USE_INFINEON_LPCOMP ${pdl_drv_dir}/source/cy_lpcomp.c)
 
-if(CONFIG_USE_INFINEON_TRNG)
+if(CONFIG_USE_INFINEON_MXCRYPTO_CORE)
   zephyr_library_sources(${pdl_drv_dir}/source/cy_crypto.c)
-  zephyr_library_sources(${pdl_drv_dir}/source/cy_crypto_core_trng_v1.c)
-  zephyr_library_sources(${pdl_drv_dir}/source/cy_crypto_core_trng_v2.c)
+  zephyr_library_sources(${pdl_drv_dir}/source/cy_crypto_core_hw.c)
+  zephyr_library_sources(${pdl_drv_dir}/source/cy_crypto_core_hw_v1.c)
+  zephyr_library_sources(${pdl_drv_dir}/source/cy_crypto_utils.c)
+  zephyr_library_sources(${pdl_drv_dir}/source/cy_crypto_core_mem_v2.c)
 endif()
+
+if(CONFIG_USE_INFINEON_MXCRYPTO_AES)
+  zephyr_library_sources(${pdl_drv_dir}/source/cy_crypto_core_aes_v2.c)
+  zephyr_library_sources(${pdl_drv_dir}/source/cy_crypto_core_cmac_v2.c)
+endif()
+
+if(CONFIG_USE_INFINEON_MXCRYPTO_SHA)
+  zephyr_library_sources(${pdl_drv_dir}/source/cy_crypto_core_sha_v2.c)
+endif()
+
+zephyr_library_sources_ifdef(CONFIG_USE_INFINEON_MXCRYPTO_TRNG ${pdl_drv_dir}/source/cy_crypto_core_trng.c)
 
 if(CONFIG_USE_INFINEON_UART OR CONFIG_USE_INFINEON_I2C OR CONFIG_USE_INFINEON_SPI)
   zephyr_library_sources(${pdl_drv_dir}/source/cy_scb_common.c)

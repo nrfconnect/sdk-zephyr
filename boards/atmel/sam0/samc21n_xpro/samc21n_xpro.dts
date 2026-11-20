@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2022 Kamil Serwus
  * # Copyright (c) 2024-2025 Gerson Fernando Budke <nandojve@gmail.com>
+ * Copyright (c) 2026 Microchip Technology Inc.
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -13,8 +14,8 @@
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 
 / {
-	model = "SAM C21N Xplained Pro";
 	compatible = "samc21n,xpro", "atmel,samc21n18a", "atmel,samc21";
+	model = "SAM C21N Xplained Pro";
 
 	chosen {
 		zephyr,console = &sercom4;
@@ -65,9 +66,9 @@
 };
 
 &adc0 {
-	status = "okay";
 	pinctrl-0 = <&adc0_default>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &adc1 {
@@ -76,25 +77,24 @@
 };
 
 &tcc2 {
-	status = "okay";
 	compatible = "atmel,sam0-tcc-pwm";
 	prescaler = <256>;
 	#pwm-cells = <2>;
 
 	pinctrl-0 = <&pwm_default>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &rtc {
-	status = "okay";
 	counter-mode = "clock";
 	prescaler = <1024>;
 
 	atmel,assigned-clocks = <&osc32kctrl 4>;
+	status = "okay";
 };
 
 &sercom0 {
-	status = "okay";
 	compatible = "atmel,sam0-uart";
 	current-speed = <9600>;
 	rxpo = <1>;
@@ -102,10 +102,10 @@
 
 	pinctrl-0 = <&sercom0_uart_default>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &sercom1 {
-	status = "okay";
 	compatible = "atmel,sam0-i2c";
 	clock-frequency = <I2C_BITRATE_FAST>;
 	#address-cells = <1>;
@@ -113,10 +113,10 @@
 
 	pinctrl-0 = <&sercom1_i2c_default>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &sercom2 {
-	status = "okay";
 	compatible = "atmel,sam0-uart";
 	current-speed = <115200>;
 	rxpo = <1>;
@@ -124,10 +124,10 @@
 
 	pinctrl-0 = <&sercom2_uart_default>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &sercom4 {
-	status = "okay";
 	compatible = "atmel,sam0-uart";
 	current-speed = <115200>;
 	rxpo = <3>;
@@ -135,10 +135,10 @@
 
 	pinctrl-0 = <&sercom4_uart_default>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &sercom5 {
-	status = "okay";
 	compatible = "atmel,sam0-spi";
 	dipo = <0>;
 	dopo = <2>;
@@ -147,11 +147,12 @@
 
 	pinctrl-0 = <&sercom5_spi_default>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &flash0 {
 	partitions {
-		compatible = "fixed-partitions";
+		ranges;
 		#address-cells = <1>;
 		#size-cells = <1>;
 
@@ -161,17 +162,18 @@
 		 * if enabled.
 		 */
 		storage_partition: partition@3c000 {
-			label = "storage";
+			compatible = "zephyr,mapped-partition";
 			reg = <0x0003c000 0x00004000>;
+			label = "storage";
 		};
 	};
 };
 
 &can0 {
-	status = "okay";
 
 	pinctrl-0 = <&can0_default>;
 	pinctrl-names = "default";
+	status = "okay";
 
 	can-transceiver {
 		max-bitrate = <5000000>;

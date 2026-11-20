@@ -80,9 +80,6 @@ static enum ethernet_hw_caps e1000_caps(const struct device *dev, struct net_if 
 #if defined(CONFIG_NET_VLAN)
 		ETHERNET_HW_VLAN |
 #endif
-#if defined(CONFIG_ETH_E1000_PTP_CLOCK)
-		ETHERNET_PTP |
-#endif
 		ETHERNET_LINK_10BASE | ETHERNET_LINK_100BASE |
 		ETHERNET_LINK_1000BASE |
 		/* The driver does not really support TXTIME atm but mark
@@ -329,7 +326,8 @@ static const struct ethernet_api e1000_api = {
 									\
 		irq_enable(DT_INST_IRQN(inst));				\
 		iow32(dev, CTRL, CTRL_SLU); /* Set link up */		\
-		iow32(dev, RCTL, RCTL_EN | RCTL_MPE | DT_INST_PROP(inst, rdmts) << RDMTS_OFFSET); \
+		iow32(dev, RCTL, RCTL_EN | RCTL_MPE | RCTL_BAM |		\
+		      DT_INST_PROP(inst, rdmts) << RDMTS_OFFSET);	\
 		iow32(dev, ITR, DT_INST_PROP(inst, itr) & (uint32_t)GENMASK(15, 0)); \
 	}								\
 									\

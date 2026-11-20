@@ -14,6 +14,7 @@
 #include <zephyr/drivers/pinctrl.h>
 #include <zephyr/drivers/clock_control.h>
 #include <zephyr/pm/device.h>
+#include <zephyr/pm/device_runtime.h>
 #include <zephyr/types.h>
 #include "sl_si91x_pwm.h"
 
@@ -121,24 +122,28 @@ static int pwm_siwx91x_set_cycles(const struct device *dev, uint32_t channel,
 		return -ENOTSUP;
 	}
 
-	if (data->pwm_channel_cfg[channel].is_chan_active == false) {
+	if (pulse_cycles > 0 && !data->pwm_channel_cfg[channel].is_chan_active) {
+		pm_device_runtime_get(dev);
+	}
+
+	if (!data->pwm_channel_cfg[channel].is_chan_active) {
 		/* Configure the channel with default parameters */
 		ret = siwx91x_default_channel_config(dev, channel);
 		if (ret) {
-			return -EINVAL;
+			goto out;
 		}
 	}
 
 	ret = sl_si91x_pwm_get_time_period(channel, (uint16_t *)&prev_period);
 	if (ret) {
-		return -EINVAL;
+		goto out;
 	}
 
 	if (period_cycles != prev_period) {
 		ret = sl_si91x_pwm_set_time_period(channel, period_cycles, 0);
 		if (ret) {
 			/* Programmed value must be out of range (>65535) */
-			return -EINVAL;
+			goto out;
 		}
 	}
 
@@ -149,21 +154,31 @@ static int pwm_siwx91x_set_cycles(const struct device *dev, uint32_t channel,
 	if (duty_cycle != data->pwm_channel_cfg[channel].duty_cycle) {
 		ret = sl_si91x_pwm_set_duty_cycle(pulse_cycles, channel);
 		if (ret) {
-			return -EINVAL;
+			goto out;
 		}
 		data->pwm_channel_cfg[channel].duty_cycle = duty_cycle;
 	}
 
-	if (data->pwm_channel_cfg[channel].is_chan_active == false) {
+	if (!data->pwm_channel_cfg[channel].is_chan_active) {
 		/* Start PWM after configuring the channel for first time */
 		ret = sl_si91x_pwm_start(channel);
 		if (ret) {
-			return -EINVAL;
+			goto out;
 		}
 		data->pwm_channel_cfg[channel].is_chan_active = true;
 	}
 
+	if (pulse_cycles == 0 && data->pwm_channel_cfg[channel].is_chan_active) {
+		pm_device_runtime_put(dev);
+		data->pwm_channel_cfg[channel].is_chan_active = false;
+	}
+
 	return 0;
+
+out:
+	pm_device_runtime_put(dev);
+	data->pwm_channel_cfg[channel].is_chan_active = false;
+	return -EINVAL;
 }
 
 static int pwm_siwx91x_get_cycles_per_sec(const struct device *dev, uint32_t channel,
@@ -195,7 +210,7 @@ static int pwm_siwx91x_pm_action(const struct device *dev, enum pm_device_action
 		break;
 	case PM_DEVICE_ACTION_TURN_ON:
 		ret = clock_control_on(config->clock_dev, config->clock_subsys);
-		if (ret) {
+		if (ret != 0 && ret != -EALREADY) {
 			return ret;
 		}
 
@@ -244,7 +259,7 @@ static DEVICE_API(pwm, pwm_siwx91x_driver_api) = {
 	static struct pwm_siwx91x_data pwm_siwx91x_data_##inst;                                    \
 	static const struct pwm_siwx91x_config pwm_config_##inst = {                               \
 		.clock_dev = DEVICE_DT_GET(DT_INST_CLOCKS_CTLR(inst)),                             \
-		.clock_subsys = (clock_control_subsys_t)DT_INST_PHA(inst, clocks, clkid),          \
+		.clock_subsys = (clock_control_subsys_t)DT_INST_CLOCKS_CELL(inst, clkid),          \
 		.pcfg = PINCTRL_DT_INST_DEV_CONFIG_GET(inst),                                      \
 		.ch_prescaler = DT_INST_PROP(inst, silabs_ch_prescaler),                           \
 		.pwm_polarity = DT_INST_PROP(inst, silabs_pwm_polarity),                           \

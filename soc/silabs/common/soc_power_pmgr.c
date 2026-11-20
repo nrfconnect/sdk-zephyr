@@ -62,7 +62,7 @@ void pm_state_set(enum pm_state state, uint8_t substate_id)
 #endif
 	} else if (energy_mode != SL_POWER_MANAGER_EM0) {
 		/* Calling the tracing and hook functions provided in arch_cpu_idle(). */
-#if defined(CONFIG_TRACING)
+#if defined(CONFIG_SYS_IDLE_HOOKS)
 		sys_trace_idle();
 #endif
 #if CONFIG_ARM_ON_ENTER_CPU_IDLE_PREPARE_HOOK
@@ -98,7 +98,7 @@ bool sl_power_manager_is_ok_to_sleep(void)
 	return true;
 }
 
-#if !defined(CONFIG_SOC_SILABS_PM_LOW_INTERRUPT_LATENCY)
+#if !defined(CONFIG_SOC_VENDOR_SILABS_PM_LOW_INTERRUPT_LATENCY)
 /* This function is called by sl_power_manager_sleep() right after it was woken up from WFI. */
 void sli_power_manager_on_wakeup(void)
 {

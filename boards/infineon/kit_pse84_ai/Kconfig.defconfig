@@ -1,5 +1,5 @@
-# SPDX-FileCopyrightText: <text>Copyright (c) 2026 Infineon Technologies AG,
-# or an affiliate of Infineon Technologies AG. All rights reserved.</text>
+# SPDX-FileCopyrightText: Copyright (c) 2026 Infineon Technologies AG,
+# SPDX-FileCopyrightText: or an affiliate of Infineon Technologies AG. All rights reserved.
 #
 # SPDX-License-Identifier: Apache-2.0
 
@@ -7,6 +7,8 @@ if BOARD_KIT_PSE84_AI_PSE846GPS2DBZC4A_M55
 
 config CLOCK_CONTROL
 	default y if !PSOC_EDGE_M55_SRF_SUPPORT
+
+endif # BOARD_KIT_PSE84_AI_PSE846GPS2DBZC4A_M55
 
 if BT
 
@@ -41,7 +43,17 @@ config HEAP_MEM_POOL_ADD_SIZE_BOARD
 
 endif # WIFI
 
-endif # BOARD_KIT_PSE84_AI_PSE846GPS2DBZC4A_M55
-
 config FLASH_FILL_BUFFER_SIZE
-	default 256 if FLASH
+	default 16 if FLASH
+
+# The extended boot of PSE84 validates a 0x400-byte MCUBoot-format header
+# at the start of the first image. ROM_START_OFFSET reserves space in the
+# ELF for imgtool to write the header into during signing. TF-M also reserves
+# the space at the beginning of the NSPE.
+#
+# In the sysbuild flow the CM33 image carries the ext-boot header and
+# enables the CM55, so the CM55 image itself is not signed and needs no
+# reserved header space.
+config ROM_START_OFFSET
+	default 0x0 if BOARD_KIT_PSE84_AI_PSE846GPS2DBZC4A_M55
+	default 0x400

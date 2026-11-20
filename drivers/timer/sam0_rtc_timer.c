@@ -22,7 +22,7 @@
 #include <zephyr/drivers/clock_control.h>
 #include <zephyr/drivers/timer/system_timer.h>
 #include <zephyr/drivers/pinctrl.h>
-#include <zephyr/sys_clock.h>
+#include <zephyr/sys/clock.h>
 #include <zephyr/irq.h>
 #include <zephyr/sys/util.h>
 
@@ -205,6 +205,12 @@ void sys_clock_set_timeout(uint32_t ticks, bool idle)
 
 #else /* !CONFIG_TICKLESS_KERNEL */
 
+	if (IS_ENABLED(CONFIG_SYSTEM_CLOCK_SLOPPY_IDLE) && ticks == SYS_CLOCK_MAX_WAIT) {
+		/* Disable comparator when the kernel has no pending timeout. */
+		rtc_timeout = rtc_counter;
+		return;
+	}
+
 	if (ticks < 1) {
 		ticks = 1;
 	}
@@ -316,7 +322,7 @@ static int sys_clock_driver_init(void)
 #endif
 
 	/* Enable RTC interrupt. */
-	NVIC_ClearPendingIRQ(DT_INST_IRQN(0));
+	k_irq_clear_pending(DT_INST_IRQN(0));
 	IRQ_CONNECT(DT_INST_IRQN(0),
 		    DT_INST_IRQ(0, priority), rtc_isr, 0, 0);
 	irq_enable(DT_INST_IRQN(0));

@@ -12,6 +12,11 @@ config EXTERNAL_MEM_CONFIG_DATA
 config NXP_IMX_EXTERNAL_SDRAM
 	default y if CPU_CORTEX_M7
 
+# The cm7 MPU region table fully covers all memory the firmware uses,
+# so enable the catch-all unmapped region (Cortex-M7 erratum 1013783).
+config ARM_MPU_CM7_UNMAPPED_REGION
+	default y if CPU_CORTEX_M7
+
 if SECOND_CORE_MCUX && CPU_CORTEX_M4
 
 config BUILD_OUTPUT_INFO_HEADER
@@ -21,8 +26,7 @@ DT_CHOSEN_IMAGE_M4 = nxp,m4-partition
 
 # Adjust the offset of the output image if building for RT11xx SOC
 config BUILD_OUTPUT_ADJUST_LMA
-	default "($(dt_chosen_reg_addr_hex,$(DT_CHOSEN_IMAGE_M4)) + \
-	$(dt_node_reg_addr_hex,/soc/spi@400cc000,1)) - \
+	default "$(dt_chosen_reg_addr_hex,$(DT_CHOSEN_IMAGE_M4)) - \
 	$(dt_node_reg_addr_hex,/soc/ocram@20200000)"
 
 endif
@@ -34,7 +38,7 @@ config IMX_USDHC_DAT3_PWR_TOGGLE
 
 endif # DISK_DRIVERS
 
-configdefault NET_L2_ETHERNET
+configdefault ETH_DRIVER
 	default y if DT_HAS_NXP_ENET_ENABLED
 
 endif

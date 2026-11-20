@@ -183,17 +183,21 @@ _idle_state_cleared:
 #endif /* !CONFIG_ARM_CUSTOM_INTERRUPT_CONTROLLER */
 	push {r0, r1}
 
+#ifdef CONFIG_ARM_TRACK_ACTIVE_IRQ
 	/*
-	 * Enable interrupts to allow nesting.
-	 *
-	 * Note that interrupts are disabled up to this point on the ARM
-	 * architecture variants other than the Cortex-M. It is also important
-	 * to note that most interrupt controllers require that the nested
-	 * interrupts are handled after the active interrupt is acknowledged;
-	 * this is be done through the `get_active` interrupt controller
-	 * interface function.
+	 * Publish the acknowledged INTID for arch_irq_get_active(). The value
+	 * is stored biased by one so that the zero-initialized boot state
+	 * reads as "no interrupt active" on every CPU. The previous value
+	 * and the CPU pointer are kept on the stack so the exit path
+	 * unwinds a nested interrupt to the preempted INTID and the
+	 * outermost exit back to "none".
 	 */
-	cpsie i
+	get_cpu r2
+	ldr r1, [r2, #_cpu_offset_to_active_irq]
+	add r3, r0, #1
+	str r3, [r2, #_cpu_offset_to_active_irq]
+	push {r1, r2}
+#endif /* CONFIG_ARM_TRACK_ACTIVE_IRQ */
 
 #if CONFIG_GIC_VER >= 3
 	/*
@@ -225,9 +229,29 @@ oob:
 			 * in thumb mode */
 
 	ldm r1!,{r0,r3}	/* arg in r0, ISR in r3 */
+
+	/*
+	 * Enable interrupts only while the registered ISR runs to allow
+	 * nesting. Keep EOI and interrupt exit non-reentrant.
+	 *
+	 * Note that interrupts are disabled up to this point on the ARM
+	 * architecture variants other than the Cortex-M. It is also important
+	 * to note that most interrupt controllers require that the nested
+	 * interrupts are handled after the active interrupt is acknowledged;
+	 * this is done through the `get_active` interrupt controller
+	 * interface function.
+	 */
+	cpsie i
 	blx r3		/* call ISR */
+	cpsid i
 
 spurious_continue:
+#ifdef CONFIG_ARM_TRACK_ACTIVE_IRQ
+	/* Unwind the published active INTID to the preempted context's */
+	pop {r1, r2}
+	str r1, [r2, #_cpu_offset_to_active_irq]
+#endif /* CONFIG_ARM_TRACK_ACTIVE_IRQ */
+
 	/* Signal end-of-interrupt */
 	pop {r0, r1}
 #if !defined(CONFIG_ARM_CUSTOM_INTERRUPT_CONTROLLER)
@@ -312,6 +336,18 @@ _idle_state_cleared:
 
 	push {r0, r1}
 
+#ifdef CONFIG_ARM_TRACK_ACTIVE_IRQ
+	/*
+	 * Publish the acknowledged INTID for arch_irq_get_active(). See the
+	 * comment in the non-USE_SWITCH variant above.
+	 */
+	get_cpu r2
+	ldr r1, [r2, #_cpu_offset_to_active_irq]
+	add r3, r0, #1
+	str r3, [r2, #_cpu_offset_to_active_irq]
+	push {r1, r2}
+#endif /* CONFIG_ARM_TRACK_ACTIVE_IRQ */
+
 #if CONFIG_GIC_VER >= 3
 	/*
 	 * Ignore Special INTIDs 1020..1023 see 2.2.1 of Arm Generic Interrupt Controller
@@ -349,6 +385,12 @@ oob:
 	cpsid i
 
 spurious_continue:
+#ifdef CONFIG_ARM_TRACK_ACTIVE_IRQ
+	/* Unwind the published active INTID to the preempted context's */
+	pop {r1, r2}
+	str r1, [r2, #_cpu_offset_to_active_irq]
+#endif /* CONFIG_ARM_TRACK_ACTIVE_IRQ */
+
 	/* Signal end-of-interrupt */
 	pop {r0, r1}
 #if !defined(CONFIG_ARM_CUSTOM_INTERRUPT_CONTROLLER)

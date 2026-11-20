@@ -65,12 +65,17 @@ BUILD_ASSERT(MCP251XFD_TEF_FIFO_SIZE + MCP251XFD_TX_QUEUE_SIZE +
 
 #define MCP251XFD_PLLRDY_TIMEOUT_USEC 100000
 #define MCP251XFD_PLLRDY_RETRIES      100
+#define MCP251XFD_PLLRDY_SETTLE_USEC  200
 
 #define MCP251XFD_MAX_INT_HANDLER_CALLS  10
 #define MCP251XFD_INT_HANDLER_SLEEP_USEC 10000
 
 /* Delay time found experimentally to fix occasional init issue */
 #define MCP251XFD_RESET_DELAY_USEC 5000
+
+/* Timeout for entering configuration mode after reset */
+#define MCP251XFD_RESET_TIMEOUT_USEC 30000
+#define MCP251XFD_RESET_RETRIES      60
 
 struct mcp251xfd_mailbox {
 	can_tx_callback_t cb;
@@ -481,6 +486,12 @@ struct mcp251xfd_fifo {
 
 struct mcp251xfd_data {
 	struct can_driver_data common;
+
+	/* Active SPI config; a distinct clamped copy is used until the PLL has
+	 * locked, since SPI drivers detect config changes by pointer comparison.
+	 */
+	struct spi_config spi_cfg_init;
+	const struct spi_config *spi_cfg;
 
 	/* Interrupt Data */
 	struct gpio_callback int_gpio_cb;

@@ -153,11 +153,25 @@ static int stm32_clock_control_get_subsys_rate(const struct device *dev,
 		*rate = LL_RCC_GetSPIClockFreq(LL_RCC_SPI67_CLKSOURCE);
 		break;
 #endif
+#if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(spi8))
+	case STM32_CLOCK_PERIPH_SPI8:
+		*rate = LL_RCC_GetSPIClockFreq(LL_RCC_SPI8_CLKSOURCE);
+		break;
+#endif
 #if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(fdcan1)) || \
 	DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(fdcan2)) || \
 	DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(fdcan3))
 	case STM32_CLOCK_PERIPH_FDCAN:
 		*rate = LL_RCC_GetFDCANClockFreq(LL_RCC_FDCAN_CLKSOURCE);
+		break;
+#endif
+#if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(timers12))
+	case STM32_CLOCK_PERIPH_TIM12:
+		/* Timer group 1 kernel clock equals APB1 when APB1 is not divided */
+		if (LL_RCC_GetAPB1Prescaler() != 0U) {
+			return -ENOTSUP;
+		}
+		*rate = SystemCoreClock >> LL_RCC_Get_LSMCUDIVR();
 		break;
 #endif
 	case STM32_CLOCK_PERIPH_WWDG1:

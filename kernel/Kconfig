@@ -12,7 +12,6 @@ source "subsys/logging/Kconfig.template.log_config"
 config MULTITHREADING
 	bool "Multi-threading" if ARCH_HAS_SINGLE_THREAD_SUPPORT
 	default y
-	select RING_BUFFER
 	help
 	  If disabled, only the main thread is available, so a main() function
 	  must be provided. Interrupts are available. Kernel objects will most
@@ -141,7 +140,7 @@ config SCHED_DEADLINE
 config MAIN_STACK_SIZE
 	int "Size of stack for initialization and main thread"
 	default 2048 if COVERAGE_GCOV
-	default 512 if ZTEST && !(RISCV || X86 || ARM || ARC || OPENRISC)
+	default 512 if ZTEST && !(RISCV || X86 || ARM || ARC || OPENRISC || HEXAGON)
 	default 1024
 	help
 	  When the initialization is complete, the thread executing it then
@@ -350,6 +349,22 @@ config WAITQ_SIMPLE
 	  a few threads blocked on any single IPC primitive.
 
 endchoice # WAITQ_ALGORITHM
+
+config SEM_LOCK_STRIPES
+	int "Number of semaphore spinlock stripes" if SMP
+	default 1
+	range 1 256
+	help
+	  Number of spinlocks used to synchronize semaphore operations. This
+	  value must be a power of two. The default is one system-wide lock,
+	  which preserves the existing semaphore behavior and memory footprint.
+	  Non-SMP systems always use one lock.
+
+	  Additional stripes reduce serialization and hash collisions on SMP
+	  systems at the cost of additional static memory. Stripes are not
+	  individually cache-line aligned. With 4-byte spinlocks and a 64-byte
+	  cache line, 16 stripes fit within a single cache line. Increasing the
+	  count beyond 16 can also reduce cache-line contention.
 
 menu "Misc Kernel related options"
 
@@ -741,6 +756,8 @@ config SYS_CLOCK_TICKS_PER_SEC
 config SYS_CLOCK_HW_CYCLES_PER_SEC
 	int "System clock's h/w timer frequency"
 	default 0 if TIMER_READS_ITS_FREQUENCY_AT_RUNTIME
+	default $(dt_node_int_prop_int,/cpus/cpu@0,timebase-frequency) \
+		if $(dt_node_has_prop,/cpus/cpu@0,timebase-frequency)
 	depends on SYS_CLOCK_EXISTS
 	help
 	  This option specifies the frequency of the hardware timer used for the
@@ -819,6 +836,22 @@ config TIMEOUT_BACKEND_BUCKET
 	  is on demand against the actual next event, so it imposes no
 	  tickless-idle floor. Requires 64-bit timeouts.
 
+config TIMEOUT_BACKEND_SKIPLIST
+	bool "Skip list [EXPERIMENTAL]"
+	depends on TIMEOUT_64BIT
+	select EXPERIMENTAL
+	help
+	  A Pugh skip list keyed on absolute expiry tick. Expected insertion
+	  and arbitrary removal are O(log n), the earliest timeout is O(1),
+	  and there is no capacity limit. Same-tick firing order is FIFO.
+	  Each pending timeout carries CONFIG_TIMEOUT_SKIPLIST_MAX_LEVEL
+	  forward pointers, sized for the worst case although the expected
+	  height is 2. At the default 8 levels struct _timeout is 88 bytes
+	  on a 64-bit target, against 32 for the delta list and 24 for the
+	  min-heap, and every k_thread, k_timer and delayable work item
+	  pays it. Requires 64-bit timeouts. Consider this when many
+	  timeouts are pending and a bounded heap is undesirable.
+
 endchoice # TIMEOUT_BACKEND
 
 config TIMEOUT_BUCKET_LISTS
@@ -833,6 +866,19 @@ config TIMEOUT_BUCKET_LISTS
 	  the O(1) window at the cost of more static RAM (one list head each).
 	  Below 8 the plain delta-list backend is likely the better choice. The
 	  occupancy bitmap is a uint32_t for up to 32 buckets, a uint64_t beyond.
+
+config TIMEOUT_SKIPLIST_MAX_LEVEL
+	int "Maximum skip-list height"
+	depends on TIMEOUT_BACKEND_SKIPLIST
+	default 8
+	range 4 16
+	help
+	  Maximum number of forward-pointer levels in each timeout node.
+	  Height is drawn from a geometric(1/2) distribution, so expected
+	  search cost is O(log n) as long as this is at least log2 of the
+	  peak number of pending timeouts. Each extra level adds one pointer
+	  to every struct _timeout (k_timer, k_thread, delayable work, ...).
+	  8 levels cover a few hundred concurrent timeouts comfortably.
 
 config TIMEOUT_HEAP_MAX_ENTRIES
 	int "Maximum simultaneous pending timeouts in the heap"
@@ -898,7 +944,7 @@ choice
 
 config STACK_CANARIES
 	bool "Default protection"
-	depends on ENTROPY_GENERATOR || TEST_RANDOM_GENERATOR
+	depends on HAS_RANDOM_GENERATOR
 	select NEED_LIBC_MEM_PARTITION if !STACK_CANARIES_TLS
 	select REQUIRES_STACK_CANARIES
 	help
@@ -908,7 +954,7 @@ config STACK_CANARIES
 
 config STACK_CANARIES_STRONG
 	bool "Strong protection"
-	depends on ENTROPY_GENERATOR || TEST_RANDOM_GENERATOR
+	depends on HAS_RANDOM_GENERATOR
 	select NEED_LIBC_MEM_PARTITION if !STACK_CANARIES_TLS
 	select REQUIRES_STACK_CANARIES
 	help
@@ -918,7 +964,7 @@ config STACK_CANARIES_STRONG
 
 config STACK_CANARIES_ALL
 	bool "Maximum protection available"
-	depends on ENTROPY_GENERATOR || TEST_RANDOM_GENERATOR
+	depends on HAS_RANDOM_GENERATOR
 	select NEED_LIBC_MEM_PARTITION if !STACK_CANARIES_TLS
 	select REQUIRES_STACK_CANARIES
 	help
@@ -926,7 +972,7 @@ config STACK_CANARIES_ALL
 
 config STACK_CANARIES_EXPLICIT
 	bool "Explicit protection"
-	depends on ENTROPY_GENERATOR || TEST_RANDOM_GENERATOR
+	depends on HAS_RANDOM_GENERATOR
 	depends on "$(ZEPHYR_TOOLCHAIN_VARIANT)" = "zephyr"
 	select NEED_LIBC_MEM_PARTITION if !STACK_CANARIES_TLS
 	select REQUIRES_STACK_CANARIES
@@ -965,7 +1011,7 @@ config STACK_POINTER_RANDOM
 	int "Initial stack pointer randomization bounds"
 	depends on !STACK_GROWS_UP
 	depends on MULTITHREADING
-	depends on TEST_RANDOM_GENERATOR || ENTROPY_HAS_DRIVER
+	depends on HAS_RANDOM_GENERATOR
 	default 0
 	help
 	  This option performs a limited form of Address Space Layout

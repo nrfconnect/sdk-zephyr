@@ -440,8 +440,6 @@ static void *display_smartbond_get_framebuffer(const struct device *dev)
 static void display_smartbond_get_capabilities(const struct device *dev,
 			struct display_capabilities *capabilities)
 {
-	memset(capabilities, 0, sizeof(*capabilities));
-
 	/*
 	 * Multiple color formats should be supported by LCDC. Currently, RGB56 and ARGB888
 	 * exposed by display API are supported. In the future we should consider supporting
@@ -654,7 +652,7 @@ static DEVICE_API(display, display_smartbond_driver_api) = {
 		.mode.vsync_pol =	\
 			DT_PROP(DT_INST_CHILD(inst, display_timings), vsync_active) ? 0 : 1,	\
 		.mode.hsync_pol =	\
-			DT_PROP(DT_INST_CHILD(inst, display_timings), vsync_active) ? 0 : 1,	\
+			DT_PROP(DT_INST_CHILD(inst, display_timings), hsync_active) ? 0 : 1,	\
 		.mode.de_pol =	\
 			DT_PROP(DT_INST_CHILD(inst, display_timings), de_active) ? 0 : 1,	\
 		.mode.pixelclk_pol =	\

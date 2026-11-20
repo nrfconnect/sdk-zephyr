@@ -5,12 +5,12 @@
  */
 
 #include <bflb/bl602.dtsi>
-#include <bflb/bl60x_em_8kb.dtsi>
+#include <bflb/bl60x_em_8kb_wifi.dtsi>
 #include "ai_wb2_12f-pinctrl.dtsi"
 
 / {
-	model = "Ai-Thinker WB2-12F Module";
 	compatible = "bflb,bl602";
+	model = "Ai-Thinker WB2-12F Module";
 
 	chosen {
 		zephyr,flash = &zb25vq32;
@@ -57,34 +57,34 @@
 
 			boot_header_partition: partition@0 {
 				compatible = "zephyr,mapped-partition";
-				label = "boot_header";
 				reg = <0x00000000 0x2000>;
+				label = "boot_header";
 				read-only;
 			};
 
 			slot0_partition: partition@2000 {
 				compatible = "zephyr,mapped-partition";
+				reg = <0x00002000 (0x00200000 - 0x2000)>;
 				label = "image-0";
-				reg = <0x00002000 (0x00100000 - 0x2000)>;
 				read-only;
 			};
 
-			storage_partition: partition@100000 {
+			storage_partition: partition@200000 {
 				compatible = "zephyr,mapped-partition";
+				reg = <0x00200000 0x200000>;
 				label = "storage";
-				reg = <0x00100000 0x300000>;
 			};
 		};
 	};
 };
 
 &uart0 {
-	status = "okay";
 	current-speed = <115200>;
 
 	pinctrl-0 = <&uart0_default>;
 	pinctrl-1 = <&uart0_sleep>;
 	pinctrl-names = "default", "sleep";
+	status = "okay";
 };
 
 &gpio0 {
@@ -96,5 +96,9 @@
 };
 
 &bt_hci_bflb {
+	status = "okay";
+};
+
+&wifi0 {
 	status = "okay";
 };

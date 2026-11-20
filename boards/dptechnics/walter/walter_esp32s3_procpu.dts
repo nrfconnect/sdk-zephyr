@@ -5,13 +5,13 @@
  */
 /dts-v1/;
 
-#include "espressif/esp32s3/esp32s3_wroom_n16r2.dtsi"
+#include <espressif/esp32s3/esp32s3.dtsi>
 #include "walter-pinctrl.dtsi"
 #include <espressif/partitions_0x0_amp_8M.dtsi>
 
 / {
-	model = "DPTechnics Walter PROCPU";
 	compatible = "espressif,esp32s3";
+	model = "DPTechnics Walter PROCPU";
 
 	aliases {
 		modem = &modem;
@@ -31,6 +31,15 @@
 	};
 };
 
+&flash0 {
+	reg = <0x0 DT_SIZE_M(16)>;
+	ranges = <0x0 0x0 DT_SIZE_M(16)>;
+};
+
+&psram0 {
+	size = <DT_SIZE_M(2)>;
+};
+
 &usb_serial {
 	status = "okay";
 };
@@ -40,17 +49,17 @@
 };
 
 &uart1 {
-	status = "okay";
 	current-speed = <115200>;
 	hw-flow-control;
 	pinctrl-0 = <&uart1_default>;
 	pinctrl-names = "default";
+	status = "okay";
 
 	modem: modem {
-		status = "okay";
 		compatible = "sqn,gm02s";
 		mdm-reset-gpios = <&gpio1 13 (GPIO_OPEN_DRAIN | GPIO_ACTIVE_LOW)>;
 		mdm-wake-gpios = <&gpio1 14 (GPIO_OPEN_SOURCE | GPIO_ACTIVE_HIGH)>;
+		status = "okay";
 	};
 };
 
@@ -77,17 +86,17 @@
 &spi2 {
 	#address-cells = <1>;
 	#size-cells = <0>;
-	status = "okay";
 	pinctrl-0 = <&spim2_default>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &spi3 {
 	#address-cells = <1>;
 	#size-cells = <0>;
-	status = "okay";
 	pinctrl-0 = <&spim3_default>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &twai {

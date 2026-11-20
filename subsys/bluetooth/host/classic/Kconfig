@@ -54,6 +54,16 @@ config BT_ACCEPT_CONN_AS_CENTRAL
 	  The kconfig option only works when calling function bt_br_set_discoverable to enable
 	  connectable mode with a NULL callback parameter.
 
+config BT_BR_ACL_RX_VIEW_COUNT
+	int "Number of views for L2CAP PDUs in HCI ACL packets carrying several"
+	default BT_BUF_ACL_RX_COUNT_EXTRA
+	range 1 $(UINT16_MAX)
+	help
+	  Number of L2CAP PDUs that receivers can keep at the same time, such as with an RFCOMM
+	  recv() callback returning -EINPROGRESS, counting only PDUs that are not the last one of
+	  their HCI ACL packet. Beyond that, a PDU shares its buffer with the next PDU of the
+	  packet, so a receiver keeping it finds the buffer moved on, and an error is logged.
+
 config BT_L2CAP_RX_FLUSH_TO
 	hex "Minimum Bluetooth L2CAP RX flush Timeout accepted in milliseconds"
 	default 0x0001 if BT_A2DP_SINK
@@ -66,11 +76,43 @@ config BT_L2CAP_RX_FLUSH_TO
 	  may be overridden on a packet by packet basis by marking individual L2CAP packets
 	  as non-automatically-flushable via the Packet_Boundary_Flag in the HCI ACL Data packet.
 
+config BT_L2CAP_SIG_TX_BUF_COUNT
+	int "Bluetooth L2CAP signalling channel TX buffer count"
+	default BT_L2CAP_TX_BUF_COUNT
+	range 1 $(UINT8_MAX)
+	help
+	  This option sets Bluetooth L2CAP signalling channel TX buffer count. The value is used to
+	  set the number of buffers available of the `br_sig_pool` for L2CAP signalling channel
+	  transmission.
+	  When the `br_sig_pool` is exhausted, the L2CAP attempts to obtain a net buffer from the
+	  default `acl_tx_pool`. If the `acl_tx_pool` is also exhausted, the currently received
+	  L2CAP signaling packet is placed into the `recv_pending` queue. Subsequently, the L2CAP
+	  attempts to process the L2CAP signaling packets in the `recv_pending` queue again, using
+	  two mechanisms: retries with random delays and notifications triggered by the net buffer
+	  destroy of the `br_sig_pool`.
+	  For the `CONFIG_BT_HCI_ACL_FLOW_CONTROL` disable case, the received L2CAP signaling packet
+	  may be discarded if the `br_recv_pending_pool` is exhausted, since the `br_sig_pool` has
+	  been exhausted. To avoid packet loss, the `br_sig_pool` should be configured with a size
+	  large enough to handle the peak number of L2CAP signaling packets that may be received.
+	  It is at least `ACL_CONN * 1 + L2CAP_CHANNEL * 2`. Here, `ACL_CONN` represents the maximum
+	  number of simultaneous ACL connections, and `L2CAP_CHANNEL` represents the maximum number
+	  of L2CAP channels being created or accepted simultaneously.
+
 config BT_L2CAP_CONNLESS
 	bool "Bluetooth L2CAP connectionless data reception [EXPERIMENTAL]"
 	select EXPERIMENTAL
 	help
 	  This option enables Bluetooth L2CAP connectionless data reception
+
+config BT_L2CAP_QOS
+	bool "Bluetooth L2CAP QoS Option [EXPERIMENTAL]"
+	select EXPERIMENTAL
+	help
+	  This option enables negotiation of the Bluetooth L2CAP QoS
+	  configuration option. Only the Best Effort service type is supported,
+	  a peer requesting the Guaranteed service type is counter-proposed
+	  Best Effort. Without this option a QoS option in a Configuration
+	  Request is answered with Unknown Option.
 
 config BT_L2CAP_RET
 	bool "Bluetooth L2CAP retransmission mode [EXPERIMENTAL]"
@@ -496,6 +538,18 @@ config BT_A2DP_SINK
 	help
 	  This option enables the A2DP profile sink function
 
+config BT_A2DP_CODEC_MAX_IE_LEN
+	int "Maximum size of A2DP codec IE"
+	default 8
+	# The minimum length is 4 bytes, because the codec specific IE for the mandatory Codec SBC
+	# is 4 bytes.
+	# The maximum length is 253 bytes, because the length field of Length Of Service Capability
+	# (LOSC) is one byte and the header of Media Codec Capabilities is 2 bytes. Thus, the
+	# maximum is 255 - 2.
+	range 4 253
+	help
+	  This option sets the maximum size of A2DP codec IE.
+
 endif # BT_A2DP
 
 config BT_AVCTP
@@ -638,6 +692,19 @@ config BT_DEVICE_VERSION
 
 endif # BT_DID
 
+config BT_HID_DEVICE
+	bool "Bluetooth HID Device Profile [EXPERIMENTAL]"
+	select EXPERIMENTAL
+	select BT_DID
+	help
+	  This option enables the HID Device profile.
+
+config BT_HID_HOST
+	bool "Bluetooth HID Host Profile [EXPERIMENTAL]"
+	select EXPERIMENTAL
+	help
+	  This option enables the HID Host profile.
+
 config BT_PAGE_TIMEOUT
 	hex "Bluetooth Page Timeout"
 	default 0x2000
@@ -712,6 +779,23 @@ config BT_OEBX_RSP_CODE_TO_STR
 	  codes represented as strings.
 	  See bt_obex_rsp_code_to_str() for more details.
 
+config BT_OBEX_AUTH
+	bool "Bluetooth OBEX Authentication support"
+	select PSA_WANT_ALG_MD5
+	select MBEDTLS
+	help
+	  This option enables OBEX authentication feature.
+	  OBEX authentication uses MD5, which is cryptographically weak.
+	  It provides only limited security.
+
+config BT_OBEX_AUTH_PWD_LEN
+	int "Maximum OBEX Authentication Password Length"
+	depends on BT_OBEX_AUTH
+	default 16
+	range 1 255
+	help
+	  This option sets the maximum length of OBEX authentication password.
+
 endif # BT_GOEP
 
 config BT_BIP
@@ -724,8 +808,7 @@ config BT_BIP
 config BT_PBAP
 	bool
 	select BT_GOEP
-	select PSA_WANT_ALG_MD5
-	select MBEDTLS
+	select BT_OBEX_AUTH
 	help
 	  This option enables the PBAP profile
 

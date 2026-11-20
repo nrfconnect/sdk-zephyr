@@ -1,12 +1,12 @@
 /*
- * SPDX-FileCopyrightText: <text>Copyright (c) 2026 Infineon Technologies AG,
- * or an affiliate of Infineon Technologies AG. All rights reserved.</text>
+ * SPDX-FileCopyrightText: Copyright (c) 2026 Infineon Technologies AG,
+ * SPDX-FileCopyrightText: or an affiliate of Infineon Technologies AG. All rights reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#ifndef IFX_CLOCK_SOURCE_PSOC4XX_H_
-#define IFX_CLOCK_SOURCE_PSOC4XX_H_
+#ifndef ZEPHYR_INCLUDE_DT_BINDINGS_CLOCK_IFX_CLOCK_SOURCE_PSOC4XX_H_
+#define ZEPHYR_INCLUDE_DT_BINDINGS_CLOCK_IFX_CLOCK_SOURCE_PSOC4XX_H_
 
 /*
  * Note : use IFX_PATH_PSOC4_IMO for internal main oscillator as src
@@ -47,4 +47,4 @@
 	 : (div) == 7 ? CY_SYSCLK_DIV_8                                                            \
 		      : CY_SYSCLK_NO_DIV)
 
-#endif
+#endif /* ZEPHYR_INCLUDE_DT_BINDINGS_CLOCK_IFX_CLOCK_SOURCE_PSOC4XX_H_ */

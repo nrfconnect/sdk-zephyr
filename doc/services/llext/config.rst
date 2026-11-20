@@ -252,11 +252,17 @@ unsigned load / store exception handler for Xtensa with the following option.
         When an unsigned load / store instruction triggers an unsupported
         load / store exception, the exception handler will perform the
         operation itself with supported word sized and aligned loads /
-        stores. Does not currently support VLIW.
+        stores.
 
-As mentioned in the option description, to use this option you must also disable
-VLIW, as enabling VLIW causes the compiler to generate signed load / store
-instructions.
+        Note that compilers may pack multiple instructions into a single
+        Very Long Instruction Word (VLIW). Exceptions caused by unsigned
+        load/store operations in these VLIW instructions are not supported
+        by this exception handler, so COMPILER_CODEGEN_VLIW_DISABLED must
+        be set to prevent VLIW instruction generation.
+
+As mentioned in the option description, you may also need to disable VLIW
+generation, as unsigned load / store instructions packed in these VLIW
+instructions are not supported by the exception handler.
 
 :kconfig:option:`CONFIG_COMPILER_CODEGEN_VLIW_DISABLED`
 
@@ -320,12 +326,6 @@ LLEXT subsystem to optimize memory footprint in this case.
            This will directly modify the contents of the buffer during the link
            phase. Once the extension is unloaded, the buffer must be reloaded
            before it can be used again in a call to :c:func:`llext_load`.
-
-        .. note::
-
-           This is currently required by the Xtensa architecture. Further
-           information on this topic is available on GitHub issue `#75341
-           <https://github.com/zephyrproject-rtos/zephyr/issues/75341>`_.
 
 .. _llext_symbol_groups:
 

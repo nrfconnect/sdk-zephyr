@@ -12,12 +12,13 @@
 #include "rzv2n_evk-pinctrl.dtsi"
 
 / {
-	model = "Renesas RZ/V2N EVK";
 	compatible = "renesas,rzv2n-evk";
+	model = "Renesas RZ/V2N EVK";
 
 	aliases {
 		led0 = &led5;
 		led1 = &led6;
+		i2c-0 = &i2c2;
 	};
 
 	chosen {
@@ -40,14 +41,14 @@
 		};
 	};
 
-	ddr: memory@80000000 {
-		compatible = "mmio-sram";
-		reg = <0x80000000 DT_SIZE_M(256)>;
-	};
-
 	sram: memory@8003000 {
 		compatible = "mmio-sram";
 		reg = <0x08003000 0xfbfff>;
+	};
+
+	ddr: memory@80000000 {
+		compatible = "mmio-sram";
+		reg = <0x80000000 DT_SIZE_M(256)>;
 	};
 };
 

@@ -5,7 +5,7 @@
  */
 /dts-v1/;
 
-#include <espressif/esp32/esp32_pico_v3_02.dtsi>
+#include <espressif/esp32/esp32.dtsi>
 #include "adafruit_feather_esp32-pinctrl.dtsi"
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 #include <zephyr/dt-bindings/led/led.h>
@@ -13,8 +13,8 @@
 #include <espressif/partitions_0x1000_amp.dtsi>
 
 / {
-	model = "Adafruit Feather ESP32 PROCPU";
 	compatible = "adafruit,adafruit_feather_esp32";
+	model = "Adafruit Feather ESP32 PROCPU";
 
 	chosen {
 		zephyr,sram = &sram1;
@@ -53,21 +53,31 @@
 	};
 };
 
+&flash0 {
+	reg = <0x0 DT_SIZE_M(8)>;
+	ranges = <0x0 0x0 DT_SIZE_M(8)>;
+};
+
+&psram0 {
+	size = <DT_SIZE_M(2)>;
+};
+
 &uart0 {
-	status = "okay";
 	current-speed = <115200>;
 	pinctrl-0 = <&uart0_default>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &uart1 {
-	status = "okay";
 	current-speed = <115200>;
 	pinctrl-0 = <&uart1_default>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &gpio0 {
+	gpio-reserved-ranges = <6 6>, <24 2>, <28 4>;
 	status = "okay";
 
 	neopixel_power_enable {
@@ -82,12 +92,12 @@
 };
 
 zephyr_i2c: &i2c0 {
-	status = "okay";
 	clock-frequency = <I2C_BITRATE_FAST>;
 	pinctrl-0 = <&i2c0_default>;
 	pinctrl-names = "default";
 	sda-gpios = <&gpio0 22 GPIO_OPEN_DRAIN>;
 	scl-gpios = <&gpio0 20 GPIO_OPEN_DRAIN>;
+	status = "okay";
 };
 
 &timer0 {
@@ -121,10 +131,10 @@ zephyr_i2c: &i2c0 {
 &spi3 {
 	#address-cells = <1>;
 	#size-cells = <0>;
-	status = "okay";
 	line-idle-low;
 	pinctrl-0 = <&spim3_ws2812_led>;
 	pinctrl-names = "default";
+	status = "okay";
 
 	led_strip: ws2812@0 {
 		compatible = "worldsemi,ws2812-spi";

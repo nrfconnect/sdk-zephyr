@@ -468,10 +468,20 @@ static int sw_set_pins(const struct device *dev,
 
 	if (config->reset.port) {
 		if (pins & BIT(SWDP_nRESET_PIN)) {
+			/*
+			 * CMSIS-DAP DAP_SWJ_Pins uses the raw electrical level
+			 * for the nRESET pin: bit=0 means drive low (asserted),
+			 * bit=1 means drive high (deasserted). Zephyr GPIO
+			 * polarity (GPIO_ACTIVE_LOW) requires us to translate
+			 * the raw level into the logical level — bit=0 maps to
+			 * logical-active (asserted), bit=1 to logical-inactive
+			 * (deasserted). Without this inversion, GPIO_ACTIVE_LOW
+			 * overlays double-invert the runtime assert/deassert.
+			 */
 			if (value & BIT(SWDP_nRESET_PIN)) {
-				gpio_pin_set_dt(&config->reset, 1);
-			} else {
 				gpio_pin_set_dt(&config->reset, 0);
+			} else {
+				gpio_pin_set_dt(&config->reset, 1);
 			}
 		}
 	}
@@ -484,9 +494,18 @@ static int sw_get_pins(const struct device *dev, uint8_t *const state)
 	const struct sw_config *config = dev->config;
 	uint32_t val;
 
+	*state = 0;
+
 	if (config->reset.port) {
+		/*
+		 * Symmetric to sw_set_pins(): the CMSIS-DAP nRESET bit
+		 * reports the raw electrical level. gpio_pin_get_dt()
+		 * returns the polarity-aware logical level — invert so
+		 * logical-active (asserted) reports bit=0 and
+		 * logical-inactive (deasserted) reports bit=1.
+		 */
 		val = gpio_pin_get_dt(&config->reset);
-		*state = val ? BIT(SWDP_nRESET_PIN) : 0;
+		*state |= val ? 0 : BIT(SWDP_nRESET_PIN);
 	}
 
 	val = gpio_pin_get_dt(&config->dio);
@@ -523,7 +542,7 @@ static int sw_set_clock(const struct device *dev, const uint32_t clock)
 
 	sw_data->clock_delay = delay;
 
-	LOG_WRN("cpu_clock %d, delay %d", CPU_CLOCK, sw_data->clock_delay);
+	LOG_DBG("cpu_clock %d, delay %d", CPU_CLOCK, sw_data->clock_delay);
 
 	return 0;
 }
@@ -573,14 +592,27 @@ static int sw_port_on(const struct device *dev)
 		}
 	}
 
-	ret = gpio_pin_configure_dt(&config->clk, GPIO_OUTPUT_ACTIVE);
+	ret = gpio_pin_configure_dt(&config->clk, GPIO_INPUT | GPIO_OUTPUT_ACTIVE);
+	if (ret == -ENOTSUP) {
+		LOG_DBG("Fall back to CLK output only");
+		ret = gpio_pin_configure_dt(&config->clk, GPIO_OUTPUT_ACTIVE);
+	}
+
 	if (ret) {
+		LOG_ERR("Failed to configure CLK GPIO");
 		return ret;
 	}
 
 	if (config->reset.port) {
-		ret = gpio_pin_configure_dt(&config->reset, GPIO_OUTPUT_INACTIVE);
+		ret = gpio_pin_configure_dt(&config->reset,
+					    GPIO_INPUT | GPIO_OUTPUT_INACTIVE);
+		if (ret == -ENOTSUP) {
+			LOG_DBG("Fall back to RESET output only");
+			ret = gpio_pin_configure_dt(&config->reset, GPIO_OUTPUT_INACTIVE);
+		}
+
 		if (ret) {
+			LOG_ERR("Failed to configure RESET GPIO");
 			return ret;
 		}
 	}
@@ -592,6 +624,8 @@ static int sw_port_off(const struct device *dev)
 {
 	const struct sw_config *config = dev->config;
 	int ret;
+	const gpio_flags_t off_flags = IS_ENABLED(CONFIG_SWDP_BITBANG_NO_DISCONNECT) ?
+		GPIO_INPUT : GPIO_DISCONNECTED;
 
 	/* If there is a transceiver connected to IO, pins should always be driven. */
 	if (config->dnoe.port) {
@@ -613,13 +647,13 @@ static int sw_port_off(const struct device *dev)
 		}
 	} else {
 		if (config->dout.port) {
-			ret = gpio_pin_configure_dt(&config->dout, GPIO_DISCONNECTED);
+			ret = gpio_pin_configure_dt(&config->dout, off_flags);
 			if (ret) {
 				return ret;
 			}
 		}
 
-		ret = gpio_pin_configure_dt(&config->dio, GPIO_DISCONNECTED);
+		ret = gpio_pin_configure_dt(&config->dio, off_flags);
 		if (ret) {
 			return ret;
 		}
@@ -638,7 +672,7 @@ static int sw_port_off(const struct device *dev)
 		}
 
 	} else {
-		ret = gpio_pin_configure_dt(&config->clk, GPIO_DISCONNECTED);
+		ret = gpio_pin_configure_dt(&config->clk, off_flags);
 		if (ret) {
 			return ret;
 		}
@@ -648,7 +682,7 @@ static int sw_port_off(const struct device *dev)
 		ret = gpio_pin_configure_dt(&config->reset,
 					    config->keep_reset_deast
 						    ? GPIO_OUTPUT_INACTIVE
-						    : GPIO_DISCONNECTED);
+						    : off_flags);
 		if (ret) {
 			return ret;
 		}

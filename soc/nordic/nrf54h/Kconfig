@@ -10,9 +10,6 @@ config SOC_SERIES_NRF54H
 	select HAS_NORDIC_DRIVERS
 	select SOC_EARLY_INIT_HOOK if ARM
 
-config SOC_SERIES_NRF54HX
-	select DEPRECATED
-
 config SOC_NRF54H20_CPUAPP_COMMON
 	bool
 	select ARM
@@ -126,5 +123,18 @@ config SOC_NRF54H20_CPUPPR
 config SOC_NRF54H20_CPUFLPR
 	select RISCV_CORE_NORDIC_VPR
 	imply NRFX_GPPI_SD2PPI_GLOBAL
+
+if SOC_NRF54H20_CPUAPP
+
+config SOC_EARLY_RESET_HOOK
+	bool "Run SoC-specific early reset hook"
+	help
+	  Enable calling soc_early_reset_hook() early in the CPU reset path.
+
+	  On nRF54H20 Application core this is required for Suspend-to-RAM
+	  (S2RAM) when a bootloader mediates resume after wake. The bootloader's
+	  project must implement soc_early_reset_hook() when this option is enabled.
+
+endif # SOC_NRF54H20_CPUAPP
 
 rsource "bicr/Kconfig"

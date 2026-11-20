@@ -87,7 +87,13 @@ static inline bool is_condition_met(struct k_poll_event *event, uint32_t *state)
 		}
 		break;
 	case K_POLL_TYPE_PIPE_DATA_AVAILABLE:
-		if (!ring_buf_is_empty(&event->pipe->buf)) {
+		/*
+		 * A closed pipe is readable: k_pipe_read() returns any
+		 * remaining bytes, then -EPIPE. Without the closed check,
+		 * k_poll() waits forever on a closed empty pipe.
+		 */
+		if (!ring_buf_is_empty(&event->pipe->buf) ||
+		    (event->pipe->flags & PIPE_FLAG_OPEN) == 0U) {
 			*state = K_POLL_STATE_PIPE_DATA_AVAILABLE;
 			return true;
 		}
@@ -765,11 +771,7 @@ int k_work_poll_submit_to_queue(struct k_work_q *work_q,
 			 "Some events were not registered!\n");
 
 		/* Setup timeout if such action is requested */
-		if (!K_TIMEOUT_EQ(timeout, K_FOREVER)) {
-			z_add_timeout(&work->timeout,
-				      triggered_work_expiration_handler,
-				      timeout);
-		}
+		z_add_timeout(&work->timeout, triggered_work_expiration_handler, timeout);
 
 		/* From now, any event will result in submitted work. */
 		work->poller.mode = MODE_TRIGGERED;

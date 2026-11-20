@@ -31,6 +31,7 @@ int main(void)
 	__maybe_unused const struct device *wnc_m14a2a = DEVICE_DT_GET_ONE(wnc_m14a2a);
 	__maybe_unused const struct device *u_blox_sara_r4 = DEVICE_DT_GET_ONE(u_blox_sara_r4);
 	__maybe_unused const struct device *simcom_sim7080 = DEVICE_DT_GET_ONE(simcom_sim7080);
+	__maybe_unused const struct device *quectel_bc660k = DEVICE_DT_GET_ONE(quectel_bc660k);
 	__maybe_unused const struct device *quectel_bg9x = DEVICE_DT_GET_ONE(quectel_bg9x);
 	__maybe_unused const struct device *quectel_eg25_g = DEVICE_DT_GET_ONE(quectel_eg25_g);
 	__maybe_unused const struct device *telit_me910g1 = DEVICE_DT_GET_ONE(telit_me910g1);
@@ -38,6 +39,7 @@ int main(void)
 	__maybe_unused const struct device *sqn_gm02s = DEVICE_DT_GET_ONE(sqn_gm02s);
 	__maybe_unused const struct device *st_st87mxx = DEVICE_DT_GET_ONE(st_st87mxx);
 	__maybe_unused const struct device *trasna_lexi_r10 = DEVICE_DT_GET_ONE(trasna_lexi_r10);
+	__maybe_unused const struct device *quectel_bg770 = DEVICE_DT_GET_ONE(quectel_bg770);
 
 #elif defined(CONFIG_MODEM_HL78XX)
 	/** Validate driver compiled in. */

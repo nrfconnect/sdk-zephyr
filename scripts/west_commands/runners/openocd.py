@@ -65,7 +65,8 @@ class OpenOcdBinaryRunner(ZephyrBinaryRunner):
                  gdb_client_port=DEFAULT_OPENOCD_GDB_PORT,
                  gdb_init=None, load=True,
                  target_handle=DEFAULT_OPENOCD_TARGET_HANDLE,
-                 rtt_port=DEFAULT_OPENOCD_RTT_PORT, rtt_server=False):
+                 rtt_port=DEFAULT_OPENOCD_RTT_PORT, rtt_server=False,
+                 gdb_pre_debug=None):
         super().__init__(cfg)
 
         if not path.exists(cfg.board_dir):
@@ -128,12 +129,13 @@ class OpenOcdBinaryRunner(ZephyrBinaryRunner):
         self.serial = ['-c set _ZEPHYR_BOARD_SERIAL ' + serial] if serial else []
         self.image_type = image_type
         self.flash_address = flash_address
-        self.gdb_init = gdb_init
+        self.gdb_init = gdb_init or []
         self.load_arg = ['-ex', 'load'] if load else []
         self.target_handle = target_handle
         self.log_file = Path(log_file).as_posix() if log_file else None
         self.rtt_port = rtt_port
         self.rtt_server = rtt_server
+        self.gdb_pre_debug = gdb_pre_debug or []
 
     @classmethod
     def name(cls):
@@ -142,7 +144,8 @@ class OpenOcdBinaryRunner(ZephyrBinaryRunner):
     @classmethod
     def capabilities(cls):
         return RunnerCaps(commands={'flash', 'debug', 'debugserver', 'attach', 'rtt'},
-                          dev_id=True, rtt=True, erase=True, skip_load=True, file=True)
+                          dev_id=True, rtt=True, erase=True, skip_load=True, file=True,
+                          gdb_init=True)
 
     @classmethod
     def dev_id_help(cls) -> str:
@@ -215,8 +218,6 @@ class OpenOcdBinaryRunner(ZephyrBinaryRunner):
         parser.add_argument('--gdb-client-port', default=DEFAULT_OPENOCD_GDB_PORT,
                             help='''openocd gdb client port if multiple ports come
                             up, defaults to 3333''')
-        parser.add_argument('--gdb-init', action='append',
-                            help='if given, add GDB init commands')
         parser.add_argument('--no-halt', action='store_true',
                             help='if given, no halt issued in gdb server cmd')
         parser.add_argument('--no-init', action='store_true',
@@ -233,6 +234,10 @@ class OpenOcdBinaryRunner(ZephyrBinaryRunner):
                             help='''start the RTT server while debugging.
                             To view the RTT log, connect to the rtt port using
                             a command like telnet.''')
+        parser.add_argument('--gdb-pre-debug', action='append',
+                            help='''if given, gdb command (-ex) to run
+                            after loading the image during 'debug';
+                            may be given multiple times''')
 
 
     @classmethod
@@ -264,7 +269,8 @@ class OpenOcdBinaryRunner(ZephyrBinaryRunner):
             telnet_port=args.telnet_port, log_file=args.log_file, gdb_port=args.gdb_port,
             gdb_client_port=args.gdb_client_port, gdb_init=args.gdb_init,
             load=args.load, target_handle=args.target_handle,
-            rtt_port=args.rtt_port, rtt_server=args.rtt_server)
+            rtt_port=args.rtt_port, rtt_server=args.rtt_server,
+            gdb_pre_debug=args.gdb_pre_debug)
 
     def print_gdbserver_message(self):
         if not self.thread_info_enabled:
@@ -476,10 +482,10 @@ class OpenOcdBinaryRunner(ZephyrBinaryRunner):
                     self.elf_name])
         if command == 'debug':
             gdb_cmd.extend(self.load_arg)
-        if self.gdb_init is not None:
-            for i in self.gdb_init:
+            for i in self.gdb_pre_debug:
                 gdb_cmd.append("-ex")
                 gdb_cmd.append(i)
+        gdb_cmd.extend(self.gdb_ex_args(self.gdb_init))
         if command == 'rtt':
             rtt_address = self.get_rtt_address()
             if rtt_address is None:

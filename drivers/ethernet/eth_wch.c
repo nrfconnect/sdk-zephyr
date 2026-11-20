@@ -159,11 +159,10 @@ static void setup_mac_filter(ETH_TypeDef *eth)
 	);
 }
 
-static void set_mac_addr(ETH_TypeDef *eth, uint8_t mac[NET_ETH_ADDR_LEN], struct net_if *iface)
+static void set_mac_addr(ETH_TypeDef *eth, uint8_t mac[NET_ETH_ADDR_LEN])
 {
 	eth->MACA0HR = (mac[5] << 8) | mac[4];
 	eth->MACA0LR = (mac[3] << 24) | (mac[2] << 16) | (mac[1] << 8) | mac[0];
-	net_if_set_link_addr(iface, mac, NET_ETH_ADDR_LEN, NET_LINK_ETHERNET);
 }
 
 static void init_tx_dma_desc(ETH_TypeDef *eth)
@@ -283,17 +282,19 @@ static struct net_pkt *eth_rx(const struct device *dev)
 	ETH_TypeDef *eth = config->regs;
 	struct net_pkt *pkt = NULL;
 
-	if ((dma_rx_desc_current->Status & ETH_DMARxDesc_OWN) != 0U) {
+	uint32_t desc_status = dma_rx_desc_current->Status;
+
+	if ((desc_status & ETH_DMARxDesc_OWN) != 0U) {
 		return NULL; /* Not error, simply packet has not arrived yet */
 	}
 
-	if (((dma_rx_desc_current->Status & ETH_DMARxDesc_ES) != 0U) ||
-	    ((dma_rx_desc_current->Status & (ETH_DMARxDesc_FS | ETH_DMARxDesc_LS)) !=
+	if (((desc_status & ETH_DMARxDesc_ES) != 0U) ||
+	    ((desc_status & (ETH_DMARxDesc_FS | ETH_DMARxDesc_LS)) !=
 	     (ETH_DMARxDesc_FS | ETH_DMARxDesc_LS))) {
 		goto release_desc; /* Drop descriptor if it is corrupt, or not a full frame */
 	}
 
-	size_t total_len = ((dma_rx_desc_current->Status & ETH_DMARxDesc_FL) >>
+	size_t total_len = ((desc_status & ETH_DMARxDesc_FL) >>
 			    ETH_DMARXDESC_FRAME_LENGTHSHIFT) -
 			   sizeof(uint32_t); /* This discards CRC (checked by hardware) */
 
@@ -534,12 +535,12 @@ static void eth_wch_iface_init(struct net_if *iface)
 
 	/* Initialise interface with relevant hardware settings */
 	eth_mac_init(dev);
-	set_mac_addr(config->regs, data->mac_addr, iface);
+	set_mac_addr(config->regs, data->mac_addr);
+	net_if_set_link_addr(iface, data->mac_addr, NET_ETH_ADDR_LEN, NET_LINK_ETHERNET);
 	setup_mac_filter(config->regs);
 	ethernet_init(iface);
 
 	net_if_carrier_off(iface);
-	net_lldp_set_lldpdu(iface);
 
 	if (device_is_ready(config->phy_dev)) {
 		phy_link_callback_set(config->phy_dev, phy_link_state_changed, (void *)dev);
@@ -582,7 +583,7 @@ static int eth_wch_set_config(const struct device *dev,
 	switch (type) {
 	case ETHERNET_CONFIG_TYPE_MAC_ADDRESS:
 		memcpy(data->mac_addr, config->mac_address.addr, 6);
-		set_mac_addr(eth, data->mac_addr, data->iface);
+		set_mac_addr(eth, data->mac_addr);
 		return 0;
 #if defined(CONFIG_NET_PROMISCUOUS_MODE)
 	case ETHERNET_CONFIG_TYPE_PROMISC_MODE:
@@ -727,14 +728,14 @@ static const struct ethernet_api eth_api = {
 	PINCTRL_DT_INST_DEFINE(inst);                                                              \
 	ETH_WCH_IRQ_HANDLER_DECL(inst)                                                             \
 	static const struct eth_wch_config eth_wch_config_##inst = {                               \
-		.regs = (ETH_TypeDef *)DT_REG_ADDR(DT_INST_PARENT(inst)),                          \
+		.regs = (ETH_TypeDef *)DT_INST_REG_ADDR(inst),                                     \
 		.phy_dev = DEVICE_DT_GET(DT_INST_PHANDLE(inst, phy_handle)),                       \
-		.clk_dev = DEVICE_DT_GET(DT_CLOCKS_CTLR_BY_NAME(DT_INST_PARENT(inst), mac)),       \
-		.clk_id = DT_CLOCKS_CELL_BY_NAME(DT_INST_PARENT(inst), mac, id),                   \
-		.clk_tx_dev = DEVICE_DT_GET(DT_CLOCKS_CTLR_BY_NAME(DT_INST_PARENT(inst), tx)),     \
-		.clk_tx_id = DT_CLOCKS_CELL_BY_NAME(DT_INST_PARENT(inst), tx, id),                 \
-		.clk_rx_dev = DEVICE_DT_GET(DT_CLOCKS_CTLR_BY_NAME(DT_INST_PARENT(inst), rx)),     \
-		.clk_rx_id = DT_CLOCKS_CELL_BY_NAME(DT_INST_PARENT(inst), rx, id),                 \
+		.clk_dev = DEVICE_DT_GET(DT_INST_CLOCKS_CTLR_BY_NAME(inst, mac)),                  \
+		.clk_id = DT_INST_CLOCKS_CELL_BY_NAME(inst, mac, id),                              \
+		.clk_tx_dev = DEVICE_DT_GET(DT_INST_CLOCKS_CTLR_BY_NAME(inst, tx)),                \
+		.clk_tx_id = DT_INST_CLOCKS_CELL_BY_NAME(inst, tx, id),                            \
+		.clk_rx_dev = DEVICE_DT_GET(DT_INST_CLOCKS_CTLR_BY_NAME(inst, rx)),                \
+		.clk_rx_id = DT_INST_CLOCKS_CELL_BY_NAME(inst, rx, id),                            \
 		.mac_cfg = NET_ETH_MAC_DT_INST_CONFIG_INIT(inst),                                  \
 		.connection_type = DT_INST_PROP(inst, phy_connection_type),                        \
 		.internal_phy_pllmul_idx = DT_INST_ENUM_IDX(inst, internal_phy_pllmul),            \

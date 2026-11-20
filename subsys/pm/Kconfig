@@ -1,5 +1,6 @@
 # Copyright (c) 2014-2015 Wind River Systems, Inc.
 # Copyright (c) 2016 Intel Corporation
+# Copyright 2026 NXP
 # SPDX-License-Identifier: Apache-2.0
 
 menu "Power Management"
@@ -66,6 +67,29 @@ config PM_STATE_SET_IRQ_UNLOCKED
 	  This guarantee covers only interrupts that arch_irq_lock() can mask. See
 	  the zero-latency interrupt documentation for IRQ_ZERO_LATENCY behavior.
 
+config PM_EARLY_SYSTEM_TIMER_RESUME
+	bool "Resume the system timer before devices [EXPERIMENTAL]"
+	depends on PM
+	default n
+	select EXPERIMENTAL
+	help
+	  Use the experimental system resume sequence: SoC exit post-ops,
+	  system timer idle-exit, system-managed device resume, then PM exit
+	  notifications. This lets a device resume callback use a timer-based
+	  busy-wait when the low-power state stopped the system timer.
+
+	  Enable only after validating the platform's resume dependencies.
+	  SoC post-ops must not depend on devices having been resumed, and
+	  timer idle-exit must not require a still-suspended device. Timer
+	  idle-exit may invoke timeout callbacks before devices are resumed.
+
+	  When disabled, preserve the legacy sequence: system-managed device
+	  resume, SoC exit post-ops, PM exit notifications, then system timer
+	  idle-exit. Timer-based busy-waits in device resume callbacks may
+	  not work with this sequence.
+
+	  If unsure, say N.
+
 rsource "policy/Kconfig"
 
 if PM
@@ -80,13 +104,11 @@ config PM_STATS
 	help
 	  Enable System Power Management Stats.
 
-DT_POWER_STATE_COMPAT := zephyr,power-state
-
 config PM_S2RAM
 	bool
 	default y
 	depends on ARCH_HAS_SUSPEND_TO_RAM
-	depends on $(dt_compat_any_has_prop,$(DT_POWER_STATE_COMPAT),power-state-name,suspend-to-ram)
+	depends on $(dt_compat_any_has_prop,$(DT_COMPAT_ZEPHYR_POWER_STATE),power-state-name,suspend-to-ram)
 	help
 	  This option enables the SoC specific implementations of suspend-to-ram (S2RAM)
 	  sleep states if PM is enabled and one or more suspend-to-ram sleep states are
@@ -170,6 +192,10 @@ if PM_DEVICE_RUNTIME
 
 config PM_DEVICE_DRIVER_NEEDS_DEDICATED_WQ
 	bool
+	help
+	  Use this option to signal that the driver performs blocking
+	  operations during suspend, and therefore the system workqueue cannot
+	  be used.
 
 config PM_DEVICE_RUNTIME_ASYNC
 	bool "Asynchronous device runtime power management"

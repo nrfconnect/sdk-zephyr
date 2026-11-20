@@ -930,7 +930,7 @@ static int mcux_i3c_do_one_xfer_read(I3C_Type *base, struct mcux_i3c_data *data,
  * @return Number of bytes written, or negative if error.
  */
 static int mcux_i3c_do_one_xfer_write(I3C_Type *base, struct mcux_i3c_data *data,
-				      uint8_t *buf, uint8_t buf_sz, bool no_ending)
+				      uint8_t *buf, size_t buf_sz, bool no_ending)
 {
 	int offset = 0;
 	int remaining = buf_sz;
@@ -1029,6 +1029,7 @@ static int mcux_i3c_do_one_xfer(I3C_Type *base, struct mcux_i3c_data *data,
 		if (ret2 != 0) {
 			LOG_DBG("%s: timed out addr 0x%02x, buf_sz %u",
 				__func__, addr, buf_sz);
+			ret = ret2;
 			emit_stop = true;
 
 			goto out_one_xfer;
@@ -1253,10 +1254,8 @@ static int mcux_i3c_do_daa(const struct device *dev)
 
 			LOG_DBG("DAA: Rcvd PID 0x%04x%08x", vendor_id, part_no);
 
-			ret = i3c_dev_list_daa_addr_helper(&data->common.attached_dev.addr_slots,
-							   &config->common.dev_list, pid,
-							   false, false,
-							   &target, &dyn_addr);
+			ret = i3c_dev_list_daa_addr_helper(dev, pid, false, false, &target,
+							   &dyn_addr);
 			if (ret != 0) {
 				goto out_daa;
 			}
@@ -1265,6 +1264,12 @@ static int mcux_i3c_do_daa(const struct device *dev)
 			target->dynamic_addr = dyn_addr;
 			target->bcr = rx_buf[6];
 			target->dcr = rx_buf[7];
+
+			int aret = i3c_attach_i3c_device(target);
+
+			if (aret != 0 && aret != -EALREADY) {
+				LOG_ERR("Failed to attach target");
+			}
 
 			/* Mark the address as I3C device */
 			i3c_addr_slots_mark_i3c(&data->common.attached_dev.addr_slots, dyn_addr);
@@ -1277,7 +1282,7 @@ static int mcux_i3c_do_daa(const struct device *dev)
 			 */
 			if ((target->static_addr != 0U) && (dyn_addr != target->static_addr)) {
 				i3c_addr_slots_mark_free(&data->common.attached_dev.addr_slots,
-							 dyn_addr);
+							 target->static_addr);
 			}
 
 			/* Emit process DAA again to send the address to the device */

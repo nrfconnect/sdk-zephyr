@@ -483,17 +483,6 @@ static int can_nrf_recover(const struct device *dev, k_timeout_t timeout)
 }
 #endif /* CONFIG_CAN_MANUAL_RECOVERY_MODE */
 
-static void can_nrf_set_state_change_callback(const struct device *dev,
-					      can_state_change_callback_t callback,
-					      void *user_data)
-{
-	struct can_nrf_data *data = can_nrf_get_data(dev);
-
-	k_mutex_lock(&data->lock, K_FOREVER);
-	can_mcan_set_state_change_callback(dev, callback, user_data);
-	k_mutex_unlock(&data->lock);
-}
-
 static void can_nrf_irq_handler(const struct device *dev)
 {
 	const struct can_nrf_config *config = can_nrf_get_config(dev);
@@ -531,7 +520,6 @@ static DEVICE_API(can, can_nrf_api) = {
 #endif /* CONFIG_CAN_MANUAL_RECOVERY_MODE */
 	.get_core_clock = can_nrf_get_core_clock,
 	.get_max_filters = can_mcan_get_max_filters,
-	.set_state_change_callback = can_nrf_set_state_change_callback,
 	.timing_min = CAN_MCAN_TIMING_MIN_INITIALIZER,
 	.timing_max = CAN_MCAN_TIMING_MAX_INITIALIZER,
 #ifdef CONFIG_CAN_FD_MODE

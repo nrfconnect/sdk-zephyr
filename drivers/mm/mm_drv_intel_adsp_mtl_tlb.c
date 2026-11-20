@@ -140,6 +140,57 @@ static uint16_t tlb_perms_to_flags(uint16_t perms)
 }
 #endif
 
+#ifdef CONFIG_MMU
+/**
+ * Map a page in the MMU through both its cached and uncached aliases.
+ *
+ * The L2 TLB translates both aliases of a virtual page, but the MMU
+ * page tables hold them as separate entries. Only the part of the
+ * virtual space backed 1:1 by physical L2 is mapped statically through
+ * both aliases, so the uncached alias must be mapped here as well, or
+ * coherent accesses to pages beyond physical L2 end would fault.
+ * The uncached alias is never made executable.
+ *
+ * @param va Page-aligned cached virtual address.
+ * @param flags Access flags (SYS_MM_MEM_PERM_* and SYS_MM_MEM_CACHE_*)
+ * @return 0 on success, negative error code otherwise.
+ */
+static int tlb_mmu_map_page(uintptr_t va, uint32_t flags)
+{
+	uintptr_t va_uc = POINTER_TO_UINT(sys_cache_uncached_ptr_get(
+			(__sparse_force void __sparse_cache *)UINT_TO_POINTER(va)));
+	uint32_t flags_uc = (flags & ~(K_MEM_CACHE_MASK | K_MEM_PERM_EXEC)) | K_MEM_CACHE_NONE;
+	int ret;
+
+	ret = arch_mem_map(UINT_TO_POINTER(va), va, CONFIG_MM_DRV_PAGE_SIZE, flags);
+	if (ret != 0) {
+		return ret;
+	}
+
+	return arch_mem_map(UINT_TO_POINTER(va_uc), va_uc, CONFIG_MM_DRV_PAGE_SIZE, flags_uc);
+}
+
+/**
+ * Unmap both the cached and uncached aliases of a page from the MMU.
+ *
+ * @param va Page-aligned cached virtual address.
+ * @return 0 on success, negative error code otherwise.
+ */
+static int tlb_mmu_unmap_page(uintptr_t va)
+{
+	void *va_uc = sys_cache_uncached_ptr_get(
+			(__sparse_force void __sparse_cache *)UINT_TO_POINTER(va));
+	int ret;
+
+	ret = arch_mem_unmap(UINT_TO_POINTER(va), CONFIG_MM_DRV_PAGE_SIZE);
+	if (ret != 0) {
+		return ret;
+	}
+
+	return arch_mem_unmap(va_uc, CONFIG_MM_DRV_PAGE_SIZE);
+}
+#endif
+
 static int sys_mm_drv_hpsram_pwr(uint32_t bank_idx, bool enable, bool non_blocking)
 {
 #if defined(CONFIG_SOC_SERIES_INTEL_ADSP_ACE)
@@ -277,7 +328,12 @@ int sys_mm_drv_map_page(void *virt, uintptr_t phys, uint32_t flags)
 	tlb_entries[entry_idx] = entry;
 
 #ifdef CONFIG_MMU
-	arch_mem_map(virt, va, CONFIG_MM_DRV_PAGE_SIZE, flags);
+	ret = tlb_mmu_map_page(va, flags);
+	__ASSERT(ret == 0, "arch_mem_map() failed %d\n", ret);
+	if (ret != 0) {
+		/* TODO: properly handle failed arch_mem_map(). */
+		k_panic();
+	}
 #endif
 	/*
 	 * Invalid the cache of the newly mapped virtual page to
@@ -386,7 +442,11 @@ static int sys_mm_drv_unmap_page_wflush(void *virt, bool flush_data)
 	if (flush_data) {
 		sys_cache_data_flush_range(virt, CONFIG_MM_DRV_PAGE_SIZE);
 #ifdef CONFIG_MMU
-		arch_mem_unmap(virt, CONFIG_MM_DRV_PAGE_SIZE);
+		ret = tlb_mmu_unmap_page(va);
+		__ASSERT(ret == 0, "arch_mem_unmap() failed %d\n", ret);
+		if (ret != 0) {
+			k_panic();
+		}
 #endif
 	}
 
@@ -471,7 +531,12 @@ int sys_mm_drv_update_page_flags(void *virt, uint32_t flags)
 	tlb_entries[entry_idx] = entry;
 
 #ifdef CONFIG_MMU
-	arch_mem_map(virt, va, CONFIG_MM_DRV_PAGE_SIZE, flags);
+	ret = tlb_mmu_map_page(va, flags);
+	__ASSERT(ret == 0, "arch_mem_map() failed %d\n", ret);
+	if (ret != 0) {
+		/* TODO: properly handle failed arch_mem_map(); */
+		k_panic();
+	}
 #endif
 
 out:
@@ -854,8 +919,15 @@ static void adsp_mm_save_context(void *storage_buffer)
 			tlb_entries[entry_idx] = entry;
 
 #ifdef CONFIG_MMU
-			arch_mem_map(UINT_TO_POINTER(phys_addr), phys_addr, CONFIG_MM_DRV_PAGE_SIZE,
-				     K_MEM_CACHE_WB | K_MEM_PERM_RW);
+			int ret = arch_mem_map(UINT_TO_POINTER(phys_addr), phys_addr,
+					       CONFIG_MM_DRV_PAGE_SIZE,
+					       K_MEM_CACHE_WB | K_MEM_PERM_RW);
+
+			__ASSERT(ret == 0, "arch_mem_map() failed %d\n", ret);
+			if (ret != 0) {
+				/* TODO: properly handle failed arch_mem_map() */
+				k_panic();
+			}
 #endif
 
 			/* Invalidate cache to avoid stalled data

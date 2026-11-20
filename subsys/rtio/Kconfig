@@ -39,13 +39,19 @@ config RTIO_SYS_MEM_BLOCKS
 	  without a pre-allocated memory buffer. Instead the buffer will be taken
 	  from the allocated memory pool associated with the RTIO context.
 
+config RTIO_CQE_CALLBACK
+	bool "Notify when a CQE is submitted to the RTIO context using a callback"
+	help
+	  The CQE callback will notify when a CQE is submitted to the RTIO context.
+	  It is set using rtio_set_cqe_callback().
+
 config RTIO_OP_DELAY
 	bool "Delay Operation"
 	default y
 	help
 	  Enable OP_DELAY which allows for, in chains of operations, delaying using a
-	  kernel timer. Note this makes the size of the submission queue entries
-	  typically larger than a dcache line and may have performance implications.
+	  kernel timeout. Delays are handled by a shared timeout iodev, so enabling
+	  this does not embed a timeout in each submission queue entry.
 
 config RTIO_SQE_CACHELINE_CHECK
 	bool "SQE Cacheline size check"
@@ -56,8 +62,10 @@ config RTIO_SQE_CACHELINE_CHECK
 
 choice RTIO_BLOCK_POOL_PLACEMENT
 	prompt "RTIO block pool placement"
-	default RTIO_BLOCK_POOL_PLACEMENT_DTCM if $(dt_chosen_enabled,$(DT_CHOSEN_Z_DTCM))
-	default RTIO_BLOCK_POOL_PLACEMENT_NOCACHE if NOCACHE_MEMORY
+	default RTIO_BLOCK_POOL_PLACEMENT_DTCM if $(dt_chosen_enabled,$(DT_CHOSEN_Z_DTCM)) && \
+		(!USERSPACE || ARCH_HAS_NOCACHE_MEM_PARTITION_SUPPORT)
+	default RTIO_BLOCK_POOL_PLACEMENT_NOCACHE if NOCACHE_MEMORY && \
+		(!USERSPACE || ARCH_HAS_NOCACHE_MEM_PARTITION_SUPPORT)
 	default RTIO_BLOCK_POOL_PLACEMENT_DEFAULT
 	help
 	  Select where the RTIO block pool is placed.
@@ -74,6 +82,7 @@ config RTIO_BLOCK_POOL_PLACEMENT_DEFAULT
 config RTIO_BLOCK_POOL_PLACEMENT_DTCM
 	bool "DTCM (uncached)"
 	depends on $(dt_chosen_enabled,$(DT_CHOSEN_Z_DTCM))
+	depends on !USERSPACE || ARCH_HAS_NOCACHE_MEM_PARTITION_SUPPORT
 	help
 	  Place RTIO block pool in DTCM. On supported architectures DTCM is
 	  inherently uncached and typically needs no extra cache maintenance.
@@ -81,6 +90,7 @@ config RTIO_BLOCK_POOL_PLACEMENT_DTCM
 config RTIO_BLOCK_POOL_PLACEMENT_NOCACHE
 	bool "Non-cacheable memory (NOCACHE)"
 	depends on NOCACHE_MEMORY
+	depends on !USERSPACE || ARCH_HAS_NOCACHE_MEM_PARTITION_SUPPORT
 	help
 	  Place RTIO block pool in a non-cacheable memory region. This assumes
 	  the board/linker provides corresponding no-cache data/bss sections.

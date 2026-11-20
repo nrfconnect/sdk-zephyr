@@ -141,7 +141,7 @@ void arch_new_thread(struct k_thread *thread, k_thread_stack_t *stack, char *sta
 
 #if defined(CONFIG_USERSPACE)
 	thread->arch.priv_stack_start = 0;
-	if ((thread->base.user_options & K_USER) != 0) {
+	if (k_thread_is_user_thread(thread)) {
 		entry_wrapper = (void *)arch_user_mode_enter;
 	}
 #endif
@@ -154,7 +154,7 @@ void arch_new_thread(struct k_thread *thread, k_thread_stack_t *stack, char *sta
 	struct __basic_sf *iframe = Z_STACK_PTR_TO_FRAME(struct __basic_sf, stack_ptr);
 
 #if defined(CONFIG_USERSPACE)
-	if ((thread->base.user_options & K_USER) != 0) {
+	if (k_thread_is_user_thread(thread)) {
 		setup_priv_stack(thread);
 		iframe = Z_STACK_PTR_TO_FRAME(struct __basic_sf, thread->arch.priv_stack_end);
 	}
@@ -708,9 +708,9 @@ FUNC_NORETURN void z_arm_switch_to_main_no_multithreading(k_thread_entry_t main_
 	extern uintptr_t z_arm_tls_ptr;
 	size_t tls_size;
 
-	tls_size = arch_tls_stack_setup(&z_main_thread, psp);
-	z_arm_tls_ptr = z_main_thread.tls;
+	tls_size = arch_tls_stack_setup(NULL, psp);
 	psp -= tls_size;
+	z_arm_tls_ptr = POINTER_TO_UINT(psp);
 #endif
 
 #if defined(CONFIG_BUILTIN_STACK_GUARD)

@@ -131,7 +131,7 @@ hal_status_t rx_channel_callback(hal_eth_handle_t *h_eth, uint32_t channel, void
 	if (!frag || size == 0U || size > frag->size) {
 		LOG_ERR("RX: Invalid frag or size");
 		if (frag) {
-			net_buf_unref(frag);
+			net_pkt_frag_unref(frag);
 		}
 		return HAL_ERROR;
 	}
@@ -141,7 +141,7 @@ hal_status_t rx_channel_callback(hal_eth_handle_t *h_eth, uint32_t channel, void
 
 	if (!pkt) {
 		LOG_ERR("RX: net_pkt_rx_alloc failed");
-		net_buf_unref(frag);
+		net_pkt_frag_unref(frag);
 		return HAL_ERROR;
 	}
 
@@ -291,9 +291,17 @@ static int eth_stm32_tx(const struct device *dev, struct net_pkt *pkt)
 	tx_pkt_conf.attributes = HAL_ETH_TX_PKT_CTRL_CRCPAD;
 	tx_pkt_conf.crc_pad_ctrl = HAL_ETH_TX_PKT_CRC_PAD_INSERT;
 	tx_pkt_conf.notify = HAL_ETH_TX_PKT_NOTIFY_ENABLE;
-	tx_pkt_conf.csum_ctrl = IS_ENABLED(CONFIG_ETH_STM32_HW_CHECKSUM)
-					? HAL_ETH_TX_PKT_CSUM_PAYLOAD_HEADER_INSERT
-					: HAL_ETH_TX_PKT_CSUM_DISABLE;
+	/* The MAC computes the ICMPv4 checksum over the field as it is, so a
+	 * packet that carries its transport layer checksum already, a forwarded
+	 * one for example, gets the IPv4 header checksum only.
+	 */
+	if (!IS_ENABLED(CONFIG_ETH_STM32_HW_CHECKSUM)) {
+		tx_pkt_conf.csum_ctrl = HAL_ETH_TX_PKT_CSUM_DISABLE;
+	} else if (net_pkt_is_chksum_done(pkt)) {
+		tx_pkt_conf.csum_ctrl = HAL_ETH_TX_PKT_CSUM_HEADER_INSERT;
+	} else {
+		tx_pkt_conf.csum_ctrl = HAL_ETH_TX_PKT_CSUM_PAYLOAD_HEADER_INSERT;
+	}
 	if (IS_ENABLED(CONFIG_ETH_STM32_HW_CHECKSUM)) {
 		tx_pkt_conf.attributes |= HAL_ETH_TX_PKT_CTRL_CSUM;
 	}
@@ -330,8 +338,6 @@ static void eth_iface_init(struct net_if *iface)
 	ethernet_init(iface);
 
 	net_if_carrier_off(iface);
-
-	net_lldp_set_lldpdu(iface);
 
 	if (device_is_ready(eth_stm32_phy_dev)) {
 		phy_link_callback_set(eth_stm32_phy_dev, phy_link_state_changed, (void *)dev);
@@ -507,15 +513,8 @@ static int eth_initialize(const struct device *dev)
 
 	/* Set up gated and source clocks */
 	for (size_t n = 0; n < cfg->pclken_cnt; n++) {
-		if (IN_RANGE(cfg->pclken[n].bus, STM32_PERIPH_BUS_MIN, STM32_PERIPH_BUS_MAX)) {
-			ret = clock_control_on(DEVICE_DT_GET(STM32_CLOCK_CONTROL_NODE),
-					(clock_control_subsys_t)&cfg->pclken[n]);
-		} else {
-			ret = clock_control_configure(DEVICE_DT_GET(STM32_CLOCK_CONTROL_NODE),
-					(clock_control_subsys_t)&cfg->pclken[n],
-					NULL);
-		}
-
+		ret = clock_control_on(DEVICE_DT_GET(STM32_CLOCK_CONTROL_NODE),
+				       (clock_control_subsys_t)&cfg->pclken[n]);
 		if (ret != 0) {
 			LOG_ERR("Failed to setup ethernet clock #%zu", n);
 			return -EIO;
@@ -583,6 +582,7 @@ static int eth_stm32_hal_set_config(const struct device *dev,
 
 	switch (type) {
 	case ETHERNET_CONFIG_TYPE_MAC_ADDRESS:
+		memcpy(dev_data->mac_addr, config->mac_address.addr, sizeof(dev_data->mac_addr));
 		HAL_ETH_GetConfig(heth, &eth_cfg);
 		memcpy(eth_cfg.mac_addr, dev_data->mac_addr, sizeof(dev_data->mac_addr));
 

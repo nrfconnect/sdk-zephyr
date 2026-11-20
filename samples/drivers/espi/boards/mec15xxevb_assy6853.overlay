@@ -6,10 +6,8 @@
 
 / {
 	board_power: resources {
-		compatible = "intel-rvp,board-power";
-		/* MCHP_GPIO_012 */
+		compatible = "intel,rvp-board-power";
 		pwrg-gpios = <MCHP_GPIO_DECODE_012 GPIO_ACTIVE_HIGH>;
-		/* MCHP_GPIO_0054 */
 		rsm-gpios = <MCHP_GPIO_DECODE_054 GPIO_ACTIVE_HIGH>;
 	};
 };
@@ -19,8 +17,8 @@
 };
 
 &spi0 {
-	status = "okay";
 	port-sel = <0>;
 	chip-select = <0>;
 	lines = <4>;
+	status = "okay";
 };

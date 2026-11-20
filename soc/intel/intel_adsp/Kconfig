@@ -9,9 +9,10 @@ config SOC_FAMILY_INTEL_ADSP
 	select CPU_HAS_DCACHE
 	select CPU_HAS_ICACHE
 	select CPU_CACHE_INCOHERENT
-	select CACHE_CAN_SAY_MEM_COHERENCE
+	select CACHE_CAN_SAY_MEM_COHERENCE if CACHE_MANAGEMENT
 	select SOC_HAS_CACHE_FUNCTIONS
 	select IPC_SERVICE if DT_HAS_INTEL_ADSP_HOST_IPC_ENABLED
+	imply XTENSA_ENABLE_BACKTRACE
 
 if SOC_FAMILY_INTEL_ADSP
 
@@ -30,17 +31,10 @@ config INTEL_ADSP_FWREADY_MSG
 	  Send a firmware ready message to the host once the system is up
 	  and running.
 
-config INTEL_ADSP_IPC
-	bool "Driver for the host IPC interrupt delivery"
-	select DEPRECATED
-	help
-	  Deprecated config for IPC. Will be removed in the future.
-
 config INTEL_ADSP_IPC_OLD_INTERFACE
 	bool "Expose old interface for the IPC"
 	depends on IPC_SERVICE_BACKEND_INTEL_ADSP_HOST_IPC
 	default y
-	select INTEL_ADSP_IPC
 	help
 	  Expose the old IPC interface (intel_adsp_ipc_* functions) to
 	  maintain backward compatibility.
@@ -181,5 +175,15 @@ config INTEL_ADSP_UNCACHED_REGION
 	help
 	  As for INTEL_ADSP_CACHED_REGION, this specifies which 512M
 	  region (0-7) contains the "uncached" mapping.
+
+config SOC_FAMILY_INTEL_ADSP_TRIPLE_FAULT_BREADCRUMB
+	bool "Record triple fault breadcrumbs in HP-SRAM window0"
+	default y
+	help
+	  When a double exception escalates to a triple fault (escaping the
+	  CPU), record the EPC1, double-exception EXCCAUSE, and DEPC into
+	  HP-SRAM window0 via its uncached alias. This is a lightweight
+	  tracing aid that can be enabled in production builds to diagnose
+	  fatal CPU locks and double faults.
 
 endif # SOC_FAMILY_INTEL_ADSP

@@ -1,6 +1,6 @@
 /*
- * SPDX-FileCopyrightText: <text>Copyright (c) 2026 Infineon Technologies AG,
- * or an affiliate of Infineon Technologies AG. All rights reserved.</text>
+ * SPDX-FileCopyrightText: Copyright (c) 2026 Infineon Technologies AG,
+ * SPDX-FileCopyrightText: or an affiliate of Infineon Technologies AG. All rights reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -56,13 +56,13 @@
 
 uart3: &scb3 {
 	compatible = "infineon,uart";
-	status = "okay";
 	current-speed = <115200>;
 
 	/* UART pins */
 	pinctrl-0 = <&p13_1_scb3_uart_tx &p13_0_scb3_uart_rx
 		     &p13_2_scb3_uart_rts &p13_3_scb3_uart_cts>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &gpio_prt16 {

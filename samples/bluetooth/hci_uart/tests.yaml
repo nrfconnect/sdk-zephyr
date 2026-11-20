@@ -1,6 +1,10 @@
 sample:
   name: Bluetooth HCI UART
   description: Allows Zephyr to provide Bluetooth connectivity via UART
+common:
+  tags:
+    - uart
+    - bluetooth
 tests:
   sample.bluetooth.hci_uart.nrf5:
     harness: bluetooth
@@ -16,9 +20,6 @@ tests:
       - nrf21540dk/nrf52840
       - nrf54l15dk/nrf54l15/cpuapp
       - nrf54lm20dk/nrf54lm20a/cpuapp
-    tags:
-      - uart
-      - bluetooth
   sample.bluetooth.hci_uart.nrf52833.df:
     harness: bluetooth
     platform_allow: nrf52833dk/nrf52833
@@ -29,9 +30,6 @@ tests:
       - SNIPPET="bt-ll-sw-split"
     extra_configs:
       - CONFIG_BT_CTLR_DF=y
-    tags:
-      - uart
-      - bluetooth
   sample.bluetooth.hci_uart.nrf5340_netcore.df:
     harness: bluetooth
     platform_allow: nrf5340dk/nrf5340/cpunet
@@ -40,9 +38,6 @@ tests:
       - SNIPPET="bt-ll-sw-split"
     extra_configs:
       - CONFIG_BT_CTLR_DF=y
-    tags:
-      - uart
-      - bluetooth
   sample.bluetooth.hci_uart.nrf52833.df.iq_report:
     harness: bluetooth
     platform_allow: nrf52833dk/nrf52833
@@ -54,9 +49,6 @@ tests:
     extra_configs:
       - CONFIG_BT_CTLR_DF=y
       - CONFIG_BT_CTLR_DTM_HCI_DF_IQ_REPORT=y
-    tags:
-      - uart
-      - bluetooth
   sample.bluetooth.hci_uart.nrf5340_netcore.df.iq_report:
     harness: bluetooth
     platform_allow: nrf5340dk/nrf5340/cpunet
@@ -66,18 +58,12 @@ tests:
     extra_configs:
       - CONFIG_BT_CTLR_DF=y
       - CONFIG_BT_CTLR_DTM_HCI_DF_IQ_REPORT=y
-    tags:
-      - uart
-      - bluetooth
   sample.bluetooth.hci_uart.nrf5340dk_cpuapp:
     harness: bluetooth
     platform_allow:
       - nrf5340dk/nrf5340/cpuapp
     integration_platforms:
       - nrf5340dk/nrf5340/cpuapp
-    tags:
-      - uart
-      - bluetooth
   sample.bluetooth.hci_uart.nrf5340_audio_dk_cpuapp.fem:
     harness: bluetooth
     platform_allow:
@@ -85,9 +71,6 @@ tests:
     integration_platforms:
       - nrf5340_audio_dk/nrf5340/cpuapp
     extra_args: DTC_OVERLAY_FILE=./boards/nrf5340_audio_dk_nrf5340_cpuapp_nrf21540_ek.overlay
-    tags:
-      - uart
-      - bluetooth
   sample.bluetooth.hci_uart.nrf52833.all:
     harness: bluetooth
     platform_allow: nrf52833dk/nrf52833
@@ -97,9 +80,6 @@ tests:
       - EXTRA_CONF_FILE=overlay-all-bt_ll_sw_split.conf
       - DTC_OVERLAY_FILE=./boards/nrf52833dk_nrf52833_df.overlay
       - SNIPPET="bt-ll-sw-split"
-    tags:
-      - uart
-      - bluetooth
   sample.bluetooth.hci_uart.nrf54l15.all:
     harness: bluetooth
     platform_allow: nrf54l15dk/nrf54l15/cpuapp
@@ -109,9 +89,6 @@ tests:
       - EXTRA_CONF_FILE=overlay-all-bt_ll_sw_split.conf
       - DTC_OVERLAY_FILE=./boards/nrf54l15dk_nrf54l15_cpuapp_df.overlay
       - SNIPPET="bt-ll-sw-split"
-    tags:
-      - uart
-      - bluetooth
   sample.bluetooth.hci_uart.nrf54lm20a.all:
     harness: bluetooth
     platform_allow: nrf54lm20dk/nrf54lm20a/cpuapp
@@ -120,6 +97,11 @@ tests:
     extra_args:
       - EXTRA_CONF_FILE=overlay-all-bt_ll_sw_split.conf
       - DTC_OVERLAY_FILE=./boards/nrf54lm20dk_nrf54lm20a_cpuapp_df.overlay
-    tags:
-      - uart
-      - bluetooth
+  sample.bluetooth.hci_uart.bsim:
+    depends_on: bsim
+    build_only: true
+    platform_allow:
+      - nrf52_bsim
+    harness: bsim
+    harness_config:
+      bsim_exe_name: samples_bluetooth_hci_uart_prj_conf

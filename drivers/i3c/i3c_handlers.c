@@ -24,6 +24,8 @@ static int copy_ccc_and_do(const struct device *dev,
 		K_OOPS(K_SYSCALL_MEMORY_ARRAY_WRITE(copy.ccc.data,
 						    copy.ccc.data_len,
 						    sizeof(*copy.ccc.data)));
+	} else {
+		K_OOPS(K_SYSCALL_VERIFY(copy.ccc.data_len == 0U));
 	}
 
 	user_payloads = copy.targets.payloads;
@@ -47,6 +49,10 @@ static int copy_ccc_and_do(const struct device *dev,
 
 		for (i = 0; i < copy.targets.num_targets; i++) {
 			if (kernel_payloads[i].data == NULL) {
+				if (kernel_payloads[i].data_len != 0U) {
+					k_free(kernel_payloads);
+					K_OOPS(K_SYSCALL_VERIFY(false));
+				}
 				continue;
 			}
 			/* rnw=1: Read (driver writes buffer); rnw=0: Write (driver reads). */
@@ -73,6 +79,7 @@ static int copy_ccc_and_do(const struct device *dev,
 
 		k_free(kernel_payloads);
 	} else {
+		K_OOPS(K_SYSCALL_VERIFY(copy.targets.num_targets == 0U));
 		ret = z_impl_i3c_do_ccc(dev, &copy);
 	}
 
@@ -117,8 +124,13 @@ static uint32_t copy_i3c_msgs_and_transfer(struct i3c_device_desc *target,
 static inline int z_vrfy_i3c_transfer(struct i3c_device_desc *target,
 				      struct i3c_msg *msgs, uint8_t num_msgs)
 {
-	K_OOPS(K_SYSCALL_MEMORY_READ(target, sizeof(*target)));
-	K_OOPS(K_SYSCALL_OBJ(target->bus, K_OBJ_DRIVER_I3C));
+	struct i3c_device_desc target_copy;
+
+	/* Work from a local copy so that the bus which gets validated is
+	 * also the one the transfer is dispatched on.
+	 */
+	K_OOPS(k_usermode_from_copy(&target_copy, target, sizeof(target_copy)));
+	K_OOPS(K_SYSCALL_OBJ(target_copy.bus, K_OBJ_DRIVER_I3C));
 
 	/* copy_msgs_and_transfer() will allocate a copy on the stack using
 	 * VLA, so ensure this won't blow the stack.  Most functions defined
@@ -131,8 +143,6 @@ static inline int z_vrfy_i3c_transfer(struct i3c_device_desc *target,
 	K_OOPS(K_SYSCALL_MEMORY_ARRAY_READ(msgs, num_msgs,
 					   sizeof(struct i3c_msg)));
 
-	return copy_i3c_msgs_and_transfer((struct i3c_device_desc *)target,
-					  (struct i3c_msg *)msgs,
-					  (uint8_t)num_msgs);
+	return copy_i3c_msgs_and_transfer(&target_copy, msgs, num_msgs);
 }
 #include <zephyr/syscalls/i3c_transfer_mrsh.c>

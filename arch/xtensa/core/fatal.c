@@ -8,6 +8,7 @@
 #include <inttypes.h>
 #include <xtensa/config/specreg.h>
 #include <xtensa_backtrace.h>
+#include <zephyr/arch/xtensa/xtensa_ptr.h>
 #include <zephyr/arch/common/exc_handle.h>
 
 #include <xtensa_exc.h>
@@ -145,7 +146,7 @@ FUNC_NORETURN void arch_syscall_oops(void *ssf)
 #ifdef CONFIG_USERSPACE
 void z_impl_xtensa_user_fault(unsigned int reason)
 {
-	if ((_current->base.user_options & K_USER) != 0) {
+	if (k_thread_is_user_thread(_current)) {
 		if ((reason != K_ERR_KERNEL_OOPS) &&
 				(reason != K_ERR_STACK_CHK_FAIL)) {
 			reason = K_ERR_KERNEL_OOPS;

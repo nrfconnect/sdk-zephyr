@@ -10,6 +10,7 @@ config BT_HCI_HOST
 	default y
 	depends on !BT_HCI_RAW
 	select UUID
+	select BT_SYSTEM_WORKQUEUE_COOP
 
 config BT_HCI_TX_STACK_SIZE
 	# NOTE: This value is derived from other symbols and should only be
@@ -43,20 +44,23 @@ config BT_HCI_TX_PRIO
 	default 7
 
 config BT_RX_STACK_SIZE
-	int "Size of the receiving thread stack"
+	int "Size of the Bluetooth workqueue stack"
+	default 4096 if ARM64
 	default 768 if BT_HCI_RAW
+	default 4096 if NO_OPTIMIZATIONS
 	default 3092 if BT_MESH_GATT_CLIENT
 	default 2800 if BT_MESH_PB_GATT
 	default 2600 if BT_MESH
 	default 2048 if BT_AUDIO
 	default 1200
 	help
-	  Size of the receiving thread stack. This is the context from
-	  which all event callbacks to the application occur. The
-	  default value is sufficient for basic operation, but if the
-	  application needs to do advanced things in its callbacks that
-	  require extra stack space, this value can be increased to
-	  accommodate for that.
+	  Size of the stack of the Bluetooth workqueue, the thread in
+	  which the Host processes received data and runs its deferred
+	  work. Most of the callbacks that the application gets from a
+	  context internal to the stack run in this thread. The default
+	  value is sufficient for basic operation, but if the application
+	  needs extra stack space in its callbacks, this value can be
+	  increased to accommodate for that.
 
 config BT_RX_PRIO
 	# Hidden option for Co-Operative Rx thread priority
@@ -84,6 +88,8 @@ config BT_TX_PROCESSOR_THREAD_PRIO
 
 config BT_TX_PROCESSOR_STACK_SIZE
 	int "TX processor thread stack size"
+	default 4096 if ARM64
+	default 2048 if NO_OPTIMIZATIONS
 	default 1024
 	help
 	  Size of the TX processor thread stack. How much stack is needed depends on which
@@ -162,13 +168,17 @@ config BT_BUF_EVT_DISCARDABLE_COUNT
 
 config BT_HOST_CRYPTO
 	bool "Use crypto functionality implemented in the Bluetooth host"
-	default y if !BT_CTLR_CRYPTO
+	default y
+	depends on !BT_CTLR_CRYPTO
 	select PSA_CRYPTO
 	select PSA_WANT_KEY_TYPE_AES
 	select PSA_WANT_ALG_ECB_NO_PADDING
+	imply MBEDTLS_AES_ROM_TABLES if PSA_CRYPTO_PROVIDER_MBEDTLS
 	help
 	  The option adds the AES encryption support using PSA Crypto API
 	  library if this is not provided by the controller implementation.
+	  In a combined build with BT_CTLR_CRYPTO enabled, the Controller
+	  provides these functions instead.
 
 config BT_HOST_CRYPTO_PRNG
 	bool "Use PSA crypto API library for random number generation"
@@ -285,24 +295,67 @@ config BT_FILTER_ACCEPT_LIST
 	  advertising reports.
 	  Connections can be established automatically for accepted peers.
 
+config BT_LIM_ADV
+	bool "Limited discoverable mode advertising"
+	default y
+	depends on BT_BROADCASTER
+	help
+	  Stop advertising that bt_le_adv_start() started with the
+	  BT_LE_AD_LIMITED flag in its advertising data after
+	  BT_LIM_ADV_TIMEOUT seconds, as the limited discoverable mode
+	  requires. Without this option bt_le_adv_start() rejects such
+	  advertising data with -ENOTSUP, and each advertising set does
+	  without the timer for it.
+
 config BT_LIM_ADV_TIMEOUT
 	int "Timeout for limited advertising in 1s units"
 	default 30
 	range 1 180
-	depends on BT_BROADCASTER
+	depends on BT_LIM_ADV
 	help
 	  After this timeout is reached, advertisement with BT_LE_AD_LIMITED flag
 	  set shall be terminated. As per BT Core Spec 5.2, Vol 3, Part C,
 	  Appendix A (NORMATIVE): TIMERS AND CONSTANTS it's required to be no more
 	  than 180s.
 
+config BT_CONN_ACCEPT_TIMEOUT
+	hex "Bluetooth Connection Accept Timeout"
+	depends on BT_CLASSIC && !BT_ISO_PERIPHERAL
+	default 0x1f40
+	range 0x00a0 0xb540
+	help
+	  This option sets the connection accept timeout, that is how long the
+	  controller waits for the host to accept or reject an incoming BR/EDR
+	  connection request before rejecting it itself. The value is in
+	  0.625 ms units. It is only programmed if the controller reports
+	  support for HCI_Write_Connection_Accept_Timeout.
+
+	  The host answers BR/EDR connection requests synchronously from its RX
+	  context, so this timeout only comes into play when the host itself is
+	  stalled.
+
+	  The controller applies the same parameter to LE CIS requests: when
+	  the application's accept callback in hci_le_cis_req() has not
+	  returned by the time it expires, the controller rejects the request
+	  on its own. The host would then send its accept for a request that
+	  is already gone, an outcome the ISO API does not handle, so the
+	  option is not offered when BT_ISO_PERIPHERAL is enabled.
+
+	  The bounds are the mandatory range from Core Specification 6.3,
+	  Vol 4, Part E, Section 6.7. Lower values down to 0x0001 are allowed
+	  by the specification but need not be supported.
+
 config BT_CONN_TX_USER_DATA_SIZE
 	int
-	default 32 if 64BIT
-	default 16
+	default 32 if 64BIT && BT_CLASSIC
+	default 16 if 64BIT || BT_CLASSIC
+	default 8
 	help
 	  Necessary user_data size for stack usage. Mostly used for passing
-	  callbacks around. See `struct closure` in conn_internal.h.
+	  callbacks around. See `struct closure` in conn_internal.h, which is
+	  all that LE stores there. Classic needs room for larger per-buffer
+	  state, such as `struct l2cap_br_closure` and the AVCTP and AVRCP TX
+	  state.
 
 config BT_CONN_FRAG_COUNT
 	int
@@ -313,15 +366,6 @@ config BT_CONN_FRAG_COUNT
 	  packets in flight. It should be equal to the number of connections.
 
 if BT_CONN
-
-config BT_CONN_TX_MAX
-	int "Maximum number of pending TX buffers with a callback [DEPRECATED]"
-	default BT_BUF_ACL_TX_COUNT
-	range BT_BUF_ACL_TX_COUNT $(UINT8_MAX)
-	help
-	  Maximum number of pending TX buffers that have an associated
-	  callback. Normally this can be left to the default value, which
-	  is equal to the number of TX buffers in the controller.
 
 config BT_CONN_PARAM_ANY
 	bool "Accept any values for connection parameters"
@@ -356,22 +400,9 @@ config BT_USER_PHY_UPDATE
 	  changes on the connection. The current PHY info is available in the
 	  connection info.
 
-config BT_AUTO_PHY_UPDATE
-	bool "Auto-initiate PHY Update Procedure [DEPRECATED]"
-	select DEPRECATED
-	help
-	  Initiate PHY Update Procedure on connection establishment. This will attempt
-	  to update the connection to use 2M PHY, however it doesn't actually guarantee
-	  that this is what will be used in the end.
-
-	  This option has been deprecated in favor of role specific options. The equivalent
-	  behavior can be accomplished by enabling BT_AUTO_PHY_PERIPHERAL_2M and
-	  BT_AUTO_PHY_CENTRAL_2M.
-
 choice BT_AUTO_PHY_PERIPHERAL
 	prompt "Auto PHY update for peripheral role"
 	depends on BT_PERIPHERAL
-	default BT_AUTO_PHY_PERIPHERAL_2M if BT_AUTO_PHY_UPDATE
 	default BT_AUTO_PHY_PERIPHERAL_NONE
 
 config BT_AUTO_PHY_PERIPHERAL_NONE
@@ -477,102 +508,8 @@ config BT_PASSKEY_KEYPRESS
 	  Enable support for receiving and sending Keypress Notifications during
 	  Passkey Entry during pairing.
 
-config BT_PRIVACY
-	bool "Device privacy"
-	help
-	  Enable privacy for the local device. This makes the device use Resolvable
-	  Private Addresses (RPAs) by default.
-
-	  Note:
-	  Establishing connections as a directed advertiser, or to a directed
-	  advertiser is only possible if the controller also supports privacy.
-
-config BT_PRIVACY_RANDOMIZE_IR
-	bool "Randomize identity root for fallback identities"
-	depends on BT_PRIVACY
-	select BT_SETTINGS
-	help
-	  Enabling this option will cause the Host to ignore controller-provided
-	  identity roots (IR). The Host will instead use bt_rand to generate
-	  identity resolving keys (IRK) and store them in the settings subsystem.
-
-	  Setting this config may come with a performance penalty to boot time,
-	  as the hardware RNG may need time to generate entropy and will block
-	  Bluetooth initialization.
-
-	  This option increases privacy, as explained in the following text.
-
-	  The IR determines the IRK of the identity. The IRK is used to both
-	  generate and resolve (recognize) the private addresses of an identity.
-	  The IRK is a shared secret, distributed to peers bonded to that
-	  identity.
-
-	  An attacker that has stolen or once bonded and retained the IRK can
-	  forever resolve addresses from that IRK, even if that bond has been
-	  deleted locally.
-
-	  Deleting an identity should ideally delete the IRK as well and thereby
-	  restore anonymity from previously bonded peers. But unless this config
-	  is set, this does not always happen.
-
-	  In particular, a factory reset function that wipes the data in the
-	  settings subsystem may not affect the controller-provided IRs. If
-	  those IRs are reused, this device can be tracked across factory resets.
-
-	  For optimal privacy, a new IRK (i.e., identity) should be used per
-	  bond. However, this naturally limits advertisements from that identity
-	  to be recognizable by only that one bonded device.
-
-	  A description of the exact effect of this setting follows.
-
-	  If the application has not setup an identity before calling
-	  settings_load()/settings_load_subtree("bt") after bt_enable(), the
-	  Host will automatically try to load saved identities from the settings
-	  subsystem, and if there are none, set up the default identity
-	  (BT_ID_DEFAULT).
-
-	  If the controller has a public address (HCI_Read_BD_ADDR), that becomes
-	  the address of the default identity. The Host will by default try to
-	  obtain the IR for that identity from the controller (by Zephyr HCI
-	  Read_Key_Hierarchy_Roots). Setting this config randomizes the IR
-	  instead.
-
-	  If the controller does not have a public address, the Host will try
-	  to source the default identity from the static address information
-	  from controller (Zephyr HCI Read_Static_Addresses). This results in an
-	  identity for each entry in Read_Static_Addresses. Setting this config
-	  randomizes the IRs during this process.
-
-config BT_RPA_TIMEOUT
-	int "Resolvable Private Address timeout"
-	depends on BT_PRIVACY
-	default 900
-	range 1 $(UINT16_MAX)
-	help
-	  This option defines how often resolvable private address is rotated.
-	  Value is provided in seconds and defaults to 900 seconds (15 minutes).
-
-config BT_RPA_TIMEOUT_DYNAMIC
-	bool "Support setting the Resolvable Private Address timeout at runtime"
-	depends on BT_PRIVACY
-	help
-	  This option allows the user to override the default value of
-	  the Resolvable Private Address timeout using dedicated APIs.
-
-config BT_RPA_SHARING
-	bool "Share the Resolvable Private Address between advertising sets"
-	depends on BT_PRIVACY && BT_EXT_ADV
-	help
-	  This option configures the advertising sets linked with the same
-	  Bluetooth identity to use the same Resolvable Private Address in
-	  a given rotation period. After the RPA timeout, the new RPA is
-	  generated and shared between the advertising sets in the subsequent
-	  rotation period. When this option is disabled, the generated RPAs
-	  of the advertising sets differ from each other in a given rotation
-	  period.
-
 config BT_SIGNING
-	bool "Data signing support"
+	bool "Data signing support [DEPRECATED]"
 	select DEPRECATED
 	help
 	  This option enables data signing which is used for transferring
@@ -632,6 +569,45 @@ config BT_SMP_ALLOW_UNAUTH_OVERWRITE
 	  to replace the existing bond. When this option is disabled in order
 	  to create a new bond the old bond has to be explicitly deleted with
 	  bt_unpair.
+
+config BT_SMP_DERIVE_LTK
+	bool "Derive the LE LTK from the BR/EDR link key"
+	depends on BT_CLASSIC
+	default y
+	help
+	  Accept the Security Manager procedure over BR/EDR, which derives the
+	  LE LTK from the BR/EDR link key as part of Cross-Transport Key
+	  Derivation (Core Specification 6.3, Vol 3, Part H, Section 2.4.2.5).
+
+	  Disabling this refuses that procedure as a whole rather than only the
+	  LTK: the IRK, the identity address and the CSRK are not distributed
+	  over BR/EDR either, so RPAs from a peer bonded only over BR/EDR can
+	  no longer be resolved. That is intended, because the identity
+	  information on its own already creates an LE bond entry. The BR/EDR
+	  Security Manager fixed channel is also left out of the L2CAP
+	  information response so that a peer does not start a procedure that
+	  would then be rejected.
+
+	  Disable this on a device that must not end up with an LE bond as a
+	  side effect of pairing over BR/EDR. Keys derived while it was enabled
+	  are kept.
+
+config BT_SMP_DERIVE_LK
+	bool "Derive the BR/EDR link key from the LE LTK"
+	depends on BT_CLASSIC
+	default y
+	help
+	  Ask for a BR/EDR link key to be derived from the LE LTK during Secure
+	  Connections pairing over LE, as part of Cross-Transport Key Derivation
+	  (Core Specification 6.3, Vol 3, Part H, Section 2.4.2.4).
+
+	  Disabling this clears the LinkKey bit from the key distribution of
+	  both the Pairing Request and the Pairing Response, so that the peer
+	  does not keep a link key that this device never derives.
+
+	  Disable this on a device that must not end up with a BR/EDR bond as a
+	  side effect of pairing over LE. Keys derived while it was enabled are
+	  kept.
 
 config BT_ID_UNPAIR_MATCHING_BONDS
 	bool "Delete bond with same peer with other local identity when bonding"
@@ -712,18 +688,8 @@ config BT_SMP_USB_HCI_CTLR_WORKAROUND
 	  It opens up for a potential vulnerability as the central cannot detect
 	  if the keys are distributed over an encrypted link.
 
-config BT_FIXED_PASSKEY
-	bool "Use a fixed passkey for pairing [DEPRECATED]"
-	select DEPRECATED
-	help
-	  This option is deprecated, use BT_APP_PASSKEY instead.
-	  With this option enabled, the application will be able to call the
-	  bt_passkey_set() API to set a fixed passkey. If set, the
-	  pairing_confirm() callback will be called for all incoming pairings.
-
 config BT_APP_PASSKEY
 	bool "Allow the application to provide passkeys for pairing"
-	depends on !BT_FIXED_PASSKEY
 	help
 	  With this option enabled, the application will be able to provide passkeys for pairing
 	  using the app_passkey() callback.  If the application does not provide a passkey, a
@@ -876,6 +842,103 @@ config BT_CONN_PARAM_RETRY_TIMEOUT
 
 endif # BT_CONN
 
+config BT_PRIVACY
+	bool "Device privacy"
+	depends on BT_BROADCASTER || BT_OBSERVER
+	depends on BT_SMP || !BT_CONN
+	select BT_RPA
+	help
+	  Enable privacy for the local device. This makes the device use Resolvable
+	  Private Addresses (RPAs) by default.
+
+	  Note:
+	  Establishing connections as a directed advertiser, or to a directed
+	  advertiser is only possible if the controller also supports privacy.
+
+config BT_PRIVACY_RANDOMIZE_IR
+	bool "Randomize identity root for fallback identities"
+	depends on BT_PRIVACY
+	select BT_SETTINGS
+	help
+	  Enabling this option will cause the Host to ignore controller-provided
+	  identity roots (IR). The Host will instead use bt_rand to generate
+	  identity resolving keys (IRK) and store them in the settings subsystem.
+
+	  Setting this config may come with a performance penalty to boot time,
+	  as the hardware RNG may need time to generate entropy and will block
+	  Bluetooth initialization.
+
+	  This option increases privacy, as explained in the following text.
+
+	  The IR determines the IRK of the identity. The IRK is used to both
+	  generate and resolve (recognize) the private addresses of an identity.
+	  The IRK is a shared secret, distributed to peers bonded to that
+	  identity.
+
+	  An attacker that has stolen or once bonded and retained the IRK can
+	  forever resolve addresses from that IRK, even if that bond has been
+	  deleted locally.
+
+	  Deleting an identity should ideally delete the IRK as well and thereby
+	  restore anonymity from previously bonded peers. But unless this config
+	  is set, this does not always happen.
+
+	  In particular, a factory reset function that wipes the data in the
+	  settings subsystem may not affect the controller-provided IRs. If
+	  those IRs are reused, this device can be tracked across factory resets.
+
+	  For optimal privacy, a new IRK (i.e., identity) should be used per
+	  bond. However, this naturally limits advertisements from that identity
+	  to be recognizable by only that one bonded device.
+
+	  A description of the exact effect of this setting follows.
+
+	  If the application has not setup an identity before calling
+	  settings_load()/settings_load_subtree("bt") after bt_enable(), the
+	  Host will automatically try to load saved identities from the settings
+	  subsystem, and if there are none, set up the default identity
+	  (BT_ID_DEFAULT).
+
+	  If the controller has a public address (HCI_Read_BD_ADDR), that becomes
+	  the address of the default identity. The Host will by default try to
+	  obtain the IR for that identity from the controller (by Zephyr HCI
+	  Read_Key_Hierarchy_Roots). Setting this config randomizes the IR
+	  instead.
+
+	  If the controller does not have a public address, the Host will try
+	  to source the default identity from the static address information
+	  from controller (Zephyr HCI Read_Static_Addresses). This results in an
+	  identity for each entry in Read_Static_Addresses. Setting this config
+	  randomizes the IRs during this process.
+
+config BT_RPA_TIMEOUT
+	int "Resolvable Private Address timeout"
+	depends on BT_PRIVACY
+	default 900
+	range 1 $(UINT16_MAX)
+	help
+	  This option defines how often resolvable private address is rotated.
+	  Value is provided in seconds and defaults to 900 seconds (15 minutes).
+
+config BT_RPA_TIMEOUT_DYNAMIC
+	bool "Support setting the Resolvable Private Address timeout at runtime"
+	depends on BT_PRIVACY
+	help
+	  This option allows the user to override the default value of
+	  the Resolvable Private Address timeout using dedicated APIs.
+
+config BT_RPA_SHARING
+	bool "Share the Resolvable Private Address between advertising sets"
+	depends on BT_PRIVACY && BT_EXT_ADV
+	help
+	  This option configures the advertising sets linked with the same
+	  Bluetooth identity to use the same Resolvable Private Address in
+	  a given rotation period. After the RPA timeout, the new RPA is
+	  generated and shared between the advertising sets in the subsequent
+	  rotation period. When this option is disabled, the generated RPAs
+	  of the advertising sets differ from each other in a given rotation
+	  period.
+
 if BT_OBSERVER
 config BT_BACKGROUND_SCAN_INTERVAL
 	int "Scan interval used for background scanning in 0.625 ms units"
@@ -903,6 +966,23 @@ config BT_EXT_SCAN_BUF_SIZE
 	  Maximum size of an advertisement report in octets. If the advertisement
 	  provided by the controller is larger than this buffer size,
 	  the remaining data will be discarded.
+
+config BT_SCAN_EXT_FILTER_POLICY
+	bool "Extended scanner filter policies"
+	depends on !HAS_BT_CTLR || BT_CTLR_EXT_SCAN_FP
+	help
+	  Enable support for the BT_LE_SCAN_OPT_EXT_FILTER_POLICY scanning option.
+
+	  The extended scanner filter policies let the Controller report directed
+	  advertisements whose target address is a resolvable private address that
+	  the Controller was unable to resolve, instead of discarding them. This
+	  allows an application to detect a peer that is directing advertisements
+	  at an identity the local device cannot resolve.
+
+	  This enables the LE Directed Advertising Report event, which is used to
+	  report these advertisements while scanning with the legacy scanning
+	  commands. It requires a Controller that supports the Extended Scanner
+	  Filter Policies.
 
 endif # BT_OBSERVER
 
@@ -1090,10 +1170,14 @@ endif # BT_HCI_HOST
 
 config BT_HOST_CCM
 	bool "Host side AES-CCM module"
+	select PSA_CRYPTO
+	select PSA_WANT_KEY_TYPE_AES
+	select PSA_WANT_ALG_CCM
+	imply MBEDTLS_AES_ROM_TABLES if PSA_CRYPTO_PROVIDER_MBEDTLS
 	help
-	  Enables the software based AES-CCM engine in the host. Will use the
-	  controller's AES encryption functions if available, or BT_HOST_CRYPTO
-	  otherwise.
+	  Enables AES-CCM in the Bluetooth host using the PSA Crypto AEAD API.
+	  PSA Crypto must be initialized before the first call; with Mbed TLS
+	  as the provider, MBEDTLS_INIT does that at boot.
 
 config BT_PER_ADV_SYNC_BUF_SIZE
 	int "Maximum periodic advertising report size"

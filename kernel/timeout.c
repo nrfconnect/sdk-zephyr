@@ -11,7 +11,7 @@
 #include <timeout_q.h>
 #include <zephyr/internal/syscall_handler.h>
 #include <zephyr/drivers/timer/system_timer.h>
-#include <zephyr/sys_clock.h>
+#include <zephyr/sys/clock.h>
 #include <zephyr/llext/symbol.h>
 
 #include <timeslicing.h>
@@ -106,13 +106,15 @@ static uint32_t elapsed(void)
  * tree-wide and live in timeout_q.h.
  */
 #if defined(CONFIG_TIMEOUT_BACKEND_MINHEAP)
-#include "timeout_minheap.h"
+#include "timeout/minheap.h"
 #elif defined(CONFIG_TIMEOUT_BACKEND_WHEEL)
-#include "timeout_wheel.h"
+#include "timeout/wheel.h"
 #elif defined(CONFIG_TIMEOUT_BACKEND_BUCKET)
-#include "timeout_bucket.h"
+#include "timeout/bucket.h"
+#elif defined(CONFIG_TIMEOUT_BACKEND_SKIPLIST)
+#include "timeout/skiplist.h"
 #else /* CONFIG_TIMEOUT_BACKEND_DLIST */
-#include "timeout_list.h"
+#include "timeout/list.h"
 #endif
 
 /*
@@ -165,7 +167,7 @@ static void reprogram_next(uint32_t ticks_elapsed)
 {
 	if (IS_ENABLED(CONFIG_SYSTEM_CLOCK_SLOPPY_IDLE) &&
 	    z_timeout_q_next_expiry() == K_TICKS_FOREVER) {
-		sys_clock_unused();
+		sys_clock_no_timeout();
 	} else {
 		sys_clock_set_timeout(next_timeout(ticks_elapsed), false);
 	}
@@ -187,7 +189,7 @@ k_ticks_t z_add_timeout(struct _timeout *to, _timeout_func_t fn, k_timeout_t tim
 	to->fn = fn;
 
 	K_SPINLOCK(&timeout_lock) {
-		uint32_t ticks_elapsed;
+		uint32_t ticks_elapsed = 0;
 		bool has_elapsed = false;
 		k_ticks_t dticks;
 
@@ -217,7 +219,8 @@ k_ticks_t z_add_timeout(struct _timeout *to, _timeout_func_t fn, k_timeout_t tim
 		} else {
 			dticks = Z_TICK_ABS(timeout.ticks) - curr_tick;
 			dticks = max(1, dticks);
-			ticks = timeout.ticks;
+			/* report the decoded absolute expiry, not the Z_TICK_ABS encoding */
+			ticks = Z_TICK_ABS(timeout.ticks);
 		}
 
 		if (z_timeout_q_insert(to, dticks) && !any_cpu_announcing()) {
@@ -246,11 +249,14 @@ int z_try_abort_timeout(struct _timeout *to)
 			if (was_first) {
 				reprogram_next(elapsed());
 			}
-		} else if (IS_ENABLED(CONFIG_SMP) && inflight_ptr() == to &&
-			   !this_cpu_announcing()) {
-			/* Handler in flight on another CPU. Free-safety
-			 * callers retry on -EAGAIN to wait it out; others
-			 * rely on the superseded mark below and don't.
+		}
+
+		if (IS_ENABLED(CONFIG_SMP) && inflight_ptr() == to &&
+		    !this_cpu_announcing()) {
+			/* Handler in flight on another CPU, even if we just
+			 * removed a copy it re-queued (periodic timer).
+			 * Free-safety callers retry on -EAGAIN to wait it
+			 * out; others rely on the superseded mark below.
 			 */
 			ret = -EAGAIN;
 		}
@@ -289,7 +295,11 @@ k_ticks_t z_timeout_remaining(const struct _timeout *timeout)
 
 	K_SPINLOCK(&timeout_lock) {
 		if (!z_is_inactive_timeout(timeout)) {
-			ticks = z_timeout_q_remainder(timeout) - elapsed();
+			k_ticks_t rem = z_timeout_q_remainder(timeout);
+			uint32_t el = elapsed();
+
+			/* elapsed() can exceed rem when announce is late. */
+			ticks = (rem > el) ? (rem - el) : 0;
 		}
 	}
 
@@ -312,20 +322,23 @@ k_ticks_t z_timeout_expires(const struct _timeout *timeout)
 }
 EXPORT_SYMBOL(z_timeout_expires);
 
-int32_t z_get_next_timeout_expiry(void)
+uint32_t z_get_next_timeout_expiry(void)
 {
-	int32_t ret = (int32_t) K_TICKS_FOREVER;
+	uint32_t ret = (uint32_t)K_TICKS_FOREVER;
 
 	K_SPINLOCK(&timeout_lock) {
-		uint32_t t = next_timeout(elapsed());
-
 		/*
-		 * next_timeout() is unsigned; only fold it into the signed
-		 * result when it fits, otherwise leave the K_TICKS_FOREVER
-		 * default.
+		 * Same decision as reprogram_next(). Sloppy idle lets the
+		 * uptime drift, so an empty list means nothing to wake up for
+		 * and that is reported as K_TICKS_FOREVER. Otherwise the
+		 * answer is a wait: either a real deadline, or the synthetic
+		 * one that keeps the announce range covered.
 		 */
-		if (t <= INT32_MAX) {
-			ret = (int32_t)t;
+		if (IS_ENABLED(CONFIG_SYSTEM_CLOCK_SLOPPY_IDLE) &&
+		    z_timeout_q_next_expiry() == K_TICKS_FOREVER) {
+			ret = (uint32_t)K_TICKS_FOREVER;
+		} else {
+			ret = next_timeout(elapsed());
 		}
 	}
 	return ret;

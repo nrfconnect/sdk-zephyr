@@ -8,6 +8,7 @@
 #include <st/h7rs/stm32h7s7X8.dtsi>
 #include <st/h7/stm32h7s7l8hxh-pinctrl.dtsi>
 #include "arduino_r3_connector.dtsi"
+#include "stmod_connector.dtsi"
 #include <zephyr/dt-bindings/display/panel.h>
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 
@@ -24,13 +25,6 @@
 		zephyr,display = &ltdc;
 		zephyr,touch = &display_ctp;
 		zephyr,canbus = &fdcan1;
-	};
-
-	psram: memory@90000000 {
-		compatible = "zephyr,memory-region";
-		reg = <0x90000000 DT_SIZE_M(32)>;
-		zephyr,memory-region = "PSRAM";
-		zephyr,memory-attr = <DT_MEM_ARM_MPU_RAM>;
 	};
 
 	leds {
@@ -101,11 +95,31 @@
 		rtc = &rtc;
 	};
 
+	/*
+	 * 11.025/22.05/44.1/88.2kHz:
+	 * PLL2.Q / 24 = 271MHz / 24 = 11.2917MHz.
+	 *
+	 * 8/16/32/48/96kHz:
+	 * PLL2.Q / 22 = 271MHz / 22 = 12.3182MHz.
+	 */
+	wm8904_fll_ref: i2s6-mclk {
+		compatible = "fixed-clock";
+		clock-frequency = <11291666>;
+		#clock-cells = <0>;
+	};
+
 	ext_flash_mem: memory@70000000 {
 		compatible = "zephyr,memory-region";
 		reg = <0x70000000 DT_SIZE_M(128)>;
 		zephyr,memory-region = "EXTMEM";
 		zephyr,memory-attr = <DT_MEM_ARM(ATTR_MPU_FLASH)>;
+	};
+
+	psram: memory@90000000 {
+		compatible = "zephyr,memory-region";
+		reg = <0x90000000 DT_SIZE_M(32)>;
+		zephyr,memory-region = "PSRAM";
+		zephyr,memory-attr = <DT_MEM_ARM_MPU_RAM>;
 	};
 };
 
@@ -135,10 +149,25 @@
 	status = "okay";
 };
 
+&pll2 {
+	/* PLL2.Q is tuned to minimize bit clock errors on I2S6 providing
+	 * MCK in stereo 16b at the following rates:
+	 * - 8kHz / 16kHz / 32kHz / 48kHz / 96kHz ~ 0.25% err
+	 * - 11.025kHz / 22.05kHz / 44.1KHz / 88.2kHz ~ 0.02% err
+	 * ie. there exists valid I2S prescaler values such that:
+	 * 271MHz x prescaler =~ sample_rate x16(bits) x2(chans) x8(MCK)
+	 */
+	div-m = <12>;
+	mul-n = <271>;
+	div-q = <2>;
+	clocks = <&clk_hse>;
+	status = "okay";
+};
+
 &pll3 {
 	div-m = <12>;
-	mul-n = <25>;
-	div-r = <2>;
+	mul-n = <200>;
+	div-r = <16>;
 	clocks = <&clk_hse>;
 	status = "okay";
 };
@@ -191,9 +220,9 @@
 	status = "okay";
 
 	pwm2: pwm {
-		status = "okay";
 		pinctrl-0 = <&tim2_ch4_pa3>;
 		pinctrl-names = "default";
+		status = "okay";
 	};
 };
 
@@ -202,9 +231,9 @@
 	status = "okay";
 
 	pwm3: pwm {
-		status = "okay";
 		pinctrl-0 = <&tim3_ch2_pb5>;
 		pinctrl-names = "default";
+		status = "okay";
 	};
 };
 
@@ -219,16 +248,18 @@
 &adc1 {
 	pinctrl-0 = <&adc1_inp6_pf12>; /* Arduino A3 */
 	pinctrl-names = "default";
-	st,adc-clock-source = "SYNC";
+	status = "okay";
+};
+
+&adc12_common {
 	st,adc-prescaler = <4>;
+	st,adc-clock-source = "SYNC";
 	status = "okay";
 };
 
 &adc2 {
 	pinctrl-0 = <&adc2_inp2_pf13>; /* Arduino A4 */
 	pinctrl-names = "default";
-	st,adc-clock-source = "SYNC";
-	st,adc-prescaler = <4>;
 	status = "okay";
 };
 
@@ -251,12 +282,32 @@ st_cam_i2c: &i2c1 {
 	 */
 	status = "okay";
 
+	audio_codec: wm8904@1a {
+		compatible = "wolfson,wm8904";
+		reg = <0x1a>;
+		input-pga-select = <1>;
+		clocks = <&wm8904_fll_ref>;
+		clock-names = "mclk";
+		clock-source = "FLL";
+		wolfson,mic-bias-voltage = "avdd-9-10";
+		status = "okay";
+	};
+
 	display_ctp: gt911@5d {
 		compatible = "goodix,gt911";
 		reg = <0x5d>;
 		irq-gpios = <&gpioe 3 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>;
 		status = "okay";
 	};
+};
+
+&i2s6 {
+	clocks = <&rcc STM32_CLOCK(APB4, 5)>,
+		 <&rcc STM32_SRC_PLL2_Q SPI6_SEL(1)>;
+	pinctrl-0 = <&i2s6_mck_pa3 &i2s6_ws_pa4 &i2s6_ck_pa5 &i2s6_sdo_pb5 &i2s6_sdi_pg12>;
+	pinctrl-names = "default";
+	mck-enabled;
+	status = "okay";
 };
 
 &fdcan1 {
@@ -276,7 +327,9 @@ st_cam_i2c: &i2c1 {
 		     &eth_rmii_rxd1_pc5
 		     &eth_rmii_tx_en_pg11
 		     &eth_rmii_txd0_pb0
-		     &eth_rmii_txd1_pb1>;
+		     &eth_rmii_txd1_pb1
+		     &eth_mdio_pa2
+		     &eth_mdc_pc1>;
 	pinctrl-names = "default";
 	phy-connection-type = "rmii";
 	phy-handle = <&eth_phy>;
@@ -284,8 +337,6 @@ st_cam_i2c: &i2c1 {
 };
 
 &mdio {
-	pinctrl-0 = <&eth_mdio_pa2 &eth_mdc_pc1>;
-	pinctrl-names = "default";
 	status = "okay";
 
 	eth_phy: ethernet-phy@0 {
@@ -341,28 +392,26 @@ st_cam_i2c: &i2c1 {
 	ext_flash_ctrl: xspi-nor-flash@0 {
 		compatible = "st,stm32-xspi-nor";
 		reg = <0>;
+		ranges = <0x0 0x70000000 DT_SIZE_M(128)>;
 		size = <DT_SIZE_M(1024)>; /* 1 Gbits */
 		ospi-max-frequency = <DT_FREQ_M(50)>;
 		spi-bus-width = <XSPI_OCTO_MODE>;
 		data-rate = <XSPI_DTR_TRANSFER>;
 		four-byte-opcodes;
-		status = "okay";
 
+		/* XSPI external flash mapping */
 		#address-cells = <1>;
 		#size-cells = <1>;
-		ranges = <0x0 0x70000000 DT_SIZE_M(128)>;
+		status = "okay";
 
 		ext_flash: mx66uw1g45: ext-flash@0 {
 			compatible = "soc-nv-flash";
 			reg = <0x0 DT_SIZE_M(128)>;
+			ranges;
 			write-block-size = <1>;
 			erase-block-size = <DT_SIZE_K(4)>;
-
-			partitions {
-				compatible = "fixed-partitions";
-				#address-cells = <1>;
-				#size-cells = <1>;
-			};
+			#address-cells = <1>;
+			#size-cells = <1>;
 		};
 	};
 };
@@ -397,13 +446,31 @@ st_cam_i2c: &i2c1 {
 	};
 };
 
+/* USB1 port of board = OTG_HS */
+usb1: &usbotg_hs {
+	pinctrl-0 = <&usb_otg_hs_dm_pm5 &usb_otg_hs_dp_pm6>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
+&usbphyc {
+	/*
+	 * There is no need to change `clocks` because
+	 * we use the default configuration after reset:
+	 *  USBPHYC kernel clock = HSE @ 24 MHz
+	 */
+	status = "okay";
+};
+
+/* USB2 port of board = OTG_FS */
 usb2: &usbotg_fs {
 	pinctrl-0 = <&usb_otg_fs_dm_pm12 &usb_otg_fs_dp_pm11>;
 	pinctrl-names = "default";
 	status = "okay";
 };
 
-zephyr_udc0: &usb2 {};
+/* USB port selection: use USB1 by default */
+zephyr_udc0: &usb1 {};
 
 &ltdc {
 	pinctrl-0 = <&ltdc_r0_pf9 &ltdc_r1_pf10 &ltdc_r2_pf0 &ltdc_r3_pb4
@@ -418,11 +485,15 @@ zephyr_udc0: &usb2 {};
 	bl-ctrl-gpios = <&gpiog 15 GPIO_ACTIVE_HIGH>;
 	ext-sdram = <&psram>;
 
-	status = "okay";
-
 	width = <800>;
 	height = <480>;
 	pixel-format = <PANEL_PIXEL_FORMAT_RGB_888>;
+
+	def-back-color-red = <0xff>;
+	def-back-color-green = <0xff>;
+	def-back-color-blue = <0xff>;
+
+	status = "okay";
 
 	display-timings {
 		compatible = "zephyr,panel-timing";
@@ -437,10 +508,6 @@ zephyr_udc0: &usb2 {};
 		hfront-porch = <8>;
 		vfront-porch = <8>;
 	};
-
-	def-back-color-red = <0xff>;
-	def-back-color-green = <0xff>;
-	def-back-color-blue = <0xff>;
 };
 
 st_cam_dvp: &dcmipp {
@@ -456,5 +523,21 @@ st_cam_dvp: &dcmipp {
 };
 
 zephyr_jpegenc: &jpeg {
+	status = "okay";
+};
+
+&gpu2d {
+	status = "okay";
+};
+
+&cryp {
+	status = "okay";
+};
+
+&hash {
+	status = "okay";
+};
+
+&dma2d {
 	status = "okay";
 };
