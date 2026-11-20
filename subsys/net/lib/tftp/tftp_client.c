@@ -4,14 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#undef _POSIX_C_SOURCE
-#define _POSIX_C_SOURCE 200809L
-
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(tftp_client, CONFIG_TFTP_LOG_LEVEL);
 
 #include <stddef.h>
-#include <string.h>
 #include <zephyr/net/tftp.h>
 #include "tftp_client.h"
 #include "net_private.h"
@@ -24,21 +20,19 @@ LOG_MODULE_REGISTER(tftp_client, CONFIG_TFTP_LOG_LEVEL);
  * Prepare a request as required by RFC1350. This packet can be sent
  * out directly to the TFTP server.
  */
-ZTESTABLE_STATIC size_t make_request(uint8_t *buf, int request,
-				     const char *remote_file, const char *mode)
+static size_t make_request(uint8_t *buf, int request,
+			   const char *remote_file, const char *mode)
 {
 	char *ptr = (char *)buf;
 	const char def_mode[] = "octet";
-	size_t len;
 
 	/* Fill in the Request Type. */
 	sys_put_be16(request, ptr);
 	ptr += 2;
 
 	/* Copy the name of the remote file. */
-	len = strnlen(remote_file, TFTP_MAX_FILENAME_SIZE);
 	strncpy(ptr, remote_file, TFTP_MAX_FILENAME_SIZE);
-	ptr += len;
+	ptr += strlen(remote_file);
 	*ptr++ = '\0';
 
 	/* Default to "Octet" if mode not specified. */
@@ -47,21 +41,11 @@ ZTESTABLE_STATIC size_t make_request(uint8_t *buf, int request,
 	}
 
 	/* Copy the mode of operation. */
-	len = strnlen(mode, TFTP_MAX_MODE_SIZE);
 	strncpy(ptr, mode, TFTP_MAX_MODE_SIZE);
-	ptr += len;
+	ptr += strlen(mode);
 	*ptr++ = '\0';
 
 	return ptr - (char *)buf;
-}
-
-static bool request_fits(const char *remote_file, const char *mode)
-{
-	if (strnlen(remote_file, TFTP_MAX_FILENAME_SIZE + 1) > TFTP_MAX_FILENAME_SIZE) {
-		return false;
-	}
-
-	return mode == NULL || strnlen(mode, TFTP_MAX_MODE_SIZE + 1) <= TFTP_MAX_MODE_SIZE;
 }
 
 static const void *sa_addr(const struct net_sockaddr *sa)
@@ -335,7 +319,7 @@ int tftp_get(struct tftpc *client, const char *remote_file, const char *mode)
 	int rcv_size;
 	int ret;
 
-	if (client == NULL || !request_fits(remote_file, mode)) {
+	if (client == NULL) {
 		return -EINVAL;
 	}
 
@@ -456,8 +440,7 @@ int tftp_put(struct tftpc *client, const char *remote_file, const char *mode,
 	struct net_sockaddr_storage peer = {0};
 	int ret;
 
-	if (client == NULL || user_buf == NULL || user_buf_size == 0 ||
-	    !request_fits(remote_file, mode)) {
+	if (client == NULL || user_buf == NULL || user_buf_size == 0) {
 		return -EINVAL;
 	}
 
