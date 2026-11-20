@@ -1,0 +1,15 @@
+# Copyright (c) 2026 Nordic Semiconductor ASA
+# SPDX-License-Identifier: Apache-2.0
+
+
+menu "IPC service error test cases"
+
+config IPC_SERVICE_API_TEST_DEREGISTER
+	bool "Test ipc_service_deregister_endpoint()"
+	default y if IPC_SERVICE_BACKEND_ICBMSG
+	help
+	  Run the endpoint deregistration test case.
+
+endmenu
+
+source "Kconfig.zephyr"
