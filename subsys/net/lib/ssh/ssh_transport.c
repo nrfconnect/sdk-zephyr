@@ -19,6 +19,7 @@ LOG_MODULE_REGISTER(ssh, CONFIG_SSH_LOG_LEVEL);
 
 #include <zephyr/random/random.h>
 #include <zephyr/zvfs/eventfd.h>
+#include <zephyr/sys/minmax.h>
 
 #include <psa/crypto.h>
 
@@ -64,6 +65,11 @@ static const struct ssh_string supported_server_sig_algs[] = {
 #endif
 };
 BUILD_ASSERT(ARRAY_SIZE(supported_server_sig_algs) > 0);
+
+/* User registered transport callbacks that are pending to be called. */
+static sys_slist_t ssh_server_transport_callbacks;
+static sys_slist_t ssh_client_transport_callbacks;
+static K_MUTEX_DEFINE(lock);
 
 static ssize_t sendall(int sock, const void *buf, size_t len)
 {
@@ -163,6 +169,29 @@ int ssh_transport_start(struct ssh_transport *transport, bool server, void *pare
 
 void ssh_transport_close(struct ssh_transport *transport)
 {
+	/* Notify any listeners that the transport is going down. Only emit the
+	 * event for a transport that actually started running, and only once,
+	 * so that error and cleanup paths that may call this function more than
+	 * once do not generate duplicate notifications. The event is dispatched
+	 * before any transport resources are released so that the callback can
+	 * still inspect the transport.
+	 */
+	if (transport->running) {
+		struct ssh_transport_event event = {
+			.type = SSH_TRANSPORT_EVENT_CLOSED,
+		};
+
+		/* The dispatch role always matches the transport role here, so
+		 * the call cannot fail with a role mismatch.
+		 */
+		(void)ssh_transport_traverse_callbacks(transport->server, transport, &event);
+
+		if (transport->callback != NULL) {
+			(void)transport->callback(transport, &event,
+						  transport->callback_user_data);
+		}
+	}
+
 	for (int i = 0; i < ARRAY_SIZE(transport->channels); i++) {
 		struct ssh_channel *channel = &transport->channels[i];
 
@@ -237,8 +266,7 @@ int ssh_transport_input(struct ssh_transport *transport)
 	switch (transport->recv_state) {
 	case SSH_RECV_STATE_IDENTITY_INIT: {
 		*rx_pkt = (struct ssh_payload) {
-			.size = MIN(sizeof(transport->rx_buf),
-				    SSH_IDENTITY_MAX_LEN),
+			.size = min(sizeof(transport->rx_buf), SSH_IDENTITY_MAX_LEN),
 			.len = 0,
 			.data = transport->rx_buf
 		};
@@ -639,19 +667,19 @@ int update_channels(struct ssh_transport *transport)
 		/* Send any pending data */
 		while (channel->tx_window_rem > 0 && !ring_buf_is_empty(&channel->tx_ring_buf)) {
 			uint8_t *data;
-			uint32_t len = MIN(channel->tx_mtu, channel->tx_window_rem);
+			uint32_t len = min(channel->tx_mtu, channel->tx_window_rem);
 			struct ssh_channel_event event;
 
 			/* Assuming up to 256 bytes overhead for headers and random padding */
 			BUILD_ASSERT(sizeof(transport->tx_buf) > 256);
 
-			len = MIN(len, sizeof(transport->tx_buf) - 256);
-			len = ring_buf_get_claim(&channel->tx_ring_buf, &data, len);
+			len = min(len, sizeof(transport->tx_buf) - 256);
+			len = min(ring_buf_get_ptr(&channel->tx_ring_buf, &data, 0), len);
 			channel->tx_window_rem -= len;
 
 			ret = ssh_connection_send_channel_data(
 				transport, channel->remote_channel, data, len);
-			ring_buf_get_finish(&channel->tx_ring_buf, len);
+			ring_buf_consume(&channel->tx_ring_buf, len);
 			if (ret != 0) {
 				/* Close channel? */
 				break;
@@ -666,20 +694,20 @@ int update_channels(struct ssh_transport *transport)
 		while (channel->tx_window_rem > 0 &&
 		       !ring_buf_is_empty(&channel->tx_stderr_ring_buf)) {
 			uint8_t *data;
-			uint32_t len = MIN(channel->tx_mtu, channel->tx_window_rem);
+			uint32_t len = min(channel->tx_mtu, channel->tx_window_rem);
 			struct ssh_channel_event event;
 
 			/* Assuming up to 256 bytes overhead for headers and random padding */
 			BUILD_ASSERT(sizeof(transport->tx_buf) > 256);
 
-			len = MIN(len, sizeof(transport->tx_buf) - 256);
-			len = ring_buf_get_claim(&channel->tx_stderr_ring_buf, &data, len);
+			len = min(len, sizeof(transport->tx_buf) - 256);
+			len = min(ring_buf_get_ptr(&channel->tx_stderr_ring_buf, &data, 0), len);
 			channel->tx_window_rem -= len;
 
 			ret = ssh_connection_send_channel_extended_data(
 				transport, channel->remote_channel,
 				SSH_EXTENDED_DATA_STDERR, data, len);
-			ring_buf_get_finish(&channel->tx_stderr_ring_buf, len);
+			ring_buf_consume(&channel->tx_stderr_ring_buf, len);
 			if (ret != 0) {
 				/* Close channel? */
 				break;
@@ -695,7 +723,7 @@ int update_channels(struct ssh_transport *transport)
 		if (channel->rx_window_rem == 0) {
 			uint32_t available_space;
 
-			available_space = MIN(ring_buf_space_get(&channel->rx_ring_buf),
+			available_space = min(ring_buf_space_get(&channel->rx_ring_buf),
 					      ring_buf_space_get(&channel->rx_stderr_ring_buf));
 			if (available_space > 0) {
 				channel->rx_window_rem = available_space;
@@ -854,6 +882,19 @@ static int process_user_request(struct ssh_transport *transport,
 		if (ret != 0) {
 			ssh_connection_free_channel(channel);
 		}
+
+		return ret;
+	}
+	case SSH_TRANSPORT_USER_REQUEST_CHANNEL_CLOSE: {
+		struct ssh_channel *channel = request->channel_close.channel;
+		int ret = 0;
+
+		if (channel->open && channel->remote_channel != UINT32_MAX) {
+			ret = ssh_connection_send_channel_close(transport,
+								channel->remote_channel);
+		}
+
+		ssh_connection_free_channel(channel);
 
 		return ret;
 	}
@@ -1389,4 +1430,77 @@ static int mac_verify(struct ssh_transport *transport, psa_key_id_t mac_key,
 exit:
 	psa_mac_abort(&op);
 	return -EIO;
+}
+
+int ssh_transport_register_callback(struct ssh_transport_conf *conf, bool is_server)
+{
+	if (conf == NULL) {
+		return -EINVAL;
+	}
+
+	k_mutex_lock(&lock, K_FOREVER);
+
+	if (is_server) {
+		sys_slist_find_and_remove(&ssh_server_transport_callbacks, &conf->node);
+		sys_slist_prepend(&ssh_server_transport_callbacks, &conf->node);
+	} else {
+		sys_slist_find_and_remove(&ssh_client_transport_callbacks, &conf->node);
+		sys_slist_prepend(&ssh_client_transport_callbacks, &conf->node);
+	}
+
+	k_mutex_unlock(&lock);
+
+	return 0;
+}
+
+int ssh_transport_unregister_callback(struct ssh_transport_conf *conf, bool is_server)
+{
+	bool ret;
+
+	if (conf == NULL) {
+		return -EINVAL;
+	}
+
+	k_mutex_lock(&lock, K_FOREVER);
+
+	if (is_server) {
+		ret = sys_slist_find_and_remove(&ssh_server_transport_callbacks, &conf->node);
+	} else {
+		ret = sys_slist_find_and_remove(&ssh_client_transport_callbacks, &conf->node);
+	}
+
+	k_mutex_unlock(&lock);
+
+	return ret ? 0 : -ENOENT;
+}
+
+int ssh_transport_traverse_callbacks(bool is_server, struct ssh_transport *transport,
+				     const struct ssh_transport_event *event)
+{
+	sys_slist_t *callbacks = is_server ? &ssh_server_transport_callbacks :
+					    &ssh_client_transport_callbacks;
+	struct ssh_transport_conf *conf;
+
+	/* The list to dispatch to is determined by the role that emits the
+	 * event, which must always match the role of the transport itself.
+	 * Bail out if they disagree so that an event is never delivered to the
+	 * wrong (server vs client) set of callbacks.
+	 */
+	if (transport != NULL && transport->server != is_server) {
+		NET_ERR("Transport role (%d) does not match dispatch role (%d)",
+			transport->server, is_server);
+		return -EINVAL;
+	}
+
+	k_mutex_lock(&lock, K_FOREVER);
+
+	SYS_SLIST_FOR_EACH_CONTAINER(callbacks, conf, node) {
+		if (conf->cb != NULL) {
+			conf->cb(transport, event, conf->user_data);
+		}
+	}
+
+	k_mutex_unlock(&lock);
+
+	return 0;
 }

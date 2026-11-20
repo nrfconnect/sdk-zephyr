@@ -5,9 +5,9 @@
  */
 
 &qtmr1_timer0 {
-	status = "okay";
 	primary-source = "kQTMR_ClockDivide_128";
 	mode = "kQTMR_PriSrcRiseEdge";
+	status = "okay";
 };
 
 &lpit1 {
@@ -71,21 +71,13 @@
 };
 
 &lptmr3 {
-	status = "okay";
 	prescale-glitch-filter = <10>;
-};
-
-&gpt2 {
-	run-mode = "free-run";
+	status = "okay";
 };
 
 &tpm1 {
 	compatible = "nxp,tpm-timer";
 	status = "okay";
-};
-
-&gpt2 {
-	run-mode = "free-run";
 };
 
 &sys_ctr {

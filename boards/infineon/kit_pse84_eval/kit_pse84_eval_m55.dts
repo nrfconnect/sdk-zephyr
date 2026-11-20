@@ -1,6 +1,6 @@
 /*
- * SPDX-FileCopyrightText: <text>Copyright (c) 2026 Infineon Technologies AG,
- * or an affiliate of Infineon Technologies AG. All rights reserved.</text>
+ * SPDX-FileCopyrightText: Copyright (c) 2026 Infineon Technologies AG,
+ * SPDX-FileCopyrightText: or an affiliate of Infineon Technologies AG. All rights reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -14,8 +14,8 @@
 #include "kit_pse84_eval_memory_map.dtsi"
 
 / {
-	model = "kit_pse84_eval";
 	compatible = "kit_pse84_eval";
+	model = "kit_pse84_eval";
 
 	aliases {
 		led0 = &led_red;
@@ -24,9 +24,10 @@
 	};
 
 	chosen {
-		/* m55_xip + flash0_sahb is used in the pse84_boot.c file for m55 core startup
+		/* m55_xip + flash0_sahb is used by cm33 or cm33/ns for m55 core startup
 		 * If a different region is assigned here, it also needs to be updated at:
-		 * soc/infineon/edge/pse84/security_config/pse84_boot.c
+		 * soc/infineon/edge/pse84/security_config/pse84_boot.c or
+		 * soc/infineon/edge/pse84/soc_pse84_m33_ns.c
 		 */
 		zephyr,flash = &flash0_sahb;
 		zephyr,code-partition = &m55_xip;
@@ -37,12 +38,12 @@
 		zephyr,dtcm = &dtcm;
 		zephyr,itcm = &itcm;
 		zephyr,touch = &ft5406;
+		zephyr,entropy = &mxcrypto_trng;
 	};
 };
 
 &i2c0 {
 	ft5406: ft5406@38 {
-		status = "okay";
 		compatible = "focaltech,ft5336";
 		reg = <0x38>;
 		swapped-x-y;
@@ -50,6 +51,7 @@
 		inverted-y;
 		screen-width = <480>;
 		screen-height = <800>;
+		status = "okay";
 	};
 };
 
@@ -58,13 +60,12 @@
 };
 
 &peri0_group1_16_5bit_0 {
-	status = "okay";
 	clock-div = <1>;
+	status = "okay";
 };
 
 uart4: &scb4 {
 	compatible = "infineon,uart";
-	status = "okay";
 
 	current-speed = <115200>;
 
@@ -77,16 +78,17 @@ uart4: &scb4 {
 
 	/* HW Flow control must be enabled for HCI H4 */
 	hw-flow-control;
+	status = "okay";
 
 	bt_hci_uart: bt_hci_uart {
 		compatible = "zephyr,bt-hci-uart";
 
 		cyw55513 {
-			status = "okay";
 			compatible = "infineon,bt-hci-uart";
 			bt-reg-on-gpios = <&gpio_prt11 0 GPIO_ACTIVE_HIGH>;
 			fw-download-speed = <115200>;
 			hci-operation-speed = <115200>;
+			status = "okay";
 		};
 	};
 };
@@ -97,17 +99,16 @@ uart4: &scb4 {
 };
 
 &peri1_group2_8bit_0 {
-	status = "okay";
 	clock-div = <2>;
+	status = "okay";
 };
 
 &peri1_group3_8bit_0 {
-	status = "okay";
 	clock-div = <2>;
+	status = "okay";
 };
 
 &sdhc0 {
-	status = "okay";
 
 	/* SDIO pins */
 	pinctrl-0 = <&p21_0_sdhc0_card_cmd &p12_0_sdhc0_clk_card &p12_1_sdhc0_card_dat_3to0
@@ -121,20 +122,20 @@ uart4: &scb4 {
 	min-bus-freq = <400000>;
 	power-delay-ms = <1000>;
 	no-1-8-v;
+	status = "okay";
 
 	/* Wi-Fi configuration */
 	airoc-wifi {
-		status = "okay";
 		compatible = "infineon,airoc-wifi";
 
 		/* Wi-Fi control gpios */
 		wifi-reg-on-gpios = <&gpio_prt11 6 GPIO_ACTIVE_HIGH>;
 		wifi-host-wake-gpios = <&gpio_prt11 4 GPIO_ACTIVE_HIGH>;
+		status = "okay";
 	};
 };
 
 &sdhc1 {
-	status = "okay";
 
 	/* SDHC pins */
 	pinctrl-0 = <&p7_0_sdhc1_card_cmd &p7_1_sdhc1_clk_card &p7_3_sdhc1_card_dat_3to0
@@ -149,10 +150,33 @@ uart4: &scb4 {
 	power-delay-ms = <1000>;
 	/* Card detect gpios */
 	cd-gpios = <&gpio_prt17 7 GPIO_ACTIVE_HIGH>;
+	no-1-8-v;
+	status = "okay";
 
 	sdmmc {
 		compatible = "zephyr,sdmmc-disk";
 		disk-name = "SD";
 		status = "okay";
+	};
+};
+
+&mxcrypto_trng {
+	status = "okay";
+};
+
+&mxcrypto_crypto {
+	status = "okay";
+};
+
+/*
+ * Bind the relative MCUboot slot0_partition/slot1_partition labels to
+ * the CM55 image slots (image 2) so the stock cmake/mcuboot.cmake signing
+ * script sizes the CM55 image against its own slot.
+ */
+&flash0_sahb {
+	partitions {
+		slot0_partition: partition@580000 {};
+
+		slot1_partition: partition@b00000 {};
 	};
 };

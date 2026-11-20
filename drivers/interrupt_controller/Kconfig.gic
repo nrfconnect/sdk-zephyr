@@ -57,21 +57,47 @@ config GIC_V3_ITS
 	# ITS generates Non-secure Group 1 LPI interrupts, requiring EL1NS
 	select ARMV8_A_NS
 	select DYNAMIC_INTERRUPTS
+	select KERNEL_MEM_POOL
 	help
 	  Support for the optional Interrupt Translation Service used to translate
 	  hardware interrupt from PCIe MSI messages for example. Please note
-	  that ITS uses dynamic memory, so HEAP_MEM_POOL_SIZE should be
-	  enough to allocate ITS tables (size is probed at runtime).
+	  that ITS allocates its tables from the system heap, whose minimum size
+	  HEAP_MEM_POOL_ADD_SIZE_GIC_V3_ITS below accounts for.
+
+# The GICv3 and ITS drivers allocate, from the system heap:
+# - LPI property table: one 64K table, 64K aligned, shared by all CPUs
+# - LPI pending table: one 64K table, 64K aligned, per redistributor/CPU
+# - Devices table: 128x4K, 4K aligned
+# - Interrupt collections table: 1x4K, 4K aligned
+#
+# 13x64K covers those on a four-CPU system. It does not include the interrupt
+# translation tables, which are 256-byte aligned and sized per device: a 32-ITE
+# table needs 256 bytes, so the remainder leaves room for a useful number of
+# them. Boards needing more can raise CONFIG_HEAP_MEM_POOL_SIZE, and an
+# application that has measured its own requirement can opt out of the minimum
+# with CONFIG_HEAP_MEM_POOL_IGNORE_MIN.
+config HEAP_MEM_POOL_ADD_SIZE_GIC_V3_ITS
+	int
+	default 851968 if GIC_V3_ITS
 
 config GIC_SAFE_CONFIG
 	bool "GIC Distributor Safe Configuration"
-	depends on GIC_V3
-	default n
+	depends on GIC
 	help
-	  In case of multiple OSes running on different CPU Cores which share the
-	  same GIC controller, need to avoid the distributor re-configured to avoid
-	  crash the OS has already been started. With this enabled, it will bypass
-	  GIC distributor configuration if it has been configured by other OS.
+	  Multiple operating systems may share one GIC distributor. When another OS
+	  has already enabled the distributor, re-running full distributor init
+	  can clobber its enables, targets, and priorities. When this option is
+	  enabled, Zephyr skips GIC distributor initialization if the distributor
+	  is already active. Per-IRQ affinity updates still occur from
+	  arm_gic_irq_enable().
+	  Applies to GICv1, GICv2, and GICv3.
+
+	  Limitation (GICv1/GICv2): the per-IRQ affinity update in
+	  arm_gic_irq_enable() is a read-modify-write of the shared
+	  GICD_ITARGETSRn register and is not serialized across OSes. Two
+	  independent Zephyr instances enabling the same shared SPI
+	  concurrently may race and lose an update; concurrent enable of the
+	  same shared SPI from multiple OSes is out of scope for this option.
 
 config GIC_V3_RDIST_DMA_NONCOHERENT
 	bool "GIC redistributor is DMA noncoherent"

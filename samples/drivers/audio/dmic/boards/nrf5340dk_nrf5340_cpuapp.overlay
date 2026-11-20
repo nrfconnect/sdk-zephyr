@@ -14,6 +14,10 @@
 	hfclkaudio-frequency = <12288000>;
 };
 
+&hfclkaudio {
+	hfclkaudio-frequency = <12288000>;
+};
+
 &pinctrl {
 	pdm0_default_alt: pdm0_default_alt {
 		group1 {
@@ -24,8 +28,8 @@
 };
 
 dmic_dev: &pdm0 {
-	status = "okay";
 	pinctrl-0 = <&pdm0_default_alt>;
 	pinctrl-names = "default";
 	clock-source = "ACLK";
+	status = "okay";
 };

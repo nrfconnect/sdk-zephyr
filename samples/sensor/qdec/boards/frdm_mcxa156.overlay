@@ -50,7 +50,6 @@
 };
 
 &eqdc0 {
-	status = "okay";
 	pinctrl-0 = <&eqdc_pinmux>;
 	pinctrl-names = "default";
 	counts-per-revolution = <120>;
@@ -63,6 +62,7 @@
 	 *   kINPUTMUX_TrigIn10ToQdc0Phasea = 0x37000022
 	 *   kINPUTMUX_TrigIn9ToQdc0Phaseb  = 0x36c00021
 	 */
-	inputmux-connections = <&inputmux0 0 0x37000022>,
-			       <&inputmux0 0 0x36c00021>;
+	mux-states = <&inputmux0 0 0x37000022>,
+		     <&inputmux0 0 0x36c00021>;
+	status = "okay";
 };

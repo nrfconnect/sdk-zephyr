@@ -1,7 +1,7 @@
 # Copyright (c) 2023 Intel Corporation.
 # SPDX-License-Identifier: Apache-2.0
 
-cmake_minimum_required(VERSION 3.20.0)
+cmake_minimum_required(VERSION 3.28.0)
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(llext_test)
 
@@ -47,7 +47,8 @@ if(NOT CONFIG_LLEXT_TYPE_ELF_SHAREDLIB)
     list(APPEND ext_names init_fini)
 endif()
 
-if(CONFIG_LLEXT_RODATA_NO_RELOC)
+if(CONFIG_LLEXT_RODATA_NO_RELOC AND NOT CONFIG_XTENSA)
+    # Xtensa linker rejects relocations in .rodata even with -fPIC
     list(APPEND ext_names rodata_no_reloc)
 endif()
 
@@ -107,7 +108,7 @@ get_property(COMPILER_TOPT TARGET compiler PROPERTY linker_script)
 set_ifndef(  TOPT "${COMPILER_TOPT}")
 set_ifndef(  TOPT -Wl,-T) # Use this if the compiler driver doesn't set a value
 
-if(CONFIG_LLEXT_TYPE_ELF_RELOCATABLE AND CONFIG_XTENSA)
+if(CONFIG_LLEXT_TYPE_ELF_RELOCATABLE AND CONFIG_XTENSA AND CONFIG_LLEXT_STORAGE_WRITABLE)
   # Manually fix the pre_located extension's text address at a multiple of 4
   get_target_property(pre_located_target pre_located_ext lib_target)
   get_target_property(pre_located_file pre_located_ext pkg_input)
@@ -118,6 +119,21 @@ if(CONFIG_LLEXT_TYPE_ELF_RELOCATABLE AND CONFIG_XTENSA)
     ${LLEXT_APPEND_FLAGS}
     -Wl,-r ${TOPT}text=0xbada110c -nostdlib -nodefaultlibs -nostartfiles
     $<TARGET_OBJECTS:${pre_located_target}> -o ${pre_located_file}
+  )
+endif()
+
+if(CONFIG_LLEXT_TYPE_ELF_RELOCATABLE AND CONFIG_XTENSA)
+  # A copy of hello_world with a relocation offset past the end of .text
+  set(ext_bin ${PROJECT_BINARY_DIR}/llext/reloc_offset_oob.llext)
+  add_custom_command(
+    OUTPUT ${ext_bin}
+    COMMAND ${PYTHON_EXECUTABLE} ${PROJECT_SOURCE_DIR}/reloc_offset_oob.py
+            ${PROJECT_BINARY_DIR}/llext/hello_world.llext ${ext_bin}
+    DEPENDS ${PROJECT_BINARY_DIR}/llext/hello_world.llext
+            ${PROJECT_SOURCE_DIR}/reloc_offset_oob.py
+  )
+  generate_inc_file_for_target(app ${ext_bin}
+    ${ZEPHYR_BINARY_DIR}/include/generated/reloc_offset_oob.inc
   )
 endif()
 

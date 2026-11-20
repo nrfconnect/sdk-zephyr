@@ -5,6 +5,7 @@
 
 menuconfig NET_SOCKETS
 	bool "BSD Sockets compatible API"
+	depends on NET_CONTEXT || !NET_NATIVE
 	select ZVFS
 	select ZVFS_POLL
 	select ZVFS_SELECT
@@ -122,7 +123,8 @@ config NET_SOCKETS_SERVICE_STACK_SIZE
 	int "Stack size for the thread handling socket services"
 	default 2400 if QUIC
 	default 2400 if NET_DHCPV4_SERVER
-	default 1400 if MDNS_RESPONDER
+	default 2048 if NET_ZPERF_SERVER
+	default 1536 if MDNS_RESPONDER
 	default 1200
 	depends on NET_SOCKETS_SERVICE
 	help
@@ -156,20 +158,26 @@ config NET_SOCKETS_TLS_PRIORITY
 config NET_SOCKETS_TLS_SET_MAX_FRAGMENT_LENGTH
 	bool "Set Maximum Fragment Length (MFL)"
 	default y
+	depends on MBEDTLS_SSL_MAX_FRAGMENT_LENGTH
 	help
 	  Call mbedtls_ssl_conf_max_frag_len() on created TLS context
 	  configuration, so that Maximum Fragment Length (MFL) will be sent to
 	  peer using RFC 6066 max_fragment_length extension.
 
-	  Maximum Fragment Length (MFL) value is automatically chosen based on
-	  MBEDTLS_SSL_OUT_CONTENT_LEN and MBEDTLS_SSL_IN_CONTENT_LEN mbed TLS
-	  macros (which are configured by CONFIG_MBEDTLS_SSL_IN_CONTENT_LEN and
-	  CONFIG_MBEDTLS_SSL_OUT_CONTENT_LEN in
-	  case of default mbed TLS config). With DTLS, MFL value may be further
-	  limited with NET_SOCKETS_DTLS_MAX_FRAGMENT_LENGTH.
+	  By default, Maximum Fragment Length (MFL) value is automatically
+	  chosen based on MBEDTLS_SSL_OUT_CONTENT_LEN and
+	  MBEDTLS_SSL_IN_CONTENT_LEN mbed TLS macros (which are configured by
+	  CONFIG_MBEDTLS_SSL_IN_CONTENT_LEN and CONFIG_MBEDTLS_SSL_OUT_CONTENT_LEN
+	  in case of default mbed TLS config), with no upper bound exception:
+	  MFL is derived and advertised even if the buffers are already at the
+	  TLS maximum (16384 bytes). This can be overridden per socket with
+	  the TLS_MAX_FRAGMENT_LENGTH socket option. With DTLS, MFL value may
+	  be further limited with NET_SOCKETS_DTLS_MAX_FRAGMENT_LENGTH.
 
 	  This is mostly useful for TLS client side to tell TLS server what is
-	  the maximum supported receive record length.
+	  the maximum supported receive record length. Disable this option to
+	  turn off all MFL handling, both this automatic derivation and the
+	  per-socket TLS_MAX_FRAGMENT_LENGTH override.
 
 config NET_SOCKETS_ENABLE_DTLS
 	bool "DTLS socket support"
@@ -356,8 +364,32 @@ config NET_SOCKETS_OFFLOAD_DISPATCHER_CONTEXT_MAX
 	  After a proper socket has been created for a given file descriptor,
 	  the dispatcher context is released and can be reused.
 
+config NET_SOCKETS_OFFLOAD_PORT_TRACKING
+	bool
+	depends on NET_SOCKETS_OFFLOAD
+	help
+	  Record the local port each offloaded socket binds so that the socket
+	  layer's port-in-use check reports it as used. Offloaded sockets bind
+	  outside the net_context layer, so without this a port bound through an
+	  offloaded socket appears free. Selected by subsystems that need the
+	  check. Not meant to be set by hand.
+
+config NET_SOCKETS_OFFLOAD_PORT_TRACKING_COUNT
+	int "Maximum number of tracked offloaded bound sockets"
+	default 8 if NET_IPV4 && NET_IPV6
+	default 4
+	depends on NET_SOCKETS_OFFLOAD_PORT_TRACKING
+	help
+	  Number of offloaded sockets whose bound local port is tracked at once
+	  for the socket layer's port-in-use check. A slot is taken when an
+	  offloaded socket binds a local port and released when it is closed.
+	  Native sockets and sockets that never bind take no slot. Increase this
+	  if more offloaded sockets are bound at the same time than the default
+	  allows, otherwise a binding may be missed and its port reported as free.
+
 config NET_SOCKETS_PACKET
 	bool "Packet socket support"
+	depends on NET_NATIVE
 	select NET_CONNECTION_SOCKETS
 	help
 	  This is an initial version of packet socket support (special type
@@ -378,6 +410,38 @@ config NET_SOCKETS_PACKET_DGRAM
 	  on the information in the net_sockaddr_ll destination address before
 	  they are queued.
 
+config NET_SOCKETS_PACKET_MCAST_MEMBERSHIP
+	bool "Packet socket multicast membership support"
+	depends on NET_SOCKETS_PACKET && NET_L2_ETHERNET
+	help
+	  Add support for ZSOCK_PACKET_ADD_MEMBERSHIP and ZSOCK_PACKET_DROP_MEMBERSHIP
+	  socket options for AF_PACKET sockets. The options operate at layer 2 and tell
+	  the NIC's receive filter which link-layer multicast addresses to let through.
+	  Ethernet is currently the only link layer that can do this, so the
+	  dependency to it can be relaxed when another one gains the support.
+
+config NET_SOCKETS_PACKET_MCAST_MEMBERSHIP_COUNT
+	int "Number of packet socket multicast group memberships"
+	depends on NET_SOCKETS_PACKET_MCAST_MEMBERSHIP
+	default 2
+	range 1 255
+	help
+	  Maximum number of L2 multicast group memberships that can be active
+	  at the same time. Every successful ZSOCK_PACKET_ADD_MEMBERSHIP for a
+	  group that a socket has not joined yet takes one entry, and the entry
+	  is released by ZSOCK_PACKET_DROP_MEMBERSHIP or when the socket is
+	  closed. The same group joined by two different sockets takes two
+	  entries.
+
+config NET_L2_ETHERNET_MCAST_FILTER_ADD_COUNT_PACKET_SOCKET
+	int
+	depends on NET_SOCKETS_PACKET_MCAST_MEMBERSHIP && NET_L2_ETHERNET
+	default NET_SOCKETS_PACKET_MCAST_MEMBERSHIP_COUNT
+	help
+	  Every packet socket multicast membership needs a link layer
+	  multicast address on an Ethernet interface. Two sockets joining the
+	  same group share one address, so this is an upper bound.
+
 config NET_SOCKETS_INET_RAW
 	bool "AF_INET/AF_INET6 and SOCK_RAW sockets support"
 	depends on NET_NATIVE_IP
@@ -386,10 +450,9 @@ config NET_SOCKETS_INET_RAW
 	  to receive raw IP datagrams before further processing takes place.
 
 config NET_SOCKETS_CAN
-	bool "Socket CAN support [EXPERIMENTAL]"
+	bool "Socket CAN support"
 	select NET_L2_CANBUS_RAW
 	select NET_CONNECTION_SOCKETS
-	select EXPERIMENTAL
 	help
 	  The value depends on your network needs.
 
@@ -475,10 +538,9 @@ module-help = Enables logging for sockets code.
 source "subsys/net/Kconfig.template.log_config.net"
 
 config NET_SOCKETS_OBJ_CORE
-	bool "Object core socket support [EXPERIMENTAL]"
+	bool "Object core socket support"
 	depends on OBJ_CORE
 	select OBJ_CORE_STATS
-	select EXPERIMENTAL
 	help
 	  Select this if you want to use object core with socket API to get
 	  network socket information and statistics via object core.

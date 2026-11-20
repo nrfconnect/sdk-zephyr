@@ -15,6 +15,7 @@
 #define ZEPHYR_INCLUDE_USB_CLASS_USBD_DFU_H
 
 #include <stdint.h>
+#include <zephyr/toolchain.h>
 
 /* DFU Class Subclass */
 #define USB_DFU_SUBCLASS		0x01
@@ -147,6 +148,7 @@ struct usbd_dfu_image {
  *
  * @param id     Identifier by which the linker sorts registered images
  * @param iname  Image name as used in interface descriptor
+ * @param ipriv  Pointer to private data passed to the callbacks
  * @param iread  Image read callback
  * @param iwrite Image write callback
  * @param inext  Notify/confirm next state
@@ -161,9 +163,9 @@ struct usbd_dfu_image {
 		.if_desc = &usbd_dfu_iface_##id,					\
 		.priv = ipriv,								\
 		.sd_nd = &usbd_dfu_str_##id,						\
+		.next_cb = inext,							\
 		.read_cb = iread,							\
 		.write_cb = iwrite,							\
-		.next_cb = inext,							\
 	}
 
 /**

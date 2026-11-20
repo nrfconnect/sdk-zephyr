@@ -20,7 +20,14 @@ tests:
       - sama7g54_ek
       - sf32lb52_devkit_lcd
       - kit_psc3m5_evk
+      - kit_psc3m6_eval/psc3m6ges3ahq1
       - cyw920829m2evk_02/cyw20829b1340
       - cyw920829m2evk_02/cyw20829b1010
       - cyw920829m2evk_02/cyw20829b0lkml
+      - rtl87x2g_evb_a/rtl8762gku
+      - rtl8752h_evb/rtl8752hjl
+      - kit_pse84_eval/pse846gps2dbzc4a/m33
+      - kit_pse84_eval/pse846gps2dbzc4a/m55
+      - kit_pse84_ai/pse846gps2dbzc4a/m33
+      - kit_pse84_ai/pse846gps2dbzc4a/m55
     tags: crypto

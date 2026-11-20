@@ -35,7 +35,7 @@
 #endif
 
 #if COUNTER_SLEEP_RETENTION_ENABLED
-#include <hal/timer_periph.h>
+#include <gptimer_priv.h>
 #include <esp_private/sleep_retention.h>
 #endif
 
@@ -104,21 +104,22 @@ static esp_err_t counter_esp32_create_sleep_retention_cb(void *arg)
 	const struct counter_esp32_config *cfg = dev->config;
 
 	return sleep_retention_entries_create(
-		soc_timg_gptimer_retention_infos[cfg->group][cfg->index].regdma_entry_array,
-		soc_timg_gptimer_retention_infos[cfg->group][cfg->index].array_size,
+		gptimer_retention_infos[cfg->group][cfg->index].regdma_entry_array,
+		gptimer_retention_infos[cfg->group][cfg->index].array_size,
 		REGDMA_LINK_PRI_GPTIMER,
-		soc_timg_gptimer_retention_infos[cfg->group][cfg->index].module);
+		gptimer_retention_infos[cfg->group][cfg->index].module);
 }
 
 static void counter_esp32_sleep_retention_init(const struct device *dev)
 {
 	const struct counter_esp32_config *cfg = dev->config;
-	const soc_timg_gptimer_retention_desc_t *info =
-		&soc_timg_gptimer_retention_infos[cfg->group][cfg->index];
+	const gptimer_retention_desc_t *info =
+		&gptimer_retention_infos[cfg->group][cfg->index];
 
 	sleep_retention_module_init_param_t init_param = {
 		.cbs = {.create = {.handle = counter_esp32_create_sleep_retention_cb,
 				   .arg = (void *)dev}},
+		.attribute = SLEEP_RETENTION_MODULE_ATTR_ATTACH,
 		.depends = RETENTION_MODULE_BITMAP_INIT(CLOCK_SYSTEM),
 	};
 
@@ -126,6 +127,9 @@ static void counter_esp32_sleep_retention_init(const struct device *dev)
 
 	if (err == ESP_OK) {
 		err = sleep_retention_module_allocate(info->module);
+	}
+	if (err == ESP_OK) {
+		err = sleep_retention_module_attach(info->module);
 	}
 	if (err != ESP_OK) {
 		LOG_WRN("GPTimer sleep retention init failed (%d) group=%u index=%u", err,
@@ -155,6 +159,17 @@ static int counter_esp32_init(const struct device *dev)
 	data->top_data.ticks = cfg->counter_info.max_top_value;
 
 	timg_ll_enable_bus_clock(cfg->group, true);
+
+	/* Take a reference on the source so its PLL branch is ungated */
+#if defined(CONFIG_SOC_SERIES_ESP32P4)
+	esp_clk_tree_enable_src(GPTIMER_CLK_SRC_DEFAULT, true);
+#endif
+
+	/* Switching the source with the clock gate open can freeze the
+	 * glitch-free mux output and the counter never ticks
+	 */
+	timer_ll_enable_clock(cfg->group, cfg->index, false);
+	timer_ll_set_clock_source(cfg->group, cfg->index, GPTIMER_CLK_SRC_DEFAULT);
 	timer_ll_enable_clock(cfg->group, cfg->index, true);
 
 	timer_hal_init(&data->hal_ctx, cfg->group, cfg->index);
@@ -162,10 +177,6 @@ static int counter_esp32_init(const struct device *dev)
 			     false);
 	timer_ll_clear_intr_status(data->hal_ctx.dev, TIMER_LL_EVENT_ALARM(data->hal_ctx.timer_id));
 	timer_ll_enable_auto_reload(data->hal_ctx.dev, data->hal_ctx.timer_id, false);
-#if defined(CONFIG_SOC_SERIES_ESP32P4)
-	esp_clk_tree_enable_src(GPTIMER_CLK_SRC_DEFAULT, true);
-#endif
-	timer_ll_set_clock_source(cfg->group, data->hal_ctx.timer_id, GPTIMER_CLK_SRC_DEFAULT);
 	timer_ll_set_clock_prescale(data->hal_ctx.dev, data->hal_ctx.timer_id, cfg->prescaler);
 	timer_ll_set_count_direction(data->hal_ctx.dev, data->hal_ctx.timer_id, GPTIMER_COUNT_UP);
 	timer_ll_enable_alarm(data->hal_ctx.dev, data->hal_ctx.timer_id, false);
@@ -595,7 +606,7 @@ static int counter_esp32_capture_setup(const struct device *dev)
 		return ret;
 	}
 
-	/* The capture task always exists on SoCs gated by ESP32_SOC_ETM_SUPPORTED. */
+	/* The capture task always exists on SoCs gated by SOC_ESP32_ETM_SUPPORTED. */
 	task_id = TIMER_LL_ETM_TASK_TABLE(cfg->group, data->hal_ctx.timer_id,
 					  GPTIMER_ETM_TASK_CAPTURE);
 

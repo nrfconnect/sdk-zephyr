@@ -10,12 +10,12 @@
  * @ingroup xen_version_queries
  */
 
-#ifndef __XEN_VERSION_H__
-#define __XEN_VERSION_H__
+#ifndef ZEPHYR_INCLUDE_XEN_VERSION_H_
+#define ZEPHYR_INCLUDE_XEN_VERSION_H_
 
 #include <zephyr/xen/generic.h>
-#include <zephyr/xen/public/version.h>
-#include <zephyr/xen/public/xen.h>
+#include <xen/public/version.h>
+#include <xen/public/xen.h>
 
 /**
  * @defgroup xen_version_queries Xen version queries
@@ -50,4 +50,4 @@ int xen_version_extraversion(char *extra, int len);
 
 /** @} */
 
-#endif /* __XEN_VERSION_H__ */
+#endif /* ZEPHYR_INCLUDE_XEN_VERSION_H_ */

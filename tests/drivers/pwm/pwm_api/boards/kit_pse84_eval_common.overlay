@@ -1,6 +1,6 @@
 /*
- * SPDX-FileCopyrightText: <text>Copyright (c) 2026 Infineon Technologies AG,
- * or an affiliate of Infineon Technologies AG. All rights reserved.</text>
+ * SPDX-FileCopyrightText: Copyright (c) 2026 Infineon Technologies AG,
+ * SPDX-FileCopyrightText: or an affiliate of Infineon Technologies AG. All rights reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -18,16 +18,16 @@
 	status = "okay";
 
 	pwm0_7: pwm0_7 {
-		status = "okay";
 		clocks = <&peri0_group1_16bit_1>;
 		pinctrl-0 = <&p16_7_pwm0_7>;
 		pinctrl-names = "default";
+		status = "okay";
 	};
 };
 
 &peri0_group1_16bit_1 {
-	status = "okay";
 	clock-div = <9600>;
+	status = "okay";
 };
 
 &pinctrl {

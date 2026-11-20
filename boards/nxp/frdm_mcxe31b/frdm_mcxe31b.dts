@@ -6,7 +6,7 @@
 
 /dts-v1/;
 
-#include <nxp/mcx/nxp_mcxe31b.dtsi>
+#include <nxp/mcx/mcxe/nxp_mcxe31b.dtsi>
 #include "frdm_mcxe31b-pinctrl.dtsi"
 #include <zephyr/dt-bindings/gpio/gpio.h>
 #include <zephyr/dt-bindings/gpio/arduino-header-r3.h>
@@ -14,8 +14,8 @@
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 
 / {
-	model = "NXP FRDM_MCXE31B board";
 	compatible = "nxp,mcxe31b";
+	model = "NXP FRDM_MCXE31B board";
 
 	aliases {
 		led0 = &red_led;
@@ -24,6 +24,7 @@
 		sw0 = &user_button;
 		rtc = &counter_rtc;
 		watchdog0 = &swt_0;
+		accel0 = &fxls8974;
 	};
 
 	chosen {
@@ -109,18 +110,20 @@
 
 &flash0 {
 	partitions {
-		compatible = "fixed-partitions";
+		ranges;
 		#address-cells = <1>;
 		#size-cells = <1>;
 
 		ivt_header: partition@0 {
-			label = "ivt-header";
+			compatible = "zephyr,mapped-partition";
 			reg = <0x00000000 0x100>;
+			label = "ivt-header";
 		};
 
 		code_partition: partition@100 {
-			label = "code-partition";
+			compatible = "zephyr,mapped-partition";
 			reg = <0x00000100 (DT_SIZE_K(3920) - 0x100)>;
+			label = "code-partition";
 		};
 	};
 };
@@ -165,17 +168,104 @@
 };
 
 &lpuart_5 {
-	status = "okay";
 	current-speed = <115200>;
 	pinctrl-0 = <&pinmux_lpuart_5>;
 	pinctrl-names = "default";
-	dmas = <&edma 1 44>, <&edma 2 45>;
+	dmas = <&edma 20 44>, <&edma 21 45>;
 	dma-names = "tx", "rx";
+	status = "okay";
 };
 
 &flexcan_0 {
 	pinctrl-0 = <&pinmux_flexcan_0>;
 	pinctrl-names = "default";
+	status = "okay";
+};
+
+&emios_0 {
+	global-prescaler = <16>;
+	status = "okay";
+
+	counter-bus {
+		/* Counter Bus A frequency is 10Mhz */
+		emios0_bus_a: emios0-bus-a {
+			channel = <23>;
+			prescaler = <1>;
+			mode = "MCB_UP_COUNTER";
+			status = "okay";
+		};
+	};
+
+	emios0_pwm: pwm {
+		pinctrl-0 = <&pinmux_emios0_pwm>;
+		pinctrl-names = "default";
+		status = "okay";
+
+		pwm2 {
+			channel = <2>;
+			mode = "OPWMB";
+			counter-bus-type = "BUS_A";
+			prescaler = <1>;
+			phase-shift = <0>;
+		};
+
+		/* Default clock for internal counter for PWM channel 3 is 10Mhz */
+		pwm3 {
+			channel = <3>;
+			mode = "OPWFMB";
+			counter-bus-type = "BUS_INTERNAL";
+			prescaler = <1>;
+		};
+
+		pwm4 {
+			channel = <4>;
+			mode = "SAIC";
+			counter-bus-type = "BUS_INTERNAL";
+			prescaler = <1>;
+		};
+	};
+};
+
+&lpspi_0 {
+	pinctrl-0 = <&pinmux_lpspi_0>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
+&emac {
+	pinctrl-0 = <&pinmux_emac>;
+	pinctrl-names = "default";
+	phy-connection-type = "rmii";
+	phy-handle = <&eth_phy>;
+	status = "okay";
+};
+
+&mdio {
+	pinctrl-0 = <&pinmux_emac_mdio>;
+	pinctrl-names = "default";
+	status = "okay";
+
+	/* Microchip LAN8741 */
+	eth_phy: ethernet-phy@0 {
+		compatible = "ethernet-phy";
+		reg = <0x00>;
+		reset-gpios = <&gpioc_l 3 GPIO_ACTIVE_LOW>;
+		reset-assert-duration-us = <25000>;
+		reset-deassertion-timeout-ms = <25>;
+	};
+};
+
+/*
+ * SAI0 on header J1: D0 = PTB2, BCLK = PTC12, SYNC = PTC13. The
+ * transmitter drives all three pads and each pad's input buffer feeds
+ * the receiver back (see pinmux_sai_0), so the receiver runs fully
+ * asynchronous from the looped-back clocks and TX->RX loopback needs
+ * no external wiring.
+ */
+&sai_0 {
+	pinctrl-0 = <&pinmux_sai_0>;
+	pinctrl-names = "default";
+	nxp,tx-channel = <1>;
 	status = "okay";
 };
 
@@ -198,16 +288,16 @@
 };
 
 &firc {
-	status = "okay";
 	firc-div = "UnDiv";
+	status = "okay";
 };
 
 &fxosc {
-	status = "okay";
 	freq = <16000000>;
 	workmode = "crystal";
 	delay = <49>;
 	overdrive = <12>;
+	status = "okay";
 };
 
 &pit_0 {
@@ -215,7 +305,6 @@
 };
 
 &pll {
-	status = "okay";
 	workmode = "Integer";
 	prediv = <2>;
 	postdiv = <2>;
@@ -225,10 +314,10 @@
 	stepnum = <0>;
 	accuracy = "Accuracy9";
 	outdiv = <3 3>;
+	status = "okay";
 };
 
 &mc_cgm {
-	status = "okay";
 	max-ido-change = <50>;
 	step-duration = <1>;
 	clk-src-freq = <160000000>;
@@ -241,11 +330,13 @@
 	mux-0-dc-6-div = <1>;
 	mux-1-dc-0-div = <1>;
 	mux-2-dc-0-div = <1>;
+	mux-10-dc-0-div = <4>;
+	status = "okay";
 };
 
 &stm_0 {
-	status = "okay";
 	prescaler = <1>;
+	status = "okay";
 };
 
 &rtc {
@@ -297,9 +388,52 @@ lpuart2: &lpuart_2 {};
 	};
 };
 
-nxp_8080_touch_panel_i2c: &lpi2c_1 {
+&lpi2c_0 {
+	pinctrl-0 = <&pinmux_lpi2c_0>;
+	pinctrl-names = "default";
+	clock-frequency = <I2C_BITRATE_STANDARD>;
 	status = "okay";
+
+	fxls8974: fxls8974@18 {
+		compatible = "nxp,fxls8974";
+		reg = <0x18>;
+		status = "okay";
+	};
+};
+
+nxp_8080_touch_panel_i2c: &lpi2c_1 {
 	pinctrl-0 = <&pinmux_lpi2c_1>;
 	pinctrl-names = "default";
 	clock-frequency = <I2C_BITRATE_STANDARD>;
+	status = "okay";
+};
+
+&qspi {
+	pinctrl-0 = <&pinmux_qspi>;
+	pinctrl-names = "default";
+	clock-frequency = <40000000>;
+	packet-data-limit = <128>;
+	status = "disabled";
+
+	w25q64: qspi-nor-flash@0 {
+		compatible = "jedec,nor";
+		reg = <0>;
+		size = <DT_SIZE_M(64)>;
+		/* Single QSPI IP write must fit the 128-byte Tx FIFO. */
+		page-size = <128>;
+		jedec-id = [ef 40 17];
+		sfdp-bfp = [e5 20 f1 ff ff ff ff 03
+			    44 eb 08 6b 08 3b 04 bb
+			    ee ff ff ff ff ff 00 ff
+			    ff ff 00 ff 0c 20 0f 52
+			    10 d8 00 ff 23 72 f5 00
+			    82 ed 04 cc 44 83 68 44
+			    30 b0 30 b0 f7 c4 d5 5c
+			    00 be 29 ff f0 d0 ff ff];
+		mspi-max-frequency = <40000000>;
+		mspi-io-mode = "MSPI_IO_MODE_QUAD_1_1_4";
+		mspi-data-rate = "MSPI_DATA_RATE_SINGLE";
+		quad-enable-requirements = "S2B1v1";
+		status = "disabled";
+	};
 };

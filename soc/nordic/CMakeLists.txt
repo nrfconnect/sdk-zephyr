@@ -10,6 +10,7 @@ zephyr_library_sources(
   validate_base_addresses.c
   validate_binding_headers.c
   validate_enabled_instances.c
+  validate_sram_app.c
   )
 
 # Include dt-bindings headers into the build. This lets us validate all required
@@ -46,12 +47,19 @@ if(CONFIG_BUILD_WITH_TFM)
     set(nrf_mramc_service OFF)
   endif()
 
+  if(CONFIG_SOC_SERIES_NRF71_TFM_RAM_CTRL_SERVICE)
+    set(nrf_ram_ctrl_service ON)
+  else()
+    set(nrf_ram_ctrl_service OFF)
+  endif()
+
   set_property(TARGET zephyr_property_target
     APPEND PROPERTY TFM_CMAKE_OPTIONS -DNRF_NS_STORAGE=${CONFIG_TFM_NRF_NS_STORAGE}
-    APPEND PROPERTY TFM_CMAKE_OPTIONS -DNRF_MRAMC_SERVICE=${nrf_mramc_service}
+    APPEND PROPERTY TFM_CMAKE_OPTIONS -DSOC_NRF7120_TFM_MRAMC_SERVICE=${nrf_mramc_service}
+    APPEND PROPERTY TFM_CMAKE_OPTIONS -DNRF_RAM_CTRL_SERVICE=${nrf_ram_ctrl_service}
   )
 endif()
 
-add_subdirectory(${SOC_SERIES})
+add_subdirectory(${CONFIG_SOC_SERIES})
 
 add_subdirectory(common)

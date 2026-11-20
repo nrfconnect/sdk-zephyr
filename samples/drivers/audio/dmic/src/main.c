@@ -27,7 +27,17 @@ LOG_MODULE_REGISTER(dmic_sample);
  */
 #define MAX_BLOCK_SIZE   BLOCK_SIZE(MAX_SAMPLE_RATE, 2)
 #define BLOCK_COUNT      4
-K_MEM_SLAB_DEFINE_STATIC(mem_slab, MAX_BLOCK_SIZE, BLOCK_COUNT, 4);
+
+/* Cache-line align the blocks so cache maintenance on one block cannot
+ * corrupt a neighbouring block
+ */
+#ifdef CONFIG_DCACHE_LINE_SIZE
+#define SLAB_ALIGN MAX(4, CONFIG_DCACHE_LINE_SIZE)
+#else
+#define SLAB_ALIGN 4
+#endif
+
+K_MEM_SLAB_DEFINE_STATIC(mem_slab, MAX_BLOCK_SIZE, BLOCK_COUNT, SLAB_ALIGN);
 
 static uint8_t capture_storage[BLOCK_COUNT * MAX_BLOCK_SIZE * 2];
 
@@ -54,7 +64,7 @@ static int do_pdm_transfer(const struct device *dmic_dev,
 
 	for (int i = 0; i < block_count; ++i) {
 		void *buffer;
-		uint32_t size;
+		size_t size;
 
 		ret = dmic_read(dmic_dev, 0, &buffer, &size, READ_TIMEOUT);
 		if (ret < 0) {

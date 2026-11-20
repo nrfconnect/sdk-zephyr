@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Microchip Technology Inc.
+ * Copyright (c) 2025-2026 Microchip Technology Inc.
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -26,7 +26,7 @@ LOG_MODULE_REGISTER(rtc_mchp_g1, CONFIG_RTC_LOG_LEVEL);
 #define RTC_ALARM_PENDING           (1)
 
 /* Timeout values for WAIT_FOR macro */
-#define TIMEOUT_REG_SYNC 5000
+#define TIMEOUT_REG_SYNC 10000
 #define DELAY_US         1
 
 #ifdef CONFIG_RTC_ALARM
@@ -34,7 +34,15 @@ LOG_MODULE_REGISTER(rtc_mchp_g1, CONFIG_RTC_LOG_LEVEL);
 	(RTC_ALARM_TIME_MASK_SECOND | RTC_ALARM_TIME_MASK_MINUTE | RTC_ALARM_TIME_MASK_HOUR |      \
 	 RTC_ALARM_TIME_MASK_MONTHDAY | RTC_ALARM_TIME_MASK_MONTH | RTC_ALARM_TIME_MASK_YEAR)
 
+/*
+ * PIC32CM JH RTC supports only one alarm (ALARM0/MASK0).
+ * Other families (SAM D5x/E5x, PIC32CK GC, PIC32CX SG) support two alarms.
+ */
+#ifdef CONFIG_RTC_MCHP_SUPPORTS_DUAL_ALARM
 #define RTC_SUPPORTED_ALARM_INT_FLAGS (RTC_MODE2_INTFLAG_ALARM0_Msk | RTC_MODE2_INTFLAG_ALARM1_Msk)
+#else
+#define RTC_SUPPORTED_ALARM_INT_FLAGS (RTC_MODE2_INTFLAG_ALARM0_Msk)
+#endif
 #endif /* CONFIG_RTC_ALARM */
 
 /* Structure defining various time parameters for Microchip RTC driver. */
@@ -46,15 +54,6 @@ struct rtc_mchp_time {
 	uint32_t month;
 	uint32_t year;
 };
-
-/* Do the peripheral interrupt related configuration */
-#ifdef CONFIG_RTC_ALARM
-#define RTC_MCHP_IRQ_HANDLER(n)                                                                    \
-	static void rtc_mchp_irq_config_##n(const struct device *dev)                              \
-	{                                                                                          \
-		RTC_MCHP_IRQ_CONNECT(n, 0);                                                        \
-	}
-#endif /* CONFIG_RTC_ALARM */
 
 /* Clock configuration structure for RTC. */
 struct rtc_mchp_clock {
@@ -112,7 +111,7 @@ static inline void rtc_sync_busy(const rtc_registers_t *regs, uint32_t sync_flag
 {
 	if (WAIT_FOR(((regs->MODE2.RTC_SYNCBUSY & sync_flag) == 0), TIMEOUT_REG_SYNC,
 		     k_busy_wait(DELAY_US)) == false) {
-		LOG_ERR("RTC reset timed out");
+		LOG_ERR("Timeout waiting for RTC_SYNCBUSY to clear");
 	}
 }
 
@@ -196,11 +195,15 @@ static void rtc_set_alarm_mask(rtc_registers_t *regs, uint16_t alarm_id, uint16_
 		regs->MODE2.RTC_MASK0 = (uint8_t)((regs->MODE2.RTC_MASK0 & ~RTC_MODE2_MASK0_Msk) |
 						  RTC_MODE2_MASK0_SEL(set_mask));
 		rtc_sync_busy(regs, RTC_MODE2_SYNCBUSY_MASK0_Msk);
-	} else if (alarm_id == RTC_MCHP_ALARM_2) {
+	}
+#ifdef CONFIG_RTC_MCHP_SUPPORTS_DUAL_ALARM
+	else if (alarm_id == RTC_MCHP_ALARM_2) {
 		regs->MODE2.RTC_MASK1 = (uint8_t)((regs->MODE2.RTC_MASK1 & ~RTC_MODE2_MASK1_Msk) |
 						  RTC_MODE2_MASK1_SEL(set_mask));
 		rtc_sync_busy(regs, RTC_MODE2_SYNCBUSY_MASK1_Msk);
-	} else {
+	}
+#endif /* CONFIG_RTC_MCHP_SUPPORTS_DUAL_ALARM */
+	else {
 		LOG_ERR("Invalid alarm_id: %u", alarm_id);
 	}
 }
@@ -212,10 +215,14 @@ static uint16_t rtc_get_alarm_mask(const rtc_registers_t *regs, uint16_t alarm_i
 	if (alarm_id == RTC_MCHP_ALARM_1) {
 		get_mask = (uint16_t)regs->MODE2.RTC_MASK0;
 		rtc_sync_busy(regs, RTC_MODE2_SYNCBUSY_MASK0_Msk);
-	} else if (alarm_id == RTC_MCHP_ALARM_2) {
+	}
+#ifdef CONFIG_RTC_MCHP_SUPPORTS_DUAL_ALARM
+	else if (alarm_id == RTC_MCHP_ALARM_2) {
 		get_mask = (uint16_t)regs->MODE2.RTC_MASK1;
 		rtc_sync_busy(regs, RTC_MODE2_SYNCBUSY_MASK1_Msk);
-	} else {
+	}
+#endif /* CONFIG_RTC_MCHP_SUPPORTS_DUAL_ALARM */
+	else {
 		LOG_ERR("Invalid alarm_id: %u", alarm_id);
 	}
 
@@ -225,29 +232,24 @@ static uint16_t rtc_get_alarm_mask(const rtc_registers_t *regs, uint16_t alarm_i
 static void rtc_set_alarm_time(rtc_registers_t *regs, uint16_t alarm_id,
 			       struct rtc_mchp_time *rtc_set_alarm)
 {
+	uint32_t alarm_val =
+		(uint32_t)((((RTC_TM_REFERENCE_YEAR + rtc_set_alarm->year) - RTC_REFERENCE_YEAR)
+			    << RTC_MODE2_CLOCK_YEAR_Pos) |
+			   ((RTC_ADJUST_MONTH(rtc_set_alarm->month)) << RTC_MODE2_CLOCK_MONTH_Pos) |
+			   (rtc_set_alarm->date_of_month << RTC_MODE2_CLOCK_DAY_Pos) |
+			   (rtc_set_alarm->hour << RTC_MODE2_CLOCK_HOUR_Pos) |
+			   (rtc_set_alarm->minute << RTC_MODE2_CLOCK_MINUTE_Pos) |
+			   (rtc_set_alarm->second << RTC_MODE2_CLOCK_SECOND_Pos));
+
 	if (alarm_id == RTC_MCHP_ALARM_1) {
-		regs->MODE2.RTC_ALARM0 =
-			(uint32_t)((((RTC_TM_REFERENCE_YEAR + rtc_set_alarm->year) -
-				     RTC_REFERENCE_YEAR)
-				    << RTC_MODE2_CLOCK_YEAR_Pos) |
-				   ((RTC_ADJUST_MONTH(rtc_set_alarm->month))
-				    << RTC_MODE2_CLOCK_MONTH_Pos) |
-				   (rtc_set_alarm->date_of_month << RTC_MODE2_CLOCK_DAY_Pos) |
-				   (rtc_set_alarm->hour << RTC_MODE2_CLOCK_HOUR_Pos) |
-				   (rtc_set_alarm->minute << RTC_MODE2_CLOCK_MINUTE_Pos) |
-				   (rtc_set_alarm->second << RTC_MODE2_CLOCK_SECOND_Pos));
-	} else if (alarm_id == RTC_MCHP_ALARM_2) {
-		regs->MODE2.RTC_ALARM1 =
-			(uint32_t)((((RTC_TM_REFERENCE_YEAR + rtc_set_alarm->year) -
-				     RTC_REFERENCE_YEAR)
-				    << RTC_MODE2_CLOCK_YEAR_Pos) |
-				   ((RTC_ADJUST_MONTH(rtc_set_alarm->month))
-				    << RTC_MODE2_CLOCK_MONTH_Pos) |
-				   (rtc_set_alarm->date_of_month << RTC_MODE2_CLOCK_DAY_Pos) |
-				   (rtc_set_alarm->hour << RTC_MODE2_CLOCK_HOUR_Pos) |
-				   (rtc_set_alarm->minute << RTC_MODE2_CLOCK_MINUTE_Pos) |
-				   (rtc_set_alarm->second << RTC_MODE2_CLOCK_SECOND_Pos));
-	} else {
+		regs->MODE2.RTC_ALARM0 = alarm_val;
+	}
+#ifdef CONFIG_RTC_MCHP_SUPPORTS_DUAL_ALARM
+	else if (alarm_id == RTC_MCHP_ALARM_2) {
+		regs->MODE2.RTC_ALARM1 = alarm_val;
+	}
+#endif /* CONFIG_RTC_MCHP_SUPPORTS_DUAL_ALARM */
+	else {
 		LOG_ERR("Invalid alarm_id: %u", alarm_id);
 	}
 
@@ -264,9 +266,13 @@ static void rtc_get_alarm_time(const rtc_registers_t *regs, uint16_t alarm_id,
 
 	if (alarm_id == RTC_MCHP_ALARM_1) {
 		dataClockCalendar = regs->MODE2.RTC_ALARM0;
-	} else if (alarm_id == RTC_MCHP_ALARM_2) {
+	}
+#ifdef CONFIG_RTC_MCHP_SUPPORTS_DUAL_ALARM
+	else if (alarm_id == RTC_MCHP_ALARM_2) {
 		dataClockCalendar = regs->MODE2.RTC_ALARM1;
-	} else {
+	}
+#endif /* CONFIG_RTC_MCHP_SUPPORTS_DUAL_ALARM */
+	else {
 		LOG_ERR("Invalid alarm_id: %u", alarm_id);
 	}
 	rtc_get_time->hour =
@@ -297,9 +303,13 @@ static void rtc_enable_interrupt(rtc_registers_t *regs, uint16_t alarm_id)
 
 	if (alarm_id == RTC_MCHP_ALARM_1) {
 		alarm_int = RTC_MODE2_INTENSET_ALARM0(1);
-	} else if (alarm_id == RTC_MCHP_ALARM_2) {
+	}
+#ifdef CONFIG_RTC_MCHP_SUPPORTS_DUAL_ALARM
+	else if (alarm_id == RTC_MCHP_ALARM_2) {
 		alarm_int = RTC_MODE2_INTENSET_ALARM1(1);
-	} else {
+	}
+#endif /* CONFIG_RTC_MCHP_SUPPORTS_DUAL_ALARM */
+	else {
 		LOG_ERR("Invalid alarm_id: %u", alarm_id);
 		return;
 	}
@@ -313,9 +323,13 @@ static void rtc_disable_interrupt(rtc_registers_t *regs, uint16_t alarm_id)
 
 	if (alarm_id == RTC_MCHP_ALARM_1) {
 		alarm_int = RTC_MODE2_INTENCLR_ALARM0(1);
-	} else if (alarm_id == RTC_MCHP_ALARM_2) {
+	}
+#ifdef CONFIG_RTC_MCHP_SUPPORTS_DUAL_ALARM
+	else if (alarm_id == RTC_MCHP_ALARM_2) {
 		alarm_int = RTC_MODE2_INTENCLR_ALARM1(1);
-	} else {
+	}
+#endif /* CONFIG_RTC_MCHP_SUPPORTS_DUAL_ALARM */
+	else {
 		LOG_ERR("Invalid alarm_id: %u", alarm_id);
 		return;
 	}
@@ -329,9 +343,13 @@ static uint16_t rtc_get_interrupt_flags(const rtc_registers_t *regs, uint16_t *a
 
 	if ((int_status & RTC_MODE2_INTFLAG_ALARM0_Msk) == RTC_MODE2_INTFLAG_ALARM0_Msk) {
 		*alarm_id = RTC_MCHP_ALARM_1;
-	} else if ((int_status & RTC_MODE2_INTFLAG_ALARM1_Msk) == RTC_MODE2_INTFLAG_ALARM1_Msk) {
+	}
+#ifdef CONFIG_RTC_MCHP_SUPPORTS_DUAL_ALARM
+	else if ((int_status & RTC_MODE2_INTFLAG_ALARM1_Msk) == RTC_MODE2_INTFLAG_ALARM1_Msk) {
 		*alarm_id = RTC_MCHP_ALARM_2;
-	} else {
+	}
+#endif /* CONFIG_RTC_MCHP_SUPPORTS_DUAL_ALARM */
+	else {
 		LOG_ERR("Invalid alarm interrupt flag detected");
 	}
 
@@ -340,10 +358,20 @@ static uint16_t rtc_get_interrupt_flags(const rtc_registers_t *regs, uint16_t *a
 
 static void rtc_clear_interrupt_flags(rtc_registers_t *regs, uint16_t alarm_id)
 {
-	uint16_t alarm_status =
-		((alarm_id == RTC_MCHP_ALARM_1)
-			 ? RTC_MODE2_INTFLAG_ALARM0_Msk
-			 : ((alarm_id == RTC_MCHP_ALARM_2) ? RTC_MODE2_INTFLAG_ALARM1_Msk : 0));
+	uint16_t alarm_status = 0;
+
+	if (alarm_id == RTC_MCHP_ALARM_1) {
+		alarm_status = RTC_MODE2_INTFLAG_ALARM0_Msk;
+	}
+#ifdef CONFIG_RTC_MCHP_SUPPORTS_DUAL_ALARM
+	else if (alarm_id == RTC_MCHP_ALARM_2) {
+		alarm_status = RTC_MODE2_INTFLAG_ALARM1_Msk;
+	}
+#endif /* CONFIG_RTC_MCHP_SUPPORTS_DUAL_ALARM */
+	else {
+		LOG_ERR("Invalid alarm_id: %u", alarm_id);
+		return;
+	}
 
 	regs->MODE2.RTC_INTFLAG = alarm_status;
 }
@@ -356,7 +384,9 @@ static void rtc_clear_interrupt_flags(rtc_registers_t *regs, uint16_t alarm_id)
  */
 static inline uint16_t rtc_supported_alarm_int_flags(const rtc_registers_t *regs)
 {
-	return (RTC_MODE2_INTFLAG_ALARM0_Msk | RTC_MODE2_INTFLAG_ALARM1_Msk);
+	ARG_UNUSED(regs);
+
+	return RTC_SUPPORTED_ALARM_INT_FLAGS;
 }
 
 /*
@@ -532,7 +562,7 @@ static int rtc_mchp_set_alarm_time(const struct device *dev, uint16_t alarm_id, 
 				   const struct rtc_time *timeptr)
 {
 	const struct rtc_mchp_dev_config *const cfg = dev->config;
-	struct rtc_mchp_time rtc_time;
+	struct rtc_mchp_time alarm_time;
 	struct rtc_mchp_dev_data *data = dev->data;
 	uint16_t supported_mask;
 	uint16_t set_mask = 0;
@@ -558,20 +588,6 @@ static int rtc_mchp_set_alarm_time(const struct device *dev, uint16_t alarm_id, 
 		return -EINVAL;
 	}
 
-	/* Validate the provided RTC time */
-	if ((timeptr != NULL) && (rtc_utils_validate_rtc_time(timeptr, supported_mask) == false)) {
-		LOG_ERR("Invalid RTC time provided");
-		return -EINVAL;
-	}
-
-	/* If validation passed, set the RTC ALARM time */
-	rtc_time.second = timeptr->tm_sec;
-	rtc_time.minute = timeptr->tm_min;
-	rtc_time.hour = timeptr->tm_hour;
-	rtc_time.month = timeptr->tm_mon;
-	rtc_time.date_of_month = timeptr->tm_mday;
-	rtc_time.year = timeptr->tm_year;
-
 	/* Lock the semaphore before accessing the RTC. */
 	k_sem_take(&data->lock, K_FOREVER);
 
@@ -582,9 +598,23 @@ static int rtc_mchp_set_alarm_time(const struct device *dev, uint16_t alarm_id, 
 		/* If the alarm mask is zero, turn off the alarm */
 		rtc_set_alarm_mask(cfg->regs, alarm_id, RTC_MCHP_ALARM_MASK_SEL_OFF);
 	} else {
+		/* Validate the provided RTC time */
+		if (rtc_utils_validate_rtc_time(timeptr, supported_mask) == false) {
+			LOG_ERR("Invalid RTC time provided");
+			k_sem_give(&data->lock);
+			return -EINVAL;
+		}
+
+		/* If validation passed, set the RTC ALARM time */
+		alarm_time.second = timeptr->tm_sec;
+		alarm_time.minute = timeptr->tm_min;
+		alarm_time.hour = timeptr->tm_hour;
+		alarm_time.month = timeptr->tm_mon;
+		alarm_time.date_of_month = timeptr->tm_mday;
+		alarm_time.year = timeptr->tm_year;
 
 		/* Set the alarm time */
-		rtc_set_alarm_time(cfg->regs, alarm_id, &rtc_time);
+		rtc_set_alarm_time(cfg->regs, alarm_id, &alarm_time);
 
 		/* Enable the interrupt for the specified alarm ID */
 		set_mask = rtc_alarm_mask(alarm_mask);
@@ -642,6 +672,11 @@ static int rtc_mchp_get_alarm_time(const struct device *dev, uint16_t alarm_id,
 	timeptr->tm_mday = (int)rtc_alarm_time.date_of_month;
 	timeptr->tm_year = (int)rtc_alarm_time.year;
 
+	timeptr->tm_wday = -1;
+	timeptr->tm_yday = -1;
+	timeptr->tm_isdst = -1;
+	timeptr->tm_nsec = 0;
+
 	return 0;
 }
 
@@ -674,7 +709,7 @@ static int rtc_mchp_set_clock_time(const struct device *dev, const struct rtc_ti
 {
 	struct rtc_mchp_dev_data *data = dev->data;
 	const struct rtc_mchp_dev_config *const cfg = dev->config;
-	struct rtc_mchp_time rtc_time;
+	struct rtc_mchp_time clock_time;
 
 	/* Check if rtc_time structure not null */
 	if (timeptr == NULL) {
@@ -691,17 +726,17 @@ static int rtc_mchp_set_clock_time(const struct device *dev, const struct rtc_ti
 #endif /* CONFIG_RTC_ALARM */
 
 		/* If validation passed, set the RTC time */
-		rtc_time.second = timeptr->tm_sec;
-		rtc_time.minute = timeptr->tm_min;
-		rtc_time.hour = timeptr->tm_hour;
-		rtc_time.month = timeptr->tm_mon;
-		rtc_time.date_of_month = timeptr->tm_mday;
-		rtc_time.year = timeptr->tm_year;
+		clock_time.second = timeptr->tm_sec;
+		clock_time.minute = timeptr->tm_min;
+		clock_time.hour = timeptr->tm_hour;
+		clock_time.month = timeptr->tm_mon;
+		clock_time.date_of_month = timeptr->tm_mday;
+		clock_time.year = timeptr->tm_year;
 
 		/* lock the semaphore before setting the RTC. */
 		k_sem_take(&data->lock, K_FOREVER);
 
-		rtc_set_clock_time(cfg->regs, &rtc_time);
+		rtc_set_clock_time(cfg->regs, &clock_time);
 
 		/* Unlock the semaphore before returning. */
 		k_sem_give(&data->lock);
@@ -732,6 +767,11 @@ static int rtc_mchp_get_clock_time(const struct device *dev, struct rtc_time *ti
 	timeptr->tm_mon = (int)rtc_current_time.month;
 	timeptr->tm_mday = (int)rtc_current_time.date_of_month;
 	timeptr->tm_year = (int)rtc_current_time.year;
+
+	timeptr->tm_wday = -1;
+	timeptr->tm_yday = -1;
+	timeptr->tm_isdst = -1;
+	timeptr->tm_nsec = 0;
 
 	return 0;
 }
@@ -869,7 +909,7 @@ static DEVICE_API(rtc, rtc_mchp_api) = {
 
 /* Defines the RTC interrupt configurations. */
 #ifdef CONFIG_RTC_ALARM
-#define RTC_MCHP_IRQ_CONNECT(n, m)                                                                 \
+#define RTC_MCHP_IRQ_CONNECT(m, n)                                                                 \
 	do {                                                                                       \
 		IRQ_CONNECT(DT_INST_IRQ_BY_IDX(n, m, irq), DT_INST_IRQ_BY_IDX(n, m, priority),     \
 			    rtc_mchp_isr, DEVICE_DT_INST_GET(n), 0);                               \
@@ -888,7 +928,7 @@ static DEVICE_API(rtc, rtc_mchp_api) = {
 #define RTC_MCHP_IRQ_HANDLER(n)                                                                    \
 	static void rtc_mchp_irq_config_##n(const struct device *dev)                              \
 	{                                                                                          \
-		RTC_MCHP_IRQ_CONNECT(n, 0);                                                        \
+		LISTIFY(DT_INST_NUM_IRQS(n), RTC_MCHP_IRQ_CONNECT, (;), n);                        \
 	}
 #endif /* CONFIG_RTC_ALARM */
 

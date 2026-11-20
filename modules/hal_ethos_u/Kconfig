@@ -1,5 +1,5 @@
-# SPDX-FileCopyrightText: <text>Copyright 2021-2022, 2024-2025 Arm Limited and/or its
-# affiliates <open-source-office@arm.com></text>
+# SPDX-FileCopyrightText: Copyright 2021-2022, 2024-2025 Arm Limited and/or its
+# SPDX-FileCopyrightText: affiliates <open-source-office@arm.com>
 # SPDX-License-Identifier: Apache-2.0
 
 config ETHOS_U
@@ -17,7 +17,8 @@ choice  ETHOS_U_NPU_CONFIG
 	default ETHOS_U65_256 if SOC_CORSTONE315
 	default ETHOS_U85_256 if SOC_CORSTONE320
 	default ETHOS_U55_256 if SOC_SERIES_M55M1X
-	default ETHOS_U55_256 if SOC_SERIES_PSE84
+	default ETHOS_U55_128 if SOC_SERIES_PSE84
+
 config ETHOS_U55_64
 	bool "using Ethos-U55 with 64 macs"
 config ETHOS_U55_128

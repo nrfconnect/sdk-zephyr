@@ -6,12 +6,14 @@
 
 #include <string.h>
 
+#include <zephyr/cache.h>
 #include <zephyr/drivers/flash.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 
 #if defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)
 #include "tfm_ioctl_core_api.h"
+#include <soc_secure.h>
 #else
 #include <nrfx_mramc.h>
 #endif
@@ -20,8 +22,8 @@ LOG_MODULE_REGISTER(flash_nrf_mramc, CONFIG_FLASH_LOG_LEVEL);
 
 #define DT_DRV_COMPAT nordic_nrf_mramc
 
-#define MRAM_NODE		  DT_NODELABEL(cpuapp_mram)
-#define MRAM_BASE		 DT_REG_ADDR(MRAM_NODE)
+#define MRAM_NODE		  DT_INST(0, soc_nv_flash)
+#define MRAM_BASE		  DT_REG_ADDR(MRAM_NODE)
 #define MRAM_SIZE		  DT_REG_SIZE(MRAM_NODE)
 
 BUILD_ASSERT(MRAM_BASE <= UINT32_MAX, "MRAM_BASE is not in size of uint32_t");
@@ -33,7 +35,17 @@ BUILD_ASSERT(MRAM_SIZE <= UINT32_MAX, "MRAM_SIZE is not in size of uint32_t");
 #define ERASE_VALUE				   0xFFFFFFFF
 #define MRAM_WORD_SIZE	16
 #define MRAMC_CONFIG_WEN_NORMAL	1
+#define MRAMC_CONFIG_WEN_DIRECT	2
 #define MRAMC_CONFIG_WEN_DISABLE   0
+
+/* Non-secure builds can't reach the MRAMC erase, so they use direct write mode,
+ * where the MRAMC erases the word itself.
+ */
+#if defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)
+#define MRAMC_CONFIG_WEN_WRITE MRAMC_CONFIG_WEN_DIRECT
+#else
+#define MRAMC_CONFIG_WEN_WRITE MRAMC_CONFIG_WEN_NORMAL
+#endif
 
 #define MAP_TO_ADDR(offset) (MRAM_BASE + offset)
 
@@ -62,25 +74,12 @@ static struct k_mutex nrf_mramc_mutex;
  */
 static bool validate_action(uint32_t addr, size_t len, bool must_align)
 {
-	bool valid = true;
-
-#if defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)
-	valid = (addr >= MRAM_BASE && addr < (MRAM_BASE + MRAM_SIZE));
-#else
-	valid = nrfx_mramc_valid_address_check(addr, true);
-#endif
-	if (!valid) {
+	if (addr < MRAM_BASE || addr >= (MRAM_BASE + MRAM_SIZE)) {
 		LOG_ERR("Invalid address: %x", addr);
 		return false;
 	}
 
-#if defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)
-	valid = (((addr - (uint32_t)MRAM_BASE) < MRAM_SIZE) &&
-		(len <= ((uint32_t)MRAM_BASE + MRAM_SIZE - addr)));
-#else
-	valid = nrfx_mramc_fits_memory_check(addr, true, len);
-#endif
-	if (!valid) {
+	if (len > ((uint32_t)MRAM_BASE + MRAM_SIZE - addr)) {
 		LOG_ERR("Address %x with length %zu exceeds MRAM size", addr, len);
 		return false;
 	}
@@ -142,7 +141,7 @@ static int nrf_mramc_verify_data(off_t offset, const void *data, size_t size, bo
 /**
  * @brief Setting the write enable mode of MRAM controller.
  *
- * @param[in] mode  Write enable mode to set, either normal(1) or disable(0).
+ * @param[in] mode  Write enable mode to set, either normal(1), direct(2) or disable(0).
  *
  * @return true if mode change is successful, false otherwise.
  */
@@ -180,6 +179,10 @@ static int nrf_mramc_read(const struct device *dev, off_t offset, void *data, si
 	/* Buffer read number of bytes and store in data pointer.
 	 */
 #if defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)
+	if (soc_secure_flash_range_is_secure((uintptr_t)addr, len)) {
+		LOG_DBG("read secure mem: %x:%zu", addr, len);
+		return soc_secure_mem_read(data, (void *)addr, len);
+	}
 	memcpy(data, (void *)addr, len);
 #else
 	nrfx_mramc_buffer_read(data, addr, len);
@@ -187,8 +190,41 @@ static int nrf_mramc_read(const struct device *dev, off_t offset, void *data, si
 	return 0;
 }
 
+#if !defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)
+/**
+ * @brief Erases one MRAM_WORD_SIZE word with the MRAMC hardware word erase.
+ *
+ * One erase of an address inside the MRAM word erases the whole 16-byte word.
+ *
+ * @param addr Address aligned to MRAM_WORD_SIZE.
+ */
+static void nrf_mram_hw_erase_word(uint32_t addr)
+{
+	nrfx_mramc_config_erase_mode_set(NRF_MRAMC_MODE_ERASE_WORD);
+	while (!nrfx_mramc_ready_check()) {
+	}
+
+	nrfy_mramc_erase_word_set(NRF_MRAMC, addr);
+	while (!nrfx_mramc_ready_check()) {
+	}
+
+	nrfx_mramc_config_erase_mode_set(NRF_MRAMC_MODE_ERASE_DISABLE);
+	while (!nrfx_mramc_ready_check()) {
+	}
+
+	/* The hardware erase bypasses the CPU cache, which sits in front of the MRAM reads. Without
+	 * the invalidate the verify can return the old contents.
+	 */
+	sys_cache_instr_invd_all();
+}
+#endif /* !CONFIG_TRUSTED_EXECUTION_NONSECURE */
+
 /**
  * @brief Writes a word with MRAM_WORD_SIZE to MRAM and verifies the written data.
+ *
+ * The secure build uses normal write mode, so the word is erased first if it is
+ * not already erased. The non-secure build has no access to the MRAMC erase and
+ * uses direct write mode, which erases the word itself.
  *
  * @param addr  Destination address. Must be aligned to MRAM_WORD_SIZE (16 bytes).
  * @param data  Pointer to the source data buffer.
@@ -200,11 +236,28 @@ static int nrf_mram_write_and_verify_word(uint32_t addr, void *data)
 {
 	uint8_t retries = CONFIG_NRF_MRAMC_MAX_RETRIES;
 
+	if (!nrf_mramc_verify_data(addr, data, MRAM_WORD_SIZE, false)) {
+		/* Already holds the requested data. */
+		return 0;
+	}
+
 	while (retries--) {
+#if !defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)
+		if (nrf_mramc_verify_data(addr, NULL, MRAM_WORD_SIZE, true)) {
+			nrf_mram_hw_erase_word(addr);
+			if (!nrf_mramc_verify_data(addr, data, MRAM_WORD_SIZE, false)) {
+				/* The data is the erase value, so the erase was enough. */
+				return 0;
+			}
+		}
+#endif
+
+		nrf_mramc_set_wen(MRAMC_CONFIG_WEN_WRITE);
+
 		/* Check if data address is aligned to 4 bytes */
 		if (((uintptr_t)data % 4) == 0) {
 			uint32_t *mram_start = (uint32_t *)addr;
-			uint32_t *mram_end = mram_start + sizeof(uint32_t);
+			uint32_t *mram_end = mram_start + MRAM_WORD_SIZE / sizeof(uint32_t);
 			uint32_t *data_ptr = (uint32_t *)data;
 
 			/* Aligned: use fast uint32_t copies */
@@ -215,6 +268,8 @@ static int nrf_mram_write_and_verify_word(uint32_t addr, void *data)
 			/* Not aligned: use memcpy */
 			memcpy((void *)addr, data, MRAM_WORD_SIZE);
 		}
+
+		nrf_mramc_set_wen(MRAMC_CONFIG_WEN_DISABLE);
 
 		if (!nrf_mramc_verify_data(addr, data, MRAM_WORD_SIZE, false)) {
 			return 0;
@@ -232,6 +287,9 @@ static int nrf_mram_write_and_verify_word(uint32_t addr, void *data)
 /**
  * @brief Erase a word with MRAM_WORD_SIZE to MRAM and verifies the written data.
  *
+ * Uses the MRAMC hardware word erase. The non-secure build writes the erase
+ * value in direct write mode, which erases the word itself.
+ *
  * @param addr		Destination address. Must be aligned to MRAM_WORD_SIZE (16 bytes).
  *
  * @retval 0		Erase succeeded and no corruption was detected.
@@ -241,14 +299,24 @@ static int nrf_mram_erase_and_verify_word(uint32_t addr)
 {
 	uint8_t retries = CONFIG_NRF_MRAMC_MAX_RETRIES;
 
-	while (retries--) {
-		uint32_t *mram_start = (uint32_t *)addr;
-		uint32_t *mram_end = mram_start + sizeof(uint32_t);
+	if (!nrf_mramc_verify_data(addr, NULL, MRAM_WORD_SIZE, true)) {
+		/* Already erased. */
+		return 0;
+	}
 
-		/* Check if data address is aligned to 4 bytes */
+	while (retries--) {
+#if !defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)
+		nrf_mram_hw_erase_word(addr);
+#else
+		uint32_t *mram_start = (uint32_t *)addr;
+		uint32_t *mram_end = mram_start + MRAM_WORD_SIZE / sizeof(uint32_t);
+
+		nrf_mramc_set_wen(MRAMC_CONFIG_WEN_WRITE);
 		while (mram_start < mram_end) {
-			*mram_start++ = 0xFFFFFFFFu;
+			*mram_start++ = ERASE_VALUE;
 		}
+		nrf_mramc_set_wen(MRAMC_CONFIG_WEN_DISABLE);
+#endif
 
 		if (!nrf_mramc_verify_data(addr, NULL, MRAM_WORD_SIZE, true)) {
 			return 0;
@@ -286,9 +354,7 @@ static int nrf_mramc_write(const struct device *dev, off_t offset,
 
 	for (uint32_t i = 0; i < size; i += MRAM_WORD_SIZE) {
 		/* Write full 16 bytes word for N iterations */
-		nrf_mramc_set_wen(MRAMC_CONFIG_WEN_NORMAL);
 		ret = nrf_mram_write_and_verify_word(addr + i, (void *)((uintptr_t)data + i));
-		nrf_mramc_set_wen(MRAMC_CONFIG_WEN_DISABLE);
 
 		if (ret) {
 			SYNC_UNLOCK();
@@ -322,9 +388,7 @@ static int nrf_mramc_erase(const struct device *dev, off_t offset, size_t size)
 
 	for (uint32_t i = 0; i < size; i += MRAM_WORD_SIZE) {
 		/* Erase full 16 bytes word for N iterations */
-		nrf_mramc_set_wen(MRAMC_CONFIG_WEN_NORMAL);
 		ret = nrf_mram_erase_and_verify_word(addr + i);
-		nrf_mramc_set_wen(MRAMC_CONFIG_WEN_DISABLE);
 
 		if (ret) {
 			SYNC_UNLOCK();

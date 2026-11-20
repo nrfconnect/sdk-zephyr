@@ -18,7 +18,7 @@
 #include <zephyr/logging/log.h>
 
 #include "osif_zephyr_impl.h"
-#include "mem_types.h"
+#include <mem_types.h>
 
 LOG_MODULE_REGISTER(osif);
 
@@ -207,7 +207,7 @@ bool os_sched_is_start_zephyr(void)
  ************************************************************/
 K_MEM_SLAB_DEFINE_TYPE(osif_task_slab, struct osif_task, CONFIG_REALTEK_BEE_OSIF_TASK_MAX_COUNT);
 
-bool os_task_create_zephyr(void **handle_ptr, const char *name, void (*routine)(void *),
+bool os_task_create_zephyr(void **handle_ptr, const char *name, void (*routine)(void *param),
 			   void *param, uint16_t stack_size, uint16_t priority)
 {
 	struct osif_task *task;
@@ -613,7 +613,7 @@ bool os_mutex_create_zephyr(void **handle_ptr)
 	struct k_mutex *mutex;
 
 	if (k_mem_slab_alloc(&osif_mutex_slab, (void **)&mutex, K_NO_WAIT) != 0) {
-		LOG_ERR("Exceeded max number of mutexs: %d!",
+		LOG_ERR("Exceeded max number of mutexes: %d!",
 			CONFIG_REALTEK_BEE_OSIF_MUTEX_MAX_COUNT);
 		return false;
 	}

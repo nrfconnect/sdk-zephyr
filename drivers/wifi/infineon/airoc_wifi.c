@@ -11,6 +11,7 @@
 
 #include <zephyr/logging/log.h>
 #include <zephyr/net/conn_mgr/connectivity_wifi_mgmt.h>
+#include <zephyr/net/wifi_utils.h>
 #include <airoc_wifi.h>
 #include <airoc_whd_hal_common.h>
 #include <whd_wlioctl.h>
@@ -139,7 +140,7 @@ struct airoc_wifi_event_t {
 	whd_event_data_t *whd_event_data;
 };
 
-K_MSGQ_DEFINE(airoc_wifi_msgq, sizeof(struct airoc_wifi_event_t), 10, 4);
+K_MSGQ_DEFINE_STATIC_TYPE(airoc_wifi_msgq, struct airoc_wifi_event_t, 10);
 K_THREAD_STACK_DEFINE(airoc_wifi_event_stack, CONFIG_AIROC_WIFI_EVENT_TASK_STACK_SIZE);
 static struct k_thread airoc_wifi_event_thread;
 
@@ -402,7 +403,7 @@ static whd_result_t airoc_wifi_host_buffer_get(whd_buffer_t *buffer, whd_buffer_
 static void airoc_wifi_buffer_release(whd_buffer_t buffer, whd_buffer_dir_t direction)
 {
 	CY_UNUSED_PARAMETER(direction);
-	(void)net_buf_destroy((struct net_buf *)buffer);
+	net_buf_unref((struct net_buf *)buffer);
 }
 
 static uint8_t *airoc_wifi_buffer_get_current_piece_data_pointer(whd_buffer_t buffer)
@@ -915,8 +916,11 @@ static int airoc_mgmt_connect(const struct device *dev,
 
 	if (data->is_sta_connected) {
 		LOG_ERR("Already connected");
-		ret = -EALREADY;
-		goto error;
+		/* Reject duplicate requests without reporting that the active
+		 * connection failed or changing its operational state.
+		 */
+		k_sem_give(&data->sema_common);
+		return -EALREADY;
 	}
 
 	if (data->is_ap_up) {
@@ -2416,17 +2420,6 @@ int airoc_wifi_wpa_supp_reg_mgmt_frame(void *if_priv, u16 frame_type, size_t mat
 #endif
 
 #if defined(CONFIG_WIFI_NM_WPA_SUPPLICANT)
-static inline unsigned short mhz_from_5g_channel(uint8_t ch)
-{
-	/* 5GHz channels: 36, 40, 44, 48, 149, 153, 157, 161, 165 */
-	return (unsigned short)(5000 + 5 * ch);
-}
-
-static inline unsigned short mhz_from_2g_channel(uint8_t ch)
-{
-	return (ch == 14) ? 2484 : (unsigned short)(2412 + 5 * (ch - 1));
-}
-
 static void airoc_build_band_5g_min(struct wpa_supp_event_supported_band *band)
 {
 	static const uint8_t chs[] = {36, 40, 44, 48, 149, 153, 157, 161, 165};
@@ -2439,7 +2432,8 @@ static void airoc_build_band_5g_min(struct wpa_supp_event_supported_band *band)
 
 	for (int i = 0; i < band->wpa_supp_n_channels; i++) {
 		band->channels[i].ch_valid = 1;
-		band->channels[i].center_frequency = mhz_from_5g_channel(chs[i]);
+		band->channels[i].center_frequency =
+			wifi_utils_chan_to_freq(WIFI_FREQ_BAND_5_GHZ, chs[i]);
 		band->channels[i].wpa_supp_flags = 0;
 		band->channels[i].wpa_supp_max_power = 20;
 		band->channels[i].dfs_state = 0;
@@ -2464,7 +2458,8 @@ static void airoc_build_band_2g_min(struct wpa_supp_event_supported_band *band)
 		int ch = i + 1; /* 1..11 */
 
 		band->channels[i].ch_valid = 1;
-		band->channels[i].center_frequency = mhz_from_2g_channel((uint8_t)ch);
+		band->channels[i].center_frequency =
+			wifi_utils_chan_to_freq(WIFI_FREQ_BAND_2_4_GHZ, (uint8_t)ch);
 		band->channels[i].wpa_supp_flags = 0;
 		band->channels[i].wpa_supp_max_power = 20;
 		band->channels[i].dfs_state = 0;

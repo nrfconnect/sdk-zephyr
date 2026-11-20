@@ -4,6 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * @file
+ * @brief Header file for NXP ENET Ethernet driver internal definitions.
+ * @ingroup ethernet
+ */
+
 #ifndef ZEPHYR_INCLUDE_DRIVERS_ETH_NXP_ENET_H__
 #define ZEPHYR_INCLUDE_DRIVERS_ETH_NXP_ENET_H__
 
@@ -19,6 +25,8 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/** @cond INTERNAL_HIDDEN */
 
 /*
  * Reasons for callback to a driver:
@@ -44,6 +52,7 @@ struct nxp_enet_ptp_data {
 	struct k_sem ptp_ts_sem;
 	struct k_mutex *ptp_mutex; /* created in PTP driver */
 	void *enet; /* enet_handle poiniter used by PTP driver */
+	bool ptp_running; /* set by PTP driver once the 1588 timer is started */
 };
 
 #ifdef CONFIG_MDIO_NXP_ENET
@@ -74,6 +83,8 @@ extern void nxp_enet_driver_cb(const struct device *dev,
 				enum nxp_enet_driver dev_type,
 				enum nxp_enet_callback_reason event,
 				void *data);
+
+/** INTERNAL_HIDDEN @endcond */
 
 #ifdef __cplusplus
 }

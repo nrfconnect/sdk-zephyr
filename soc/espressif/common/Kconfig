@@ -3,7 +3,7 @@
 
 config ESP32_ETM
 	bool
-	depends on ESP32_SOC_ETM_SUPPORTED
+	depends on SOC_ESP32_ETM_SUPPORTED
 	help
 	  Espressif Event Task Matrix (ETM) channel allocator. The ETM
 	  routes a peripheral event to a peripheral task in hardware. This
@@ -29,10 +29,12 @@ config ESP_SIMPLE_BOOT
 
 config ESP32_TIMER_TASK_STACK_SIZE
 	int "Stack size of the high resolution ESP Timer"
-	default 4096
+	default 1536
 	help
 	  Set the stack size for the internal high resolution ESP Timer
-	  used in Wi-Fi and BLE peripherals.
+	  used in Wi-Fi and BLE peripherals. Registered timer callbacks
+	  run in this task's context, including Wi-Fi, BLE, mesh, PHY and
+	  coexistence callbacks that dispatch here.
 
 config ESP32_TIMER_TASK_PRIO
 	int "Task priority of the high resolution ESP Timer"
@@ -72,6 +74,7 @@ rsource "Kconfig.spiram"
 rsource "Kconfig.esptool"
 rsource "Kconfig.flash"
 rsource "Kconfig.lcd_cam"
+rsource "Kconfig.ppa"
 
 if PM && TICKLESS_KERNEL
 rsource "Kconfig.pm"

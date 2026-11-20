@@ -8,8 +8,8 @@
 
 / {
 	zephyr,user {
-		miso-gpios = <&gpio0 6 GPIO_ACTIVE_HIGH>;
-		mosi-gpios = <&gpio0 7 GPIO_ACTIVE_HIGH>;
+		sdi-gpios = <&gpio0 6 GPIO_ACTIVE_HIGH>;
+		sdo-gpios = <&gpio0 7 GPIO_ACTIVE_HIGH>;
 		cs-loopback-gpios = <&gpio0 11 0>;
 	};
 };
@@ -38,6 +38,8 @@
 	pinctrl-1 = <&spi130_sleep>;
 	pinctrl-names = "default", "sleep";
 	overrun-character = <0x00>;
+
+	cs-gpios = <&gpio0 10 0>;
 	zephyr,pm-device-runtime-auto;
 	status = "okay";
 
@@ -52,8 +54,6 @@
 		reg = <0>;
 		spi-max-frequency = <DT_FREQ_M(8)>;
 	};
-
-	cs-gpios = <&gpio0 10 0>;
 };
 
 &gpio0 {

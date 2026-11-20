@@ -57,8 +57,9 @@ strlen_done:
 GTEXT(arch_buffer_validate)
 SECTION_FUNC(TEXT, arch_buffer_validate)
 
-	add	x1, x1, x0
 	mrs	x3, DAIF
+	adds	x1, x1, x0
+	b.cs	abv_fail
 	msr	DAIFSET, #DAIFSET_IRQ_BIT
 
 abv_loop:

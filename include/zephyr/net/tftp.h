@@ -26,7 +26,7 @@ extern "C" {
 #endif
 
 /**
- * RFC1350: the file is sent in fixed length blocks of 512 bytes.
+ * @rfc{1350}: the file is sent in fixed length blocks of 512 bytes.
  * Each data packet contains one block of data, and must be acknowledged
  * by an acknowledgment packet before the next packet can be sent.
  * A data packet of less than 512 bytes signals termination of a transfer.
@@ -34,7 +34,7 @@ extern "C" {
 #define TFTP_BLOCK_SIZE          512
 
 /**
- * RFC1350: For non-request TFTP message, the header contains 2-byte operation
+ * @rfc{1350}: For non-request TFTP message, the header contains 2-byte operation
  * code plus 2-byte block number or error code.
  */
 #define TFTP_HEADER_SIZE         4
@@ -84,7 +84,10 @@ struct tftp_data_param {
 
 /** @brief Parameters for error event. */
 struct tftp_error_param {
-	char *msg;                 /**< Error message. */
+	char *msg;                 /**< Error message. NUL-terminated within
+				     *   tftp_buf, at most TFTP_BLOCK_SIZE - 1
+				     *   characters.
+				     */
 	int code;                  /**< Error code. */
 };
 
@@ -127,8 +130,15 @@ typedef void (*tftp_callback_t)(const struct tftp_evt *evt);
  *       GET or PUT API with the `tftpc` structure.
  */
 struct tftpc {
-	/** Socket address pointing to the remote TFTP server */
-	struct net_sockaddr server;
+	/** Socket address storage */
+	union {
+		/** Socket address pointing to the remote TFTP server */
+		struct net_sockaddr_storage server_addr;
+/** @cond INTERNAL_HIDDEN */
+		/* Do not access this directly, use server_addr instead */
+		struct net_sockaddr server;
+/** @endcond */
+	};
 
 	/** Event notification callback. No notification if NULL */
 	tftp_callback_t callback;
@@ -148,7 +158,8 @@ struct tftpc {
  * @retval TFTPC_BUFFER_OVERFLOW if the file is larger than the user buffer.
  * @retval TFTPC_REMOTE_ERROR if the server failed to process our request.
  * @retval TFTPC_RETRIES_EXHAUSTED if the client timed out waiting for server.
- * @retval -EINVAL if `client` is NULL.
+ * @retval -EINVAL if `client` is NULL, or if `remote_file` or `mode` is too long to fit in a
+ *         request. Nothing is sent in that case.
  *
  * @note This function blocks until the transfer is completed or network error happens. The
  *       integrity of the `client` structure must be ensured until the function returns.
@@ -168,7 +179,8 @@ int tftp_get(struct tftpc *client,
  * @return The size of data being sent if the operation completed successfully.
  * @retval TFTPC_REMOTE_ERROR if the server failed to process our request.
  * @retval TFTPC_RETRIES_EXHAUSTED if the client timed out waiting for server.
- * @retval -EINVAL if `client` or `user_buf` is NULL or if `user_buf_size` is zero.
+ * @retval -EINVAL if `client` or `user_buf` is NULL, if `user_buf_size` is zero, or if
+ *         `remote_file` or `mode` is too long to fit in a request. Nothing is sent in that case.
  *
  * @note This function blocks until the transfer is completed or network error happens. The
  *       integrity of the `client` structure must be ensured until the function returns.

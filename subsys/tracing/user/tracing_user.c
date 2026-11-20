@@ -7,8 +7,9 @@
 
 #include <tracing_user.h>
 #include <zephyr/kernel.h>
-#include <zephyr/debug/cpu_load.h>
+#include <zephyr/sys/cpu_load.h>
 #include <zephyr/init.h>
+#include <zephyr/rtio/sqe.h>
 
 void __weak sys_trace_thread_create_user(struct k_thread *thread) {}
 void __weak sys_trace_thread_abort_user(struct k_thread *thread) {}
@@ -26,12 +27,8 @@ void __weak sys_trace_isr_exit_user(void) {}
 void __weak sys_trace_idle_user(void) {}
 void __weak sys_trace_sys_init_enter_user(const struct init_entry *entry, int level) {}
 void __weak sys_trace_sys_init_exit_user(const struct init_entry *entry, int level, int result) {}
-void __weak sys_trace_k_thread_sleep_enter_user(k_timeout_t timeout) {}
-void __weak sys_trace_k_thread_sleep_exit_user(k_timeout_t timeout, int32_t ret) {}
-void __weak sys_trace_k_thread_msleep_enter_user(int32_t ms) {}
-void __weak sys_trace_k_thread_msleep_exit_user(int32_t ms, int32_t ret) {}
-void __weak sys_trace_k_thread_usleep_enter_user(int32_t us) {}
-void __weak sys_trace_k_thread_usleep_exit_user(int32_t us, int32_t ret) {}
+void __weak sys_trace_k_thread_sleep_ticks_enter_user(k_timeout_t timeout) {}
+void __weak sys_trace_k_thread_sleep_ticks_exit_user(k_timeout_t timeout, int32_t ret) {}
 void __weak sys_trace_gpio_pin_interrupt_configure_enter_user(const struct device *port,
 							      gpio_pin_t pin, gpio_flags_t flags) {}
 void __weak sys_trace_gpio_pin_interrupt_configure_exit_user(const struct device *port,
@@ -111,9 +108,9 @@ void __weak sys_trace_rtio_sqe_acquire_exit_user(const struct rtio *r, const str
 {
 	printk("sqe_acquire_exit: rtio: %p\t sqe: %p\n", r, sqe);
 }
-void __weak sys_trace_rtio_sqe_cancel_user(const struct rtio_sqe *sqe)
+void __weak sys_trace_rtio_sqe_cancel_user(uint16_t index, uint16_t generation)
 {
-	printk("sqe_cancel_user: sqe: %p", sqe);
+	printk("sqe_cancel_user: index: %u\t generation: %u\n", index, generation);
 }
 void __weak sys_trace_rtio_cqe_submit_enter_user(const struct rtio *r, int result, uint32_t flags)
 {
@@ -221,6 +218,10 @@ void sys_trace_thread_pend(struct k_thread *thread)
 
 void sys_trace_isr_enter(void)
 {
+	if (IS_ENABLED(CONFIG_CPU_LOAD_BACKEND_IDLE_HOOK)) {
+		cpu_load_on_exit_idle();
+	}
+
 	sys_trace_isr_enter_user();
 }
 
@@ -233,14 +234,14 @@ void sys_trace_idle(void)
 {
 	sys_trace_idle_user();
 
-	if (IS_ENABLED(CONFIG_CPU_LOAD)) {
+	if (IS_ENABLED(CONFIG_CPU_LOAD_BACKEND_IDLE_HOOK)) {
 		cpu_load_on_enter_idle();
 	}
 }
 
 void sys_trace_idle_exit(void)
 {
-	if (IS_ENABLED(CONFIG_CPU_LOAD)) {
+	if (IS_ENABLED(CONFIG_CPU_LOAD_BACKEND_IDLE_HOOK)) {
 		cpu_load_on_exit_idle();
 	}
 }
@@ -255,34 +256,14 @@ void sys_trace_sys_init_exit(const struct init_entry *entry, int level, int resu
 	sys_trace_sys_init_exit_user(entry, level, result);
 }
 
-void sys_trace_k_thread_sleep_enter(k_timeout_t timeout)
+void sys_trace_k_thread_sleep_ticks_enter(k_timeout_t timeout)
 {
-	sys_trace_k_thread_sleep_enter_user(timeout);
+	sys_trace_k_thread_sleep_ticks_enter_user(timeout);
 }
 
-void sys_trace_k_thread_sleep_exit(k_timeout_t timeout, int32_t ret)
+void sys_trace_k_thread_sleep_ticks_exit(k_timeout_t timeout, int32_t ret)
 {
-	sys_trace_k_thread_sleep_exit_user(timeout, ret);
-}
-
-void sys_trace_k_thread_msleep_enter(int32_t ms)
-{
-	sys_trace_k_thread_msleep_enter_user(ms);
-}
-
-void sys_trace_k_thread_msleep_exit(int32_t ms, int32_t ret)
-{
-	sys_trace_k_thread_msleep_exit_user(ms, ret);
-}
-
-void sys_trace_k_thread_usleep_enter(int32_t us)
-{
-	sys_trace_k_thread_usleep_enter_user(us);
-}
-
-void sys_trace_k_thread_usleep_exit(int32_t us, int32_t ret)
-{
-	sys_trace_k_thread_usleep_exit_user(us, ret);
+	sys_trace_k_thread_sleep_ticks_exit_user(timeout, ret);
 }
 
 void sys_trace_gpio_pin_interrupt_configure_enter(const struct device *port, gpio_pin_t pin,
@@ -453,9 +434,10 @@ void sys_trace_rtio_sqe_acquire_exit(const struct rtio *r, const struct rtio_sqe
 	sys_trace_rtio_sqe_acquire_exit_user(r, sqe);
 }
 
-void sys_trace_rtio_sqe_cancel(const struct rtio_sqe *sqe)
+void sys_trace_rtio_sqe_cancel(uint32_t handle)
 {
-	sys_trace_rtio_sqe_cancel_user(sqe);
+	sys_trace_rtio_sqe_cancel_user(rtio_sqe_handle_index(handle),
+				       rtio_sqe_handle_generation(handle));
 }
 
 void sys_trace_rtio_cqe_submit_enter(const struct rtio *r, int result, uint32_t flags)

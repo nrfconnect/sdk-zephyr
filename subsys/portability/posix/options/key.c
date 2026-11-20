@@ -98,7 +98,7 @@ static pthread_key_obj *to_posix_key(pthread_key_t *key)
  * See IEEE 1003.1
  */
 int pthread_key_create(pthread_key_t *key,
-		void (*destructor)(void *))
+		void (*destructor)(void *value))
 {
 	pthread_key_obj *new_key;
 
@@ -108,7 +108,7 @@ int pthread_key_create(pthread_key_t *key,
 		return ENOMEM;
 	}
 
-	sys_slist_init(&(new_key->key_data_l));
+	sys_dlist_init(&(new_key->key_data_l));
 
 	new_key->destructor = destructor;
 	LOG_DBG("Initialized key %p (%x)", new_key, *key);
@@ -127,7 +127,7 @@ int pthread_key_delete(pthread_key_t key)
 	int ret = EINVAL;
 	pthread_key_obj *key_obj = NULL;
 	struct pthread_key_data *key_data;
-	sys_snode_t *node_l, *next_node_l;
+	sys_dnode_t *node_l;
 
 	SYS_SEM_LOCK(&pthread_key_lock) {
 		key_obj = get_posix_key(key);
@@ -137,10 +137,14 @@ int pthread_key_delete(pthread_key_t key)
 		}
 
 		/* Delete thread-specific elements associated with the key */
-		SYS_SLIST_FOR_EACH_NODE_SAFE(&(key_obj->key_data_l), node_l, next_node_l) {
+		while ((node_l = sys_dlist_get(&key_obj->key_data_l)) != NULL) {
+			key_data = CONTAINER_OF(node_l, struct pthread_key_data, node);
 
-			/* Remove the object from the list key_data_l */
-			key_data = (struct pthread_key_data *)sys_slist_get(&(key_obj->key_data_l));
+			if (key_data->thread != NULL) {
+				(void)sys_slist_find_and_remove(
+					&key_data->thread->key_list,
+					(sys_snode_t *)&key_data->thread_data);
+			}
 
 			/* Deallocate the object's memory */
 			k_free((void *)key_data);
@@ -220,6 +224,7 @@ int pthread_setspecific(pthread_key_t key, const void *value)
 			pthread_self());
 
 		/* Associate thread specific data, initialize new key */
+		key_data->thread = thread;
 		key_data->thread_data.key = key_obj;
 		key_data->thread_data.spec_data = (void *)value;
 
@@ -227,7 +232,7 @@ int pthread_setspecific(pthread_key_t key, const void *value)
 		sys_slist_append((&thread->key_list), (sys_snode_t *)(&key_data->thread_data));
 
 		/* Append new key data to the key object's list */
-		sys_slist_append(&(key_obj->key_data_l), (sys_snode_t *)key_data);
+		sys_dlist_append(&key_obj->key_data_l, &key_data->node);
 
 		LOG_DBG("Paired key %x to value %p for thread %x", key, value, pthread_self());
 	}

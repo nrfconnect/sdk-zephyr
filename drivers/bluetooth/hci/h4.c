@@ -22,6 +22,7 @@
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/hci.h>
 #include <zephyr/drivers/bluetooth.h>
+#include <zephyr/drivers/bluetooth/h4.h>
 
 #define LOG_LEVEL CONFIG_BT_HCI_DRIVER_LOG_LEVEL
 #include <zephyr/logging/log.h>
@@ -49,6 +50,14 @@ struct h4_data {
 
 		struct k_sem    ready;
 
+		/* Boolean: set by the ISR when it found no buffer for the packet and
+		 * stopped receiving. rx_thread owns the RX state until it clears it.
+		 */
+		atomic_t        deferred;
+
+		/* Byte counts: still to be read of the current header or payload,
+		 * and still to be read and dropped.
+		 */
 		uint16_t        remaining;
 		uint16_t        discard;
 
@@ -65,6 +74,11 @@ struct h4_data {
 			uint8_t hdr[4];
 		};
 	} rx;
+
+#if defined(CONFIG_BT_H4_VND_OPEN)
+	/* Commands of the vendor extension, sent while opening */
+	struct bt_hci_lockstep lockstep;
+#endif
 };
 
 struct h4_config {
@@ -79,6 +93,9 @@ struct h4_config {
 	struct gpio_dt_spec reset;
 	uint16_t reset_ms;
 #endif /* DT_ANY_INST_HAS_PROP_STATUS_OKAY(reset_gpios) */
+#if defined(CONFIG_BT_H4_VND_OPEN)
+	struct net_buf_pool *vnd_pool;
+#endif
 };
 
 static inline void h4_get_type(const struct device *dev)
@@ -197,11 +214,6 @@ static inline void get_evt_hdr(const struct device *dev)
 }
 
 
-static inline void copy_hdr(struct h4_data *h4)
-{
-	net_buf_add_mem(h4->rx.buf, h4->rx.hdr, h4->rx.hdr_len);
-}
-
 static void reset_rx(struct h4_data *h4)
 {
 	net_buf_drop(&h4->rx.buf);
@@ -213,6 +225,28 @@ static void reset_rx(struct h4_data *h4)
 	h4->rx.discardable = false;
 }
 
+/* Puts the header into rx.buf, which the caller has just allocated, or
+ * discards the packet, leaving rx.buf NULL, if the header and payload do not
+ * fit in it.
+ */
+static void init_rx_buf(struct h4_data *h4)
+{
+	size_t buf_tailroom = net_buf_tailroom(h4->rx.buf);
+
+	if (buf_tailroom < (h4->rx.remaining + h4->rx.hdr_len)) {
+		LOG_ERR("Not enough space in buffer %u/%zu", h4->rx.remaining + h4->rx.hdr_len,
+			buf_tailroom);
+		h4->rx.discard = h4->rx.remaining;
+		reset_rx(h4);
+		return;
+	}
+
+	(void)net_buf_add_mem(h4->rx.buf, h4->rx.hdr, h4->rx.hdr_len);
+}
+
+/* Called only once the header is in: the pool depends on the packet type and,
+ * for an event, on its code and whether it is discardable.
+ */
 static struct net_buf *get_rx(struct h4_data *h4, k_timeout_t timeout)
 {
 	LOG_DBG("type 0x%02x, evt 0x%02x", h4->rx.type, h4->rx.evt.evt);
@@ -231,6 +265,22 @@ static struct net_buf *get_rx(struct h4_data *h4, k_timeout_t timeout)
 	return NULL;
 }
 
+#if defined(CONFIG_BT_H4_VND_OPEN)
+/* Responses to the vendor extension's own commands, sent while opening */
+static bool vnd_consumed(struct h4_data *h4, struct net_buf *buf)
+{
+	return bt_hci_lockstep_feed(&h4->lockstep, buf->data, buf->len);
+}
+#else
+static bool vnd_consumed(struct h4_data *h4, struct net_buf *buf)
+{
+	ARG_UNUSED(h4);
+	ARG_UNUSED(buf);
+
+	return false;
+}
+#endif
+
 static void rx_thread(void *p1, void *p2, void *p3)
 {
 	const struct device *dev = p1;
@@ -243,36 +293,19 @@ static void rx_thread(void *p1, void *p2, void *p3)
 
 	LOG_DBG("started");
 
+	uart_irq_rx_enable(cfg->uart);
+
 	while (1) {
-		LOG_DBG("rx.buf %p", h4->rx.buf);
-
-		/* We can only do the allocation if we know the initial
-		 * header, since Command Complete/Status events must use the
-		 * original command buffer (if available).
-		 */
-		if (h4->rx.have_hdr && !h4->rx.buf) {
-			h4->rx.buf = get_rx(h4, K_FOREVER);
-			LOG_DBG("Got rx.buf %p", h4->rx.buf);
-			if (h4->rx.remaining > net_buf_tailroom(h4->rx.buf)) {
-				LOG_ERR("Not enough space in buffer");
-				h4->rx.discard = h4->rx.remaining;
-				reset_rx(h4);
-			} else {
-				copy_hdr(h4);
-			}
-		}
-
-		/* Let the ISR continue receiving new packets */
-		uart_irq_rx_enable(cfg->uart);
-
 		k_sem_take(&h4->rx.ready, K_FOREVER);
 
 		buf = k_fifo_get(&h4->rx.fifo, K_NO_WAIT);
 		while (buf != NULL) {
-			uart_irq_rx_enable(cfg->uart);
-
-			LOG_DBG("Calling bt_hci_recv(%p)", buf);
-			bt_hci_recv(dev, buf);
+			if (vnd_consumed(h4, buf)) {
+				net_buf_unref(buf);
+			} else {
+				LOG_DBG("Calling bt_hci_recv(%p)", buf);
+				bt_hci_recv(dev, buf);
+			}
 
 			/* Give other threads a chance to run if the ISR
 			 * is receiving data so fast that rx.fifo never
@@ -280,8 +313,20 @@ static void rx_thread(void *p1, void *p2, void *p3)
 			 */
 			k_yield();
 
-			uart_irq_rx_disable(cfg->uart);
 			buf = k_fifo_get(&h4->rx.fifo, K_NO_WAIT);
+		}
+
+		/* Only once no packet is queued, as the allocation may have to wait
+		 * for the host to free one of them. The ISR queues none while
+		 * deferred, and gave rx.ready for any it queued before.
+		 */
+		if (atomic_get(&h4->rx.deferred) != 0 && k_fifo_is_empty(&h4->rx.fifo)) {
+			h4->rx.buf = get_rx(h4, K_FOREVER);
+			LOG_DBG("Got rx.buf %p", h4->rx.buf);
+			init_rx_buf(h4);
+
+			(void)atomic_clear(&h4->rx.deferred);
+			uart_irq_rx_enable(cfg->uart);
 		}
 	}
 }
@@ -308,8 +353,6 @@ static inline void read_payload(const struct device *dev)
 	int read;
 
 	if (!h4->rx.buf) {
-		size_t buf_tailroom;
-
 		h4->rx.buf = get_rx(h4, K_NO_WAIT);
 		if (!h4->rx.buf) {
 			if (h4->rx.discardable) {
@@ -321,6 +364,7 @@ static inline void read_payload(const struct device *dev)
 
 			LOG_WRN("Failed to allocate, deferring to rx_thread");
 			uart_irq_rx_disable(cfg->uart);
+			(void)atomic_set(&h4->rx.deferred, 1);
 			/*
 			 * At this time, HCI UART RX is turned off, which means that no new
 			 * received data buffer will be put into the RX FIFO. This will cause
@@ -338,16 +382,11 @@ static inline void read_payload(const struct device *dev)
 
 		LOG_DBG("Allocated rx.buf %p", h4->rx.buf);
 
-		buf_tailroom = net_buf_tailroom(h4->rx.buf);
-		if (buf_tailroom < (h4->rx.remaining + h4->rx.hdr_len)) {
-			LOG_ERR("Not enough space in buffer %u/%zu", h4->rx.remaining,
-				buf_tailroom);
-			h4->rx.discard = h4->rx.remaining;
-			reset_rx(h4);
+		init_rx_buf(h4);
+		/* init_rx_buf may drop h4->rx.buf */
+		if (h4->rx.buf == NULL) {
 			return;
 		}
-
-		copy_hdr(h4);
 	}
 
 	read = uart_fifo_read(cfg->uart, net_buf_tail(h4->rx.buf), h4->rx.remaining);
@@ -401,16 +440,6 @@ static inline void read_header(const struct device *dev)
 		CODE_UNREACHABLE;
 		return;
 	}
-
-	if (h4->rx.have_hdr && h4->rx.buf) {
-		if (h4->rx.remaining > net_buf_tailroom(h4->rx.buf)) {
-			LOG_ERR("Not enough space in buffer");
-			h4->rx.discard = h4->rx.remaining;
-			reset_rx(h4);
-		} else {
-			copy_hdr(h4);
-		}
-	}
 }
 
 static inline void process_tx(const struct device *dev)
@@ -451,6 +480,22 @@ static inline void process_rx(const struct device *dev)
 {
 	const struct h4_config *cfg = dev->config;
 	struct h4_data *h4 = dev->data;
+
+	/* rx_thread owns the RX state. A TX interrupt gets here too, as
+	 * uart_irq_rx_ready() need not depend on the RX interrupt being enabled,
+	 * and an RX one if rx_thread enabled RX after the ISR deferred: the
+	 * unread data would keep that interrupt pending.
+	 */
+	if (atomic_get(&h4->rx.deferred) != 0) {
+		uart_irq_rx_disable(cfg->uart);
+
+		/* rx_thread may have handed the RX state back on another CPU */
+		if (atomic_get(&h4->rx.deferred) == 0) {
+			uart_irq_rx_enable(cfg->uart);
+		}
+
+		return;
+	}
 
 	LOG_DBG("remaining %u discard %u have_hdr %u rx.buf %p len %u",
 		h4->rx.remaining, h4->rx.discard, h4->rx.have_hdr, h4->rx.buf,
@@ -502,6 +547,56 @@ static int h4_send(const struct device *dev, struct net_buf *buf)
 	return 0;
 }
 
+#if defined(CONFIG_BT_H4_VND_OPEN)
+static int h4_send_raw(const struct device *dev, const uint8_t *pkt, size_t len)
+{
+	const struct h4_config *cfg = dev->config;
+	struct net_buf *buf;
+
+	/* The pool holds one packet: the previous command has been written to the
+	 * UART, and its buffer returned, before its response lets the next one out.
+	 */
+	buf = net_buf_alloc(cfg->vnd_pool, K_NO_WAIT);
+	if (buf == NULL) {
+		return -ENOBUFS;
+	}
+
+	if (len > net_buf_tailroom(buf)) {
+		/* Longer than CONFIG_BT_BUF_CMD_TX_SIZE allows */
+		net_buf_unref(buf);
+		return -EMSGSIZE;
+	}
+
+	net_buf_add_mem(buf, pkt, len);
+
+	return h4_send(dev, buf);
+}
+#endif /* CONFIG_BT_H4_VND_OPEN */
+
+/* Stops reception and transmission and drops what is queued or half received,
+ * so that the next open() starts from a clean transport.
+ */
+static void h4_stop(const struct device *dev)
+{
+	const struct h4_config *cfg = dev->config;
+	struct h4_data *h4 = dev->data;
+
+	uart_irq_rx_disable(cfg->uart);
+	uart_irq_tx_disable(cfg->uart);
+
+	k_thread_abort(cfg->rx_thread);
+
+	reset_rx(h4);
+	h4->rx.discard = 0U;
+	(void)atomic_clear(&h4->rx.deferred);
+	net_buf_fifo_purge(&h4->rx.fifo);
+	k_sem_reset(&h4->rx.ready);
+
+	net_buf_drop(&h4->tx.buf);
+	h4->tx.type = BT_HCI_H4_NONE;
+	net_buf_fifo_purge(&h4->tx.fifo);
+}
+
 /** Setup the HCI transport, which usually means to reset the Bluetooth IC
   *
   * @param dev The device structure for the bus connecting to the IC
@@ -541,6 +636,13 @@ static int h4_open(const struct device *dev)
 	}
 #endif
 
+#if defined(CONFIG_BT_H4_VND_OPEN)
+	/* Every open() starts a new session with the controller: what it allowed
+	 * or sent before does not count, and any reset of it happened above.
+	 */
+	bt_hci_lockstep_reset(&h4->lockstep);
+#endif
+
 	tid = k_thread_create(cfg->rx_thread, cfg->rx_thread_stack,
 			      cfg->rx_thread_stack_size,
 			      rx_thread, (void *)dev, NULL, NULL,
@@ -550,6 +652,17 @@ static int h4_open(const struct device *dev)
 
 	/* Active rx_thread at first time */
 	k_sem_give(&h4->rx.ready);
+
+#if defined(CONFIG_BT_H4_VND_OPEN)
+	ret = bt_h4_vnd_open(dev, cfg->uart, &h4->lockstep);
+	if (ret < 0) {
+		LOG_ERR("Vendor initialization failed (err %d)", ret);
+		/* A failed open() is not followed by close() */
+		h4_stop(dev);
+		(void)bt_hci_transport_teardown(cfg->uart);
+		return ret;
+	}
+#endif
 
 	return 0;
 }
@@ -574,8 +687,7 @@ static int h4_close(const struct device *dev)
 		return err;
 	}
 
-	/* Abort RX thread */
-	k_thread_abort(cfg->rx_thread);
+	h4_stop(dev);
 
 	return 0;
 }
@@ -598,6 +710,17 @@ static int h4_setup(const struct device *dev, const struct bt_hci_setup_params *
 }
 #endif
 
+static int h4_init(const struct device *dev)
+{
+#if defined(CONFIG_BT_H4_VND_OPEN)
+	struct h4_data *h4 = dev->data;
+
+	bt_hci_lockstep_init(&h4->lockstep, dev, h4_send_raw);
+#endif
+
+	return 0;
+}
+
 static DEVICE_API(bt_hci, h4_driver_api) = {
 	.open = h4_open,
 	.send = h4_send,
@@ -607,9 +730,23 @@ static DEVICE_API(bt_hci, h4_driver_api) = {
 #endif
 };
 
+#if defined(CONFIG_BT_H4_VND_OPEN)
+/* One command packet of the vendor extension, of up to CONFIG_BT_BUF_CMD_TX_SIZE
+ * parameter bytes: an extension with longer commands needs that option raised.
+ */
+#define BT_UART_VND_POOL_DEFINE(inst) \
+	NET_BUF_POOL_FIXED_DEFINE(vnd_pool_##inst, 1, \
+				  BT_HCI_PKT_CMD_SIZE(CONFIG_BT_BUF_CMD_TX_SIZE), 0, NULL)
+#define BT_UART_VND_POOL_INIT(inst) .vnd_pool = &vnd_pool_##inst,
+#else
+#define BT_UART_VND_POOL_DEFINE(inst)
+#define BT_UART_VND_POOL_INIT(inst)
+#endif
+
 #define BT_UART_DEVICE_INIT(inst) \
 	static K_KERNEL_STACK_DEFINE(rx_thread_stack_##inst, CONFIG_BT_DRV_RX_STACK_SIZE); \
 	static struct k_thread rx_thread_##inst; \
+	BT_UART_VND_POOL_DEFINE(inst); \
 	static const struct h4_config h4_config_##inst = { \
 		.common = BT_DT_HCI_DRIVER_CONFIG_INST_GET(inst), \
 		.uart = DEVICE_DT_GET(DT_INST_PARENT(inst)), \
@@ -620,6 +757,7 @@ static DEVICE_API(bt_hci, h4_driver_api) = {
 			(.reset = GPIO_DT_SPEC_INST_GET_OR(inst, reset_gpios, {0}), \
 			.reset_ms = DT_INST_PROP_OR(inst, reset_assert_duration_ms, 0), \
 		), ()) \
+		BT_UART_VND_POOL_INIT(inst) \
 	}; \
 	static struct h4_data h4_data_##inst = { \
 		.rx = { \
@@ -630,7 +768,7 @@ static DEVICE_API(bt_hci, h4_driver_api) = {
 			.fifo = Z_FIFO_INITIALIZER(h4_data_##inst.tx.fifo), \
 		}, \
 	}; \
-	DEVICE_DT_INST_DEFINE(inst, NULL, NULL, &h4_data_##inst, &h4_config_##inst, \
+	DEVICE_DT_INST_DEFINE(inst, h4_init, NULL, &h4_data_##inst, &h4_config_##inst, \
 			      POST_KERNEL, CONFIG_BT_HCI_INIT_PRIORITY, &h4_driver_api)
 
 DT_INST_FOREACH_STATUS_OKAY(BT_UART_DEVICE_INIT)

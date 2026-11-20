@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2024 BayLibre SAS
- * Copyright (c) 2026 Philipp Steiner <philipp.steiner1987@gmail.com>
+ * Copyright (c) 2026 Philipp Steiner
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -110,6 +110,13 @@ void ptp_clock_handle_state_decision_evt(void);
  * @return 1 if the message processing results in State Decision Event.
  */
 int ptp_clock_management_msg_process(struct ptp_port *port, struct ptp_msg *msg);
+
+/**
+ * @brief Function setting the Sync interval used by the clock servo.
+ *
+ * @param[in] log_sync_interval Sync interval of the time transmitter, as log2 of seconds.
+ */
+void ptp_clock_sync_interval_set(int8_t log_sync_interval);
 
 /**
  * @brief Function synchronizing local PTP Hardware Clock to the remote.

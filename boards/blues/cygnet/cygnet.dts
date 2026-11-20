@@ -11,8 +11,8 @@
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 
 / {
-	model = "Blues Cygnet";
 	compatible = "blues,cygnet";
+	model = "Blues Cygnet";
 
 	chosen {
 		zephyr,console = &lpuart1;
@@ -68,6 +68,10 @@
 	status = "okay";
 };
 
+&clk_hsi48 {
+	status = "okay";
+};
+
 &pll {
 	div-m = <1>;
 	mul-n = <20>;
@@ -119,9 +123,9 @@
 	status = "okay";
 
 	pwm2: pwm {
-		status = "okay";
 		pinctrl-0 = <&tim2_ch1_pa0>;
 		pinctrl-names = "default";
+		status = "okay";
 	};
 };
 
@@ -137,6 +141,12 @@
 	status = "okay";
 };
 
+zephyr_udc0: &usb {
+	pinctrl-0 = <&usb_dm_pa11 &usb_dp_pa12>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
 &flash0 {
 	partitions {
 		ranges;
@@ -148,8 +158,8 @@
 		 */
 		storage_partition: partition@3c000 {
 			compatible = "zephyr,mapped-partition";
-			label = "storage";
 			reg = <0x0003c000 DT_SIZE_K(16)>;
+			label = "storage";
 		};
 	};
 };

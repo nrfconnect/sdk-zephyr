@@ -6,13 +6,13 @@
 
 /dts-v1/;
 
-#include <nxp/kinetis/nxp_kw2xd.dtsi>
+#include <nxp/kinetis/kwx/nxp_kw2xd.dtsi>
 #include "usb_kw24d512-pinctrl.dtsi"
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 
 / {
-	model = "NXP USB-KW24D512 board";
 	compatible = "nxp,usb-kw24d512", "nxp,kw24d512", "nxp,kw2xd";
+	model = "NXP USB-KW24D512 board";
 
 	aliases {
 		led0 = &led_0;
@@ -59,6 +59,10 @@
 	er32k-select = <KINETIS_SIM_ER32KSEL_RTC>;
 };
 
+&{/cpus} {
+	timebase-frequency = <DT_FREQ_M(48)>;
+};
+
 &cpu0 {
 	clock-frequency = <DT_FREQ_M(48)>;
 };
@@ -68,16 +72,16 @@
 };
 
 &uart0 {
-	status = "okay";
 	current-speed = <115200>;
 	pinctrl-0 = <&uart0_default>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 zephyr_udc0: &usbd {
 	compatible = "nxp,kinetis-usbd";
-	status = "okay";
 	num-bidir-endpoints = <8>;
+	status = "okay";
 };
 
 &gpioa {
@@ -106,18 +110,20 @@ zephyr_udc0: &usbd {
 
 &flash0 {
 	partitions {
-		compatible = "fixed-partitions";
+		ranges;
 		#address-cells = <1>;
 		#size-cells = <1>;
 
 		slot0_partition: partition@0 {
-			label = "image-0";
+			compatible = "zephyr,mapped-partition";
 			reg = <0x00000000 0x00070000>;
+			label = "image-0";
 		};
 
 		storage_partition: partition@70000 {
-			label = "storage";
+			compatible = "zephyr,mapped-partition";
 			reg = <0x00070000 0x00010000>;
+			label = "storage";
 		};
 	};
 };

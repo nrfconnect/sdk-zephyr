@@ -40,7 +40,4 @@ zephyr_sources_ifdef(
   coresight/cs_trace_defmt.c
 )
 
-zephyr_sources_ifdef(
-  CONFIG_CPU_LOAD
-  cpu_load.c
-  )
+add_subdirectory_ifdef(CONFIG_ASSERT zassert)

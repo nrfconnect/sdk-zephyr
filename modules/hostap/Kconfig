@@ -45,9 +45,14 @@ config WIFI_NM_WPA_SUPPLICANT_GLOBAL_HEAP
 if !WIFI_NM_WPA_SUPPLICANT_GLOBAL_HEAP
 config WIFI_NM_WPA_SUPPLICANT_HEAP
 	int "Dedicated memory pool for wpa_supplicant"
+	def_int 84560 if WIFI_NM_HOSTAPD_CRYPTO_ENTERPRISE && \
+		WIFI_NM_WPA_SUPPLICANT_CRYPTO_ENTERPRISE
+	def_int 72560 if WIFI_NM_HOSTAPD_CRYPTO_ENTERPRISE
+	def_int 78560 if WIFI_NM_HOSTAPD_AP && WIFI_NM_WPA_SUPPLICANT_CRYPTO_ENTERPRISE
 	def_int 66560 if WIFI_NM_HOSTAPD_AP
+	def_int 72000 if WIFI_USAGE_MODE_STA_AP && WIFI_NM_WPA_SUPPLICANT_CRYPTO_ENTERPRISE
 	def_int 60000 if WIFI_USAGE_MODE_STA_AP
-	def_int 55000 if WIFI_NM_WPA_SUPPLICANT_CRYPTO_ENTERPRISE
+	def_int 67000 if WIFI_NM_WPA_SUPPLICANT_CRYPTO_ENTERPRISE
 	def_int 41808 if WIFI_NM_WPA_SUPPLICANT_AP
 	def_int 40000 if WIFI_NM_MAX_MANAGED_INTERFACES=2
 	# 30K is mandatory, but might need more for long duration use cases
@@ -63,6 +68,22 @@ config HEAP_MEM_POOL_ADD_SIZE_HOSTAP
 	def_int 41808 if WIFI_NM_WPA_SUPPLICANT_AP
 	# 30K is mandatory, but might need more for long duration use cases
 	def_int 30000
+
+config HEAP_MEM_POOL_ADD_SIZE_HOSTAP_STA_ENTERPRISE_CREDS
+	int "Heap size for the station enterprise credential copies"
+	default 12000 if WIFI_NM_WPA_SUPPLICANT_CRYPTO_ENTERPRISE
+	default 0
+	help
+	  Heap reserved for the copies of the enterprise certificates and keys
+	  that the station glue keeps until the credentials are replaced.
+
+config HEAP_MEM_POOL_ADD_SIZE_HOSTAP_AP_ENTERPRISE_CREDS
+	int "Heap size for the access point enterprise credential copies"
+	default 6000 if WIFI_NM_HOSTAPD_CRYPTO_ENTERPRISE
+	default 0
+	help
+	  Heap reserved for the copies of the enterprise certificates and keys
+	  that the access point glue keeps until the credentials are replaced.
 endif # WIFI_NM_WPA_SUPPLICANT_GLOBAL_HEAP
 
 
@@ -72,9 +93,7 @@ config WIFI_NM_WPA_SUPPLICANT_THREAD_STACK_SIZE
 	# overflow issues. Need to identify the cause for higher stack usage.
 	default 8600 if WIFI_NM_WPA_SUPPLICANT_CRYPTO_ENTERPRISE || WIFI_USAGE_MODE_STA_AP
 	default 8000 if WIFI_NM_WPA_SUPPLICANT_P2P
-	# This is needed to handle stack overflow issues on nRF Wi-Fi drivers.
-	default 6300 if WIFI_NM_WPA_SUPPLICANT_AP
-	default 5800
+	default 6300
 
 config WIFI_NM_WPA_SUPPLICANT_WQ_STACK_SIZE
 	int "Stack size for wpa_supplicant iface workqueue"
@@ -127,6 +146,19 @@ config WIFI_NM_WPA_SUPPLICANT_DEBUG_SHOW_KEYS
 	  development or debugging. Key material should never be logged in production
 	  systems as it can compromise network security.
 
+config WIFI_NM_WPA_SUPPLICANT_PRINT_PMK
+	bool "Print PMK once per successful handshake [EXPERIMENTAL]"
+	select EXPERIMENTAL
+	help
+	  Prints the PMK (as a hex string) once per completed 4-way handshake,
+	  independent of WIFI_NM_WPA_SUPPLICANT_DEBUG_LEVEL and
+	  WIFI_NM_WPA_SUPPLICANT_DEBUG_SHOW_KEYS. Intended for capturing the PMK
+	  needed to decrypt an over-the-air Wi-Fi capture, without the log
+	  volume that comes with enabling full supplicant debug output.
+
+	  WARNING: This is a security risk and should only be enabled during
+	  development or debugging.
+
 if WIFI_NM_WPA_SUPPLICANT_LOG_LEVEL_DBG
 # hostap debug is very verbose and despite large log buffer sizes
 # log messages can be lost. So, we set the log mode to immediate
@@ -169,8 +201,6 @@ config WIFI_NM_WPA_SUPPLICANT_LEGACY_CRYPTO
 	bool "Legacy (non-FIPS) crypto for backward compatibility"
 	default y
 	depends on !WIFI_NM_WPA_SUPPLICANT_CRYPTO_NONE
-	imply WIFI_NM_WPA_SUPPLICANT_WEP
-	select DEPRECATED
 	select NOT_SECURE
 	help
 	  Drop CONFIG_FIPS from the supplicant build to re-enable the legacy
@@ -182,9 +212,9 @@ config WIFI_NM_WPA_SUPPLICANT_LEGACY_CRYPTO
 	  is off, CMake links md5-internal.c and md5.c so EAPOL-Key v1
 	  HMAC-MD5 does not depend on PSA.
 
-	  Implies WIFI_NM_WPA_SUPPLICANT_WEP by default (merged legacy option,
-	  kept for prj.conf compatibility). Set CONFIG_WIFI_NM_WPA_SUPPLICANT_WEP=n
-	  to strip WEP while keeping WPA/TKIP interop.
+	  WEP is not part of this option. It is deprecated and has to be
+	  enabled separately with CONFIG_WIFI_NM_WPA_SUPPLICANT_WEP, which
+	  only takes effect together with this option.
 
 	  Enabled by default so WPA/TKIP and other legacy AP interop works
 	  out of the box. This is NOT a TKIP-only switch: it disables CONFIG_FIPS
@@ -205,17 +235,15 @@ config WIFI_NM_WPA_SUPPLICANT_LEGACY_CRYPTO
 	  unless LEGACY_CRYPTO is set explicitly.
 
 config WIFI_NM_WPA_SUPPLICANT_WEP
-	bool "WEP support (deprecated)"
+	bool "WEP support [DEPRECATED]"
 	depends on !WIFI_NM_WPA_SUPPLICANT_CRYPTO_NONE
 	select DEPRECATED
 	select NOT_SECURE
 	help
-	  Deprecated: merged under WIFI_NM_WPA_SUPPLICANT_LEGACY_CRYPTO.
-	  Symbol retained for backward compatibility with existing prj.conf
-	  files that set CONFIG_WIFI_NM_WPA_SUPPLICANT_WEP. WEP is enabled by
-	  default via LEGACY_CRYPTO imply; set CONFIG_WIFI_NM_WPA_SUPPLICANT_WEP=n
-	  to strip WEP while keeping WPA/TKIP interop. Has no effect unless
-	  LEGACY_CRYPTO is enabled.
+	  Deprecated: WEP is legacy broken crypto and will be removed.
+	  Enable this together with WIFI_NM_WPA_SUPPLICANT_LEGACY_CRYPTO to
+	  keep WEP support while it lasts. Has no effect unless LEGACY_CRYPTO
+	  is enabled.
 
 choice WIFI_NM_WPA_SUPPLICANT_CRYPTO_BACKEND
 	prompt "WPA supplicant crypto implementation"
@@ -445,6 +473,15 @@ config WIFI_NM_WPA_SUPPLICANT_P2P_PROV_DISC_REQ_RETRIES
 	  Maximum number of retries for P2P provision discovery requests
 	  when the peer is not listening.
 
+config WIFI_NM_WPA_SUPPLICANT_P2P_DEVICE_NAME
+	string "Default Wi-Fi P2P device name"
+	default "ZephyrP2PDevice"
+	help
+	  Device name advertised in the P2P Device Info attribute and in WPS
+	  attributes. Applied at supplicant initialization and can be changed
+	  at runtime. Maximum 32 characters (WPS_DEV_NAME_MAX_LEN). If empty,
+	  the wpa_supplicant default device name is kept at initialization.
+
 endif # WIFI_NM_WPA_SUPPLICANT_P2P
 
 config WIFI_NM_WPA_SUPPLICANT_EAPOL
@@ -454,13 +491,8 @@ config WIFI_NM_WPA_SUPPLICANT_EAPOL
 config WIFI_NM_WPA_SUPPLICANT_CLI
 	bool "CLI support for wpa_supplicant"
 
-config WIFI_NM_WPA_SUPPLICANT_INF_MON
-	bool "Monitor the net mgmt event to add/del interface"
-	default y
-
 config WIFI_NM_HOSTAPD_AP
 	bool "FullAP mode support based on Hostapd"
-	depends on !WIFI_NM_WPA_SUPPLICANT_INF_MON
 
 config WIFI_NM_HOSTAPD_CRYPTO_ENTERPRISE
 	bool "Hostapd crypto enterprise support"
@@ -531,6 +563,19 @@ config WIFI_NM_WPA_SUPPLICANT_NAN
 	bool "NAN (Neighbor Awareness Networking) support"
 	depends on !WIFI_NM_WPA_SUPPLICANT_CRYPTO_NONE
 
+config WIFI_NAN_MAX_SSI_LEN
+	int "Maximum length of NAN service specific info"
+	depends on WIFI_NM_WPA_SUPPLICANT_NAN
+	range 1 65535
+	default 128
+	help
+	  Maximum NAN Service Specific Info (SSI) payload length in bytes.
+	  This value is stored inline in NAN event and request structures,
+	  so increasing it raises the net_mgmt event queue footprint by
+	  roughly CONFIG_NET_MGMT_EVENT_QUEUE_SIZE times this value.
+	  Users needing larger SSI payloads (e.g. Matter PAF commissioning
+	  with MTU=350) should set this to the required size.
+
 config WIFI_NM_WPA_SUPPLICANT_11AC
 	bool "IEEE 802.11ac VHT support"
 	depends on WIFI_NM_WPA_SUPPLICANT_AP || WIFI_NM_HOSTAPD_AP
@@ -562,6 +607,8 @@ config WIFI_NM_WPA_SUPPLICANT_ROAMING
 	  STA will try to find an AP with better RSSI. If found, STA will reassociate
 	  to the new AP automatically without losing connection.
 
+	  This option is mutually exclusive with WIFI_NM_WPA_SUPPLICANT_BGSCAN.
+
 config WIFI_NM_WPA_SUPPLICANT_ROAMING_RETRY
 	int "Retry count on every roaming method"
 	depends on WIFI_NM_WPA_SUPPLICANT_ROAMING
@@ -585,6 +632,12 @@ config WIFI_NM_WPA_SUPPLICANT_BGSCAN
 	bool "Background scanning (for legacy roaming), recommended if 802.11r is not supported"
 	depends on WIFI_NM_WPA_SUPPLICANT_WNM
 	depends on !WIFI_NM_WPA_SUPPLICANT_ROAMING
+	help
+	  Enable periodic background scans so wpa_supplicant can move to a
+	  better AP (legacy roaming). Recommended when 802.11r is not supported.
+
+	  This option is mutually exclusive with WIFI_NM_WPA_SUPPLICANT_ROAMING.
+	  Disable ROAMING to make this option selectable.
 
 if WIFI_NM_WPA_SUPPLICANT_BGSCAN
 

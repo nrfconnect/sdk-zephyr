@@ -5,9 +5,9 @@
  */
 
 &qtmr1_timer0 {
-	status = "okay";
 	primary-source = "kQTMR_ClockDivide_128";
 	mode = "kQTMR_PriSrcRiseEdge";
+	status = "okay";
 };
 
 &lpit1 {
@@ -68,8 +68,4 @@
 
 &lpit3_channel3 {
 	status = "okay";
-};
-
-&gpt2 {
-	run-mode = "free-run";
 };

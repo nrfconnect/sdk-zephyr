@@ -9,6 +9,8 @@ LOG_MODULE_REGISTER(net_dsa_core, CONFIG_NET_DSA_LOG_LEVEL);
 #include <zephyr/net/ethernet.h>
 #include <zephyr/net/dsa_core.h>
 #include <zephyr/net/dsa_tag.h>
+#include <zephyr/net/net_log.h>
+#include <zephyr/net/promiscuous.h>
 
 struct net_if *dsa_recv(struct net_if *iface, struct net_pkt *pkt)
 {
@@ -33,8 +35,7 @@ int dsa_xmit(const struct device *dev, struct net_pkt *pkt)
 
 #ifdef CONFIG_NET_L2_PTP_TIMESTAMPING
 	/* Handle TX timestamp if defines */
-	if (net_ntohs(NET_ETH_HDR(pkt)->type) == NET_ETH_PTYPE_PTP &&
-	    dsa_switch_ctx->dapi->port_txtstamp != NULL) {
+	if (net_pkt_is_tx_timestamping(pkt) && dsa_switch_ctx->dapi->port_txtstamp != NULL) {
 		ret = dsa_switch_ctx->dapi->port_txtstamp(dev, pkt);
 		if (ret != 0) {
 			return ret;
@@ -67,12 +68,21 @@ int dsa_xmit(const struct device *dev, struct net_pkt *pkt)
 
 int dsa_eth_init(struct net_if *iface)
 {
+	int ret = 0;
 	struct ethernet_context *eth_ctx = net_if_l2_data(iface);
 
-	if (eth_ctx->dsa_port == DSA_CONDUIT_PORT) {
-		net_if_flag_clear(iface, NET_IF_IPV4);
-		net_if_flag_clear(iface, NET_IF_IPV6);
+	if (eth_ctx->dsa_port != DSA_CONDUIT_PORT) {
+		return 0;
 	}
 
-	return 0;
+	net_if_flag_clear(iface, NET_IF_IPV4);
+	net_if_flag_clear(iface, NET_IF_IPV6);
+
+	if (IS_ENABLED(CONFIG_DSA_CONDUIT_PROMISC_ON)) {
+		NET_DBG("Enabling promiscuous mode on iface %d (%p)", net_if_get_by_iface(iface),
+			(void *)iface);
+		ret = net_promisc_mode_on(iface);
+	}
+
+	return ret;
 }

@@ -24,6 +24,30 @@ Q&A:
 
 Answer: Yes. [#mtu_exchange]_ The Bluetooth specification mandates a symmetric MTU for ATT.
 
+  Question: I raised the MTU, but the data is still sent to the controller in
+  27-octet chunks. Is the MTU update not working?
+
+| Answer: It is working. The MTU and the size of the HCI ACL data packets are
+  configured separately.
+| :kconfig:option:`CONFIG_BT_L2CAP_TX_MTU` sets the largest SDU the L2CAP layer
+  accepts from ATT, which is what the MTU exchange communicates to the peer.
+| :kconfig:option:`CONFIG_BT_BUF_ACL_TX_SIZE` sets the largest ACL data packet
+  the host hands to the controller, and defaults to the 27 octets that every
+  controller is required to support. An SDU larger than that is fragmented over
+  several HCI ACL packets, and the receiving side recombines them into the
+  original L2CAP PDU. The peer still receives one notification of the full
+  size.
+| Set :kconfig:option:`CONFIG_BT_BUF_ACL_TX_SIZE` to at least the MTU plus the
+  L2CAP header size (4 octets) if you want each SDU to reach the controller in
+  a single HCI ACL packet, and make sure the controller reports at least that
+  much in its ACL data packet length.
+
+This sample deliberately leaves :kconfig:option:`CONFIG_BT_BUF_ACL_TX_SIZE` at
+its default, so that it demonstrates a large L2CAP MTU while using the default
+data packet size, keeps working with controllers that only support 27-octet
+data packets, and shows that the RX buffer size requirement follows the L2CAP
+MTU rather than the ACL packet size.
+
 Overview:
 *********
 
@@ -107,8 +131,8 @@ Central:
   *** Booting Zephyr OS build zephyr-v3.2.0-2251-g95d8943c69ce ***
   Bluetooth initialized
   Scanning successfully started
-  Device found: EB:BF:36:26:42:09 (random) (RSSI -34)
-  Connected: EB:BF:36:26:42:09 (random)
+  Device found: R:EB:BF:36:26:42:09 (RSSI -34)
+  Connected: R:EB:BF:36:26:42:09
   mtu_exchange: Current MTU = 23
   mtu_exchange: Exchange MTU...
   mtu_exchange_cb: MTU exchange successful (247)

@@ -576,8 +576,7 @@ static inline void lsm6dso_hum_convert(struct sensor_value *val,
 	rh /= (ht->x1 - ht->x0);
 
 	/* convert humidity to integer and fractional part */
-	val->val1 = rh;
-	val->val2 = rh * 1000000;
+	sensor_value_from_float(val, rh);
 }
 
 static inline void lsm6dso_press_convert(struct sensor_value *val,
@@ -916,13 +915,14 @@ static int lsm6dso_init(const struct device *dev)
 #define LSM6DSO_CFG_IRQ(inst)						\
 	.trig_enabled = true,						\
 	.gpio_drdy = GPIO_DT_SPEC_INST_GET(inst, irq_gpios),		\
-	.int_pin = DT_INST_PROP(inst, int_pin)
+	.int_pin = DT_INST_PROP(inst, int_pin),				\
+	.int_open_drain = DT_INST_PROP(inst, int_open_drain)
 #else
 #define LSM6DSO_CFG_IRQ(inst)
 #endif /* CONFIG_LSM6DSO_TRIGGER */
 
 #define LSM6DSO_SPI_OP  (SPI_WORD_SET(8) |				\
-			 SPI_OP_MODE_MASTER |				\
+			 SPI_OP_MODE_CONTROLLER |			\
 			 SPI_MODE_CPOL |				\
 			 SPI_MODE_CPHA)					\
 

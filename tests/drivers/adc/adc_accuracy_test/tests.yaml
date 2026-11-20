@@ -40,6 +40,9 @@ tests:
       - ek_ra2a1
       - ek_ra2l1
       - sam_e54_xpro
+      - pic32cx_sg41_cult
+      - pic32cx_sg61_cult
+      - pic32cm_jh01_cpro
   drivers.adc.accuracy.ref_volt:
     extra_configs:
       - CONFIG_REFERENCE_VOLTAGE_TEST=y
@@ -57,6 +60,11 @@ tests:
       - nrf54l15dk/nrf54l15/cpuapp
       - nrf54lm20dk/nrf54lm20a/cpuapp
       - nrf54lm20dk/nrf54lm20b/cpuapp
+      - nrf54lv10dk/nrf54lv10a/cpuapp
+      - nrf54lv10dk/nrf54lv10a/cpuapp/ns
+      - nrf7120dk/nrf7120/cpuapp
+      - nrf7120dk/nrf7120e/cpuapp
+      - nrf7120dk/nrf7120/cpuapp/ns
       - ophelia4ev/nrf54l15/cpuapp
       - sltb010a
       - xg23_rb4210a
@@ -66,13 +74,24 @@ tests:
       - xg29_rb4412a
       - bg29_rb4420a
       - slwrb4180a
+      - kg100s_rb4332a
+      - sixg301_rb4407a
       - ek_ra4c1
       - pic32cx_sg41_cult
       - sam_e54_xpro
       - pic32cm_jh01_cpro
+      - ek_ra8d2/r7ka8d2kflcac/cm85
+      - ek_ra8m2/r7ka8m2jflcac/cm85
+      - ek_ra8p1/r7ka8p1kflcac/cm85
+      - ek_ra8t2/r7ka8t2lflcac/cm85
+      - pic32cz_ca80_cult
+      - pic32cz_ca90_cult
     extra_args:
       - platform:sam_e54_xpro/atsame54p20a:"DTC_OVERLAY_FILE=boards/sam_e54_xpro_ref.overlay"
       - platform:pic32cx_sg41_cult/pic32cx1025sg41128:"DTC_OVERLAY_FILE=boards/pic32cx_sg41_cult_ref.overlay"
+      - platform:pic32cz_ca80_cult/pic32cz8110ca80208:"DTC_OVERLAY_FILE=boards/pic32cz_ca80_cult_ref.overlay"
+      - platform:pic32cz_ca90_cult/pic32cz8110ca90208:"DTC_OVERLAY_FILE=boards/pic32cz_ca90_cult_ref.overlay"
+      - platform:pic32cm_jh01_cpro/pic32cm5164jh01100:"DTC_OVERLAY_FILE=boards/pic32cm_jh01_cpro_ref.overlay"
     integration_platforms:
       - frdm_kl25z
       - nrf54l15dk/nrf54l15/cpuapp

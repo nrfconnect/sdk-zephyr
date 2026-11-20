@@ -9,16 +9,14 @@
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
 
-#include <zephyr/drivers/video.h>
-#include <zephyr/drivers/video-controls.h>
-#include <zephyr/drivers/i2c.h>
 #include <zephyr/drivers/gpio.h>
+#include <zephyr/drivers/i2c.h>
+#include <zephyr/drivers/video.h>
 #include <zephyr/dt-bindings/video/video-interfaces.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/video/video.h>
 
 #include "video_common.h"
-#include "video_ctrls.h"
-#include "video_device.h"
 
 LOG_MODULE_REGISTER(video_gc2145, CONFIG_VIDEO_LOG_LEVEL);
 
@@ -1266,7 +1264,7 @@ static int gc2145_set_selection(const struct device *dev, struct video_selection
 	}
 
 	if (sel->target != VIDEO_SEL_TGT_CROP) {
-		return -EINVAL;
+		return -ENOSYS;
 	}
 
 	return gc2145_set_crop(dev, sel);

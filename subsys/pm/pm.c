@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2018 Intel Corporation.
+ * Copyright 2026 NXP
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -70,27 +71,42 @@ static inline void pm_state_notify(bool entering_state)
 	k_spin_unlock(&pm_notifier_lock, pm_notifier_key);
 }
 
-static inline int32_t ticks_expiring_sooner(int32_t ticks1, int32_t ticks2)
+static inline int32_t ticks_expiring_sooner(int64_t ticks1, int64_t ticks2)
 {
+	int64_t ticks;
+
 	/*
 	 * Ticks are relative numbers that defines the number of ticks
 	 * until the next event.
-	 * Its maximum value is K_TICKS_FOREVER ((uint32_t)-1) which is -1
-	 * when we cast it to (int32_t)
+	 * "Nothing pending" is reported as a negative value: the kernel
+	 * timeout is K_TICKS_FOREVER, which is -1 once it is held in a signed
+	 * tick variable, and the policy getters return -1. Test the sign
+	 * instead of comparing against K_TICKS_FOREVER, whose underlying
+	 * k_ticks_t is unsigned when CONFIG_TIMEOUT_64BIT=n and would then not
+	 * compare equal to -1 at this width.
 	 * We need to find out which one is the closest
 	 */
 
 	__ASSERT(ticks1 >= -1, "ticks1 has unexpected negative value");
 	__ASSERT(ticks2 >= -1, "ticks2 has unexpected negative value");
 
-	if (ticks1 == K_TICKS_FOREVER) {
-		return ticks2;
+	if (ticks1 < 0) {
+		ticks = ticks2;
+	} else if (ticks2 < 0) {
+		ticks = ticks1;
+	} else {
+		/* At this step ticks1 and ticks2 are positive */
+		ticks = MIN(ticks1, ticks2);
 	}
-	if (ticks2 == K_TICKS_FOREVER) {
-		return ticks1;
-	}
-	/* At this step ticks1 and ticks2 are positive */
-	return MIN(ticks1, ticks2);
+
+	/*
+	 * pm_policy_next_state() takes the result as int32_t ticks, where a
+	 * negative value means "nothing pending". Clamp to that range rather
+	 * than truncate: a far future event must not wrap negative, or it would
+	 * be read as "no wakeup pending" and select the deepest state while a
+	 * real wakeup is still due.
+	 */
+	return (int32_t)CLAMP(ticks, -1, (int64_t)SYS_CLOCK_MAX_WAIT);
 }
 
 void pm_system_resume(void)
@@ -103,6 +119,13 @@ void pm_system_resume(void)
 	 * complete before the idle thread restores its saved interrupt key.
 	 */
 	if (atomic_test_and_clear_bit(z_post_ops_required, id)) {
+		if (IS_ENABLED(CONFIG_PM_EARLY_SYSTEM_TIMER_RESUME)) {
+			pm_state_exit_post_ops(z_cpus_pm_state[id]->state,
+					       z_cpus_pm_state[id]->substate_id);
+#ifdef CONFIG_SYS_CLOCK_EXISTS
+			sys_clock_idle_exit();
+#endif /* CONFIG_SYS_CLOCK_EXISTS */
+		}
 #ifdef CONFIG_PM_DEVICE_SYSTEM_MANAGED
 		if (atomic_add(&_cpus_active, 1) == 0) {
 			if ((z_cpus_pm_state[id]->state != PM_STATE_RUNTIME_IDLE) &&
@@ -111,11 +134,15 @@ void pm_system_resume(void)
 			}
 		}
 #endif
-		pm_state_exit_post_ops(z_cpus_pm_state[id]->state,
-				       z_cpus_pm_state[id]->substate_id);
+		if (!IS_ENABLED(CONFIG_PM_EARLY_SYSTEM_TIMER_RESUME)) {
+			pm_state_exit_post_ops(z_cpus_pm_state[id]->state,
+					       z_cpus_pm_state[id]->substate_id);
+		}
 		pm_state_notify(false);
 #ifdef CONFIG_SYS_CLOCK_EXISTS
-		sys_clock_idle_exit();
+		if (!IS_ENABLED(CONFIG_PM_EARLY_SYSTEM_TIMER_RESUME)) {
+			sys_clock_idle_exit();
+		}
 #endif /* CONFIG_SYS_CLOCK_EXISTS */
 		z_cpus_pm_state[id] = NULL;
 		_kernel.idle = 0;
@@ -146,13 +173,15 @@ bool pm_system_suspend(int32_t kernel_ticks)
 {
 	uint8_t id = CPU_ID;
 	k_spinlock_key_t key;
-	int32_t ticks, events_ticks;
+	int32_t ticks;
+	int64_t events_ticks;
 	uint32_t exit_latency_ticks;
 
 	SYS_PORT_TRACING_FUNC_ENTER(pm, system_suspend, kernel_ticks);
 
 	if (!pm_policy_state_any_active() && (z_cpus_pm_forced_state[id] == NULL)) {
 		/* Return early if all states are unavailable. */
+		SYS_PORT_TRACING_FUNC_EXIT(pm, system_suspend, kernel_ticks, PM_STATE_ACTIVE);
 		return false;
 	}
 
@@ -164,7 +193,7 @@ bool pm_system_suspend(int32_t kernel_ticks)
 	ticks = ticks_expiring_sooner(kernel_ticks, events_ticks);
 
 #ifdef CONFIG_PM_CUSTOM_TICKS_HOOK
-	int32_t custom_ticks = pm_policy_next_custom_ticks();
+	int64_t custom_ticks = pm_policy_next_custom_ticks();
 
 	ticks = ticks_expiring_sooner(custom_ticks, ticks);
 #endif /* CONFIG_PM_CUSTOM_TICKS_HOOK */
@@ -201,20 +230,20 @@ bool pm_system_suspend(int32_t kernel_ticks)
 #endif
 
 	exit_latency_ticks = EXIT_LATENCY_US_TO_TICKS(z_cpus_pm_state[id]->exit_latency_us);
-	if ((exit_latency_ticks > 0) && (ticks != K_TICKS_FOREVER)) {
-		/*
-		 * We need to set the timer to interrupt a little bit early to
-		 * accommodate the time required by the CPU to fully wake up.
-		 *
-		 * Since K_TICKS_FOREVER is defined as -1, ensure that -1
-		 * is not passed as the next timeout.
-		 *
-		 */
-		k_spinlock_key_t key = sys_clock_lock();
 
-		sys_clock_set_timeout(MAX(0, (int64_t)ticks - (int64_t)exit_latency_ticks), true);
-		sys_clock_unlock(key);
-	}
+	/*
+	 * Nothing to wake up for is handed over as SYS_CLOCK_IDLE_FOREVER, so a
+	 * driver able to stop its clock outright can do so; recovery is
+	 * sys_clock_idle_exit(). A real deadline is brought forward to
+	 * accommodate the time the CPU needs to fully wake up.
+	 */
+	uint32_t idle_ticks = (ticks == K_TICKS_FOREVER)
+		? SYS_CLOCK_IDLE_FOREVER
+		: (uint32_t)MAX(0, (int64_t)ticks - (int64_t)exit_latency_ticks);
+
+	key = sys_clock_lock();
+	sys_clock_idle_enter(idle_ticks);
+	sys_clock_unlock(key);
 
 	/*
 	 * This function runs with interrupts locked. If a power state is
@@ -237,7 +266,10 @@ bool pm_system_suspend(int32_t kernel_ticks)
 	if (!IS_ENABLED(CONFIG_PM_STATE_SET_IRQ_UNLOCKED)) {
 		_kernel.idle = 0;
 	}
-	pm_state_set(z_cpus_pm_state[id]->state, z_cpus_pm_state[id]->substate_id);
+	/* pm_system_resume() clears z_cpus_pm_state[id] before the exit trace. */
+	enum pm_state state = z_cpus_pm_state[id]->state;
+
+	pm_state_set(state, z_cpus_pm_state[id]->substate_id);
 
 	/* Wake up sequence starts here */
 
@@ -249,9 +281,7 @@ bool pm_system_suspend(int32_t kernel_ticks)
 
 	pm_system_resume();
 	k_sched_unlock();
-	SYS_PORT_TRACING_FUNC_EXIT(pm, system_suspend, ticks,
-				   z_cpus_pm_state[id] ?
-				   z_cpus_pm_state[id]->state : PM_STATE_ACTIVE);
+	SYS_PORT_TRACING_FUNC_EXIT(pm, system_suspend, ticks, state);
 
 	return true;
 }

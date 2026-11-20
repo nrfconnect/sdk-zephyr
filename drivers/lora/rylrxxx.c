@@ -183,6 +183,7 @@ static void on_rx(struct modem_chat *chat, char **argv, uint16_t argc, void *use
 }
 
 static void on_script_finished(struct modem_chat *chat, enum modem_chat_script_result result,
+			       const struct modem_chat_script_completion_info *info,
 			       void *user_data)
 {
 	struct rylr_data *driver_data = user_data;
@@ -332,6 +333,12 @@ static int rylr_config(const struct device *dev, const struct lora_modem_config 
 	if (err != 0) {
 		LOG_ERR("error taking operation semaphore: %d", err);
 		return err;
+	}
+
+	if (config->explicit_header_disable) {
+		LOG_ERR("Implicit mode not supported");
+		err = -ENOTSUP;
+		goto exit;
 	}
 
 	if (RYLR_IS_ASYNC_OP_PENDING(data->pending_async_flags)) {

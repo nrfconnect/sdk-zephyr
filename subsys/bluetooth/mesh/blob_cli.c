@@ -101,9 +101,16 @@ static struct bt_mesh_blob_target *target_get(struct bt_mesh_blob_cli *cli,
 {
 	struct bt_mesh_blob_target *target;
 
+	if (cli->inputs == NULL) {
+		return NULL;
+	}
+
 	TARGETS_FOR_EACH(cli, target) {
 		if (target->addr == addr) {
-			return target;
+			/* A skipped target can still receive and answer a group-addressed
+			 * message. It is not part of the current step, so ignore its response.
+			 */
+			return target->skip ? NULL : target;
 		}
 	}
 
@@ -123,19 +130,19 @@ static void target_drop(struct bt_mesh_blob_cli *cli,
 	}
 }
 
-static uint32_t targets_reset(struct bt_mesh_blob_cli *cli)
+static bool targets_reset(struct bt_mesh_blob_cli *cli)
 {
 	struct bt_mesh_blob_target *target;
-	uint32_t count = 0;
+	bool active = false;
 
 	TARGETS_FOR_EACH(cli, target) {
 		if (target->status == BT_MESH_BLOB_SUCCESS) {
 			target->acked = 0U;
-			count++;
+			active = true;
 		}
 	}
 
-	return count;
+	return active;
 }
 
 static bool targets_active(struct bt_mesh_blob_cli *cli)
@@ -514,6 +521,8 @@ static void retry_timeout(struct k_work *work)
 void blob_cli_broadcast(struct bt_mesh_blob_cli *cli,
 			const struct blob_cli_broadcast_ctx *ctx)
 {
+	struct bt_mesh_blob_target *target;
+
 	if (cli->tx.ctx.is_inited || cli->tx.sending) {
 		LOG_ERR("BLOB cli busy");
 		return;
@@ -524,7 +533,15 @@ void blob_cli_broadcast(struct bt_mesh_blob_cli *cli,
 	cli->tx.ctx = *ctx;
 	cli->tx.ctx.is_inited = 1U;
 
-	cli->tx.pending = targets_reset(cli);
+	(void)targets_reset(cli);
+
+	cli->tx.pending = 0U;
+	TARGETS_FOR_EACH(cli, target) {
+		/* Skipped targets are not sent to and must not hold the broadcast open. */
+		if (target->status == BT_MESH_BLOB_SUCCESS && !target->skip) {
+			cli->tx.pending++;
+		}
+	}
 
 	LOG_DBG("%u targets", cli->tx.pending);
 
@@ -546,7 +563,8 @@ void blob_cli_broadcast_tx_complete(struct bt_mesh_blob_cli *cli)
 void blob_cli_broadcast_rsp(struct bt_mesh_blob_cli *cli,
 			    struct bt_mesh_blob_target *target)
 {
-	if (target->acked) {
+	/* Skipped targets are not counted in tx.pending. */
+	if (target->acked || target->skip) {
 		return;
 	}
 
@@ -1297,6 +1315,16 @@ static int handle_block_report(const struct bt_mesh_model *mod, struct bt_mesh_m
 	};
 	struct bt_mesh_blob_target *target;
 
+	if (cli->state != BT_MESH_BLOB_CLI_STATE_BLOCK_START &&
+	    cli->state != BT_MESH_BLOB_CLI_STATE_BLOCK_SEND &&
+	    cli->state != BT_MESH_BLOB_CLI_STATE_BLOCK_CHECK) {
+		/* In Pull mode, reports can arrive after the block has ended, for example
+		 * through a Friend queue.
+		 */
+		LOG_DBG("Wrong state: %d", cli->state);
+		return -EBUSY;
+	}
+
 	if (!cli->xfer) {
 		return -EINVAL;
 	}
@@ -1317,8 +1345,9 @@ static int handle_block_report(const struct bt_mesh_model *mod, struct bt_mesh_m
 		int idx;
 
 		idx = chunk_idx_decode(buf);
-		if (idx < 0) {
-			return idx;
+		if (idx < 0 || idx >= cli->block.chunk_count) {
+			LOG_ERR("Invalid encoding");
+			return -EINVAL;
 		}
 
 		blob_chunk_missing_set(status.block.missing, idx, true);
@@ -1350,6 +1379,13 @@ static int handle_block_status(const struct bt_mesh_model *mod, struct bt_mesh_m
 	size_t len;
 	int idx;
 
+	if (cli->state != BT_MESH_BLOB_CLI_STATE_BLOCK_START &&
+	    cli->state != BT_MESH_BLOB_CLI_STATE_BLOCK_SEND &&
+	    cli->state != BT_MESH_BLOB_CLI_STATE_BLOCK_CHECK) {
+		LOG_WRN("Wrong state: %d", cli->state);
+		return -EBUSY;
+	}
+
 	target = target_get(cli, ctx->addr);
 	if (!target) {
 		return -ENOENT;
@@ -1360,8 +1396,16 @@ static int handle_block_status(const struct bt_mesh_model *mod, struct bt_mesh_m
 	status.missing = status_and_format >> 6;
 	status.block.number = net_buf_simple_pull_le16(buf);
 	chunk_size = net_buf_simple_pull_le16(buf);
-	status.block.chunk_count =
-		DIV_ROUND_UP(cli->block.size, chunk_size);
+	/* Chunk Size 0 is Prohibited (MshMBTv1.0 3.1.2.3) */
+	if (chunk_size == 0U) {
+		LOG_WRN("Invalid chunk size");
+		return -EINVAL;
+	}
+
+	/* The client owns the Chunk Size state (MshMBTv1.0 6.2.4), so the received value must not
+	 * be used to size the missing chunks bitfield.
+	 */
+	status.block.chunk_count = cli->block.chunk_count;
 
 	LOG_DBG("status: %u block: %u encoding: %u", status.status,
 		status.block.number, status.missing);
@@ -1526,6 +1570,8 @@ int bt_mesh_blob_cli_send(struct bt_mesh_blob_cli *cli,
 			  const struct bt_mesh_blob_xfer *xfer,
 			  const struct bt_mesh_blob_io *io)
 {
+	size_t block_size;
+
 	if (bt_mesh_blob_cli_is_busy(cli)) {
 		LOG_ERR("BLOB Client is busy");
 		return -EBUSY;
@@ -1535,6 +1581,20 @@ int bt_mesh_blob_cli_send(struct bt_mesh_blob_cli *cli,
 	    xfer->block_size_log > 0x20 || xfer->chunk_size < 8 ||
 	    xfer->chunk_size > BLOB_TX_CHUNK_SIZE) {
 		LOG_ERR("Incompatible transfer parameters");
+		return -EINVAL;
+	}
+
+	/* No block is larger than the first one, so its chunk count bounds the chunk count
+	 * of every block. Compare sizes to avoid truncating the chunk count to uint16_t.
+	 */
+	block_size = xfer->size;
+	if (xfer->block_size_log < 32U && block_size > BIT(xfer->block_size_log)) {
+		block_size = BIT(xfer->block_size_log);
+	}
+
+	if (block_size > (size_t)CONFIG_BT_MESH_BLOB_CHUNK_COUNT_MAX * xfer->chunk_size) {
+		LOG_ERR("Too many chunks: block size %zu, chunk size %u, max %d", block_size,
+			xfer->chunk_size, CONFIG_BT_MESH_BLOB_CHUNK_COUNT_MAX);
 		return -EINVAL;
 	}
 
@@ -1549,11 +1609,6 @@ int bt_mesh_blob_cli_send(struct bt_mesh_blob_cli *cli,
 	}
 
 	block_set(cli, 0);
-
-	if (cli->block.chunk_count > CONFIG_BT_MESH_BLOB_CHUNK_COUNT_MAX) {
-		LOG_ERR("Too many chunks");
-		return -EINVAL;
-	}
 
 	if (!targets_reset(cli)) {
 		LOG_ERR("No valid targets");

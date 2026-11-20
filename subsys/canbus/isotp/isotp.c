@@ -459,38 +459,48 @@ static void process_ff_sf(struct isotp_recv_ctx *rctx, struct can_frame *frame)
 	net_buf_add_mem(rctx->buf, &frame->data[index], payload_len - index);
 }
 
-static inline void receive_add_mem(struct isotp_recv_ctx *rctx, uint8_t *data, size_t len)
+static inline int receive_add_mem(struct isotp_recv_ctx *rctx, uint8_t *data, size_t len)
 {
 	size_t tailroom = net_buf_tailroom(rctx->act_frag);
 
 	if (tailroom >= len) {
 		net_buf_add_mem(rctx->act_frag, data, len);
-		return;
+		return 0;
 	}
 
 	/* Use next fragment that is already allocated*/
 	net_buf_add_mem(rctx->act_frag, data, tailroom);
 	rctx->act_frag = rctx->act_frag->frags;
-	if (!rctx->act_frag) {
+	if (rctx->act_frag == NULL || net_buf_tailroom(rctx->act_frag) < (len - tailroom)) {
 		LOG_ERR("No fragment left to append data");
 		receive_report_error(rctx, ISOTP_N_BUFFER_OVERFLW);
-		return;
+		return -ENOBUFS;
 	}
 
 	net_buf_add_mem(rctx->act_frag, data + tailroom, len - tailroom);
+
+	return 0;
 }
 
 static void process_cf(struct isotp_recv_ctx *rctx, struct can_frame *frame)
 {
 	uint32_t *ud_rem_len = (uint32_t *)net_buf_user_data(rctx->buf);
-	int index = 0;
+	uint8_t index = 0U;
 	uint32_t data_len;
 	uint8_t can_dl = can_dlc_to_bytes(frame->dlc);
 
 	if ((rctx->rx_addr.flags & ISOTP_MSG_EXT_ADDR) != 0) {
-		if (frame->data[index++] != rctx->rx_addr.ext_addr) {
+		/* A frame without payload cannot carry the address extension */
+		if (can_dl == 0U || frame->data[index++] != rctx->rx_addr.ext_addr) {
 			return;
 		}
+	}
+
+	/* The frame must at least hold the PCI byte */
+	if (can_dl <= index) {
+		LOG_ERR("CF DL invalid");
+		receive_report_error(rctx, ISOTP_N_ERROR);
+		return;
 	}
 
 	if ((frame->data[index] & ISOTP_PCI_TYPE_MASK) != ISOTP_PCI_TYPE_CF) {
@@ -520,9 +530,10 @@ static void process_cf(struct isotp_recv_ctx *rctx, struct can_frame *frame)
 #endif
 
 	/* First frame defines the RX data length, consecutive frames
-	 * must have the same length (except the last frame)
+	 * must have the same length (except the last frame, which may be shorter)
 	 */
-	if (can_dl != rctx->rx_addr.dl && rctx->length > can_dl - index) {
+	if (can_dl > rctx->rx_addr.dl ||
+	    (can_dl < rctx->rx_addr.dl && rctx->length > (uint32_t)(can_dl - index))) {
 		LOG_ERR("CF DL invalid");
 		receive_report_error(rctx, ISOTP_N_ERROR);
 		return;
@@ -530,7 +541,10 @@ static void process_cf(struct isotp_recv_ctx *rctx, struct can_frame *frame)
 
 	LOG_DBG("Got CF irq. Appending data");
 	data_len = MIN(rctx->length, can_dl - index);
-	receive_add_mem(rctx, &frame->data[index], data_len);
+	if (receive_add_mem(rctx, &frame->data[index], data_len) != 0) {
+		return;
+	}
+
 	rctx->length -= data_len;
 	LOG_DBG("%d bytes remaining", rctx->length);
 
@@ -669,8 +683,6 @@ int isotp_bind(struct isotp_recv_ctx *rctx, const struct device *can_dev,
 
 void isotp_unbind(struct isotp_recv_ctx *rctx)
 {
-	struct net_buf *buf;
-
 	if (rctx->filter_id >= 0 && rctx->can_dev) {
 		can_remove_rx_filter(rctx->can_dev, rctx->filter_id);
 	}
@@ -682,9 +694,7 @@ void isotp_unbind(struct isotp_recv_ctx *rctx)
 
 	rctx->state = ISOTP_RX_STATE_UNBOUND;
 
-	while ((buf = k_fifo_get(&rctx->fifo, K_NO_WAIT))) {
-		net_buf_unref(buf);
-	}
+	net_buf_fifo_purge(&rctx->fifo);
 
 	k_fifo_cancel_wait(&rctx->fifo);
 
@@ -874,19 +884,19 @@ static size_t get_send_ctx_data_len(struct isotp_send_ctx *sctx)
 	return sctx->is_net_buf ? net_buf_frags_len(sctx->buf) : sctx->len;
 }
 
-static const uint8_t *get_send_ctx_data(struct isotp_send_ctx *sctx)
+static void get_send_ctx_data(struct isotp_send_ctx *sctx, uint8_t *buf, size_t len)
 {
 	if (sctx->is_net_buf) {
-		return sctx->buf->data;
+		net_buf_linearize(buf, len, sctx->buf, 0, len);
 	} else {
-		return sctx->data;
+		memcpy(buf, sctx->data, len);
 	}
 }
 
 static void pull_send_ctx_data(struct isotp_send_ctx *sctx, size_t len)
 {
 	if (sctx->is_net_buf) {
-		net_buf_pull_mem(sctx->buf, len);
+		sctx->buf = net_buf_skip(sctx->buf, len);
 	} else {
 		sctx->data += len;
 		sctx->len -= len;
@@ -899,12 +909,8 @@ static inline int send_sf(struct isotp_send_ctx *sctx)
 	size_t len = get_send_ctx_data_len(sctx);
 	int index = 0;
 	int ret;
-	const uint8_t *data;
 
 	prepare_frame(&frame, &sctx->tx_addr);
-
-	data = get_send_ctx_data(sctx);
-	pull_send_ctx_data(sctx, len);
 
 	if ((sctx->tx_addr.flags & ISOTP_MSG_EXT_ADDR) != 0) {
 		frame.data[index++] = sctx->tx_addr.ext_addr;
@@ -923,7 +929,8 @@ static inline int send_sf(struct isotp_send_ctx *sctx)
 		return -ENOSPC;
 	}
 
-	memcpy(&frame.data[index], data, len);
+	get_send_ctx_data(sctx, &frame.data[index], len);
+	pull_send_ctx_data(sctx, len);
 
 	if (IS_ENABLED(CONFIG_ISOTP_ENABLE_TX_PADDING) ||
 	    (IS_ENABLED(CONFIG_CAN_FD_MODE) && (sctx->tx_addr.flags & ISOTP_MSG_FDF) != 0 &&
@@ -950,7 +957,6 @@ static inline int send_ff(struct isotp_send_ctx *sctx)
 	int index = 0;
 	size_t len = get_send_ctx_data_len(sctx);
 	int ret;
-	const uint8_t *data;
 
 	prepare_frame(&frame, &sctx->tx_addr);
 
@@ -976,9 +982,8 @@ static inline int send_ff(struct isotp_send_ctx *sctx)
 	 * although it's not part of the FF frame
 	 */
 	sctx->sn = 1;
-	data = get_send_ctx_data(sctx);
+	get_send_ctx_data(sctx, &frame.data[index], sctx->tx_addr.dl - index);
 	pull_send_ctx_data(sctx, sctx->tx_addr.dl - index);
-	memcpy(&frame.data[index], data, sctx->tx_addr.dl - index);
 
 	ret = can_send(sctx->can_dev, &frame, K_MSEC(ISOTP_A_TIMEOUT_MS), send_can_tx_cb, sctx);
 	return ret;
@@ -991,7 +996,6 @@ static inline int send_cf(struct isotp_send_ctx *sctx)
 	int ret;
 	int len;
 	int rem_len;
-	const uint8_t *data;
 
 	prepare_frame(&frame, &sctx->tx_addr);
 
@@ -1005,8 +1009,7 @@ static inline int send_cf(struct isotp_send_ctx *sctx)
 	rem_len = get_send_ctx_data_len(sctx);
 	len = MIN(rem_len, sctx->tx_addr.dl - index);
 	rem_len -= len;
-	data = get_send_ctx_data(sctx);
-	memcpy(&frame.data[index], data, len);
+	get_send_ctx_data(sctx, &frame.data[index], len);
 
 	if (IS_ENABLED(CONFIG_ISOTP_ENABLE_TX_PADDING) ||
 	    (IS_ENABLED(CONFIG_CAN_FD_MODE) && (sctx->tx_addr.flags & ISOTP_MSG_FDF) != 0 &&

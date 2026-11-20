@@ -4,7 +4,7 @@ Overview
 ********
 
 The nRF7120 Development Kit hardware provides support for the Nordic Semiconductor
-nRF7120 Arm Cortex-M33 CPU.
+nRF7120 and nRF7120E Arm Cortex-M33 CPUs.
 
 Hardware
 ********
@@ -27,12 +27,14 @@ Programming and Debugging
 
 .. zephyr:board-supported-runners::
 
-Applications for the ``nrf7120dk/nrf7120/cpuapp`` board target can be
+Applications for the ``nrf7120dk/nrf7120/cpuapp`` and ``nrf7120dk/nrf7120e/cpuapp``
+board targets can be
 built, flashed, and debugged in the usual way. See
 :ref:`build_an_application` and :ref:`application_run` for more details on
 building and running.
 
-Applications for the ``nrf7120dk/nrf7120/cpuflpr`` board target need
+Applications for the ``nrf7120dk/nrf7120/cpuflpr`` and ``nrf7120dk/nrf7120e/cpuflpr``
+board targets need
 to be built using sysbuild to include the ``vpr_launcher`` image for the application core.
 
 Enter the following command to compile ``hello_world`` for the FLPR core:
@@ -73,7 +75,7 @@ found in :ref:`nordic_segger_flashing`.
 
 To build and program the sample to the nRF7120 DK, complete the following steps:
 
-First, connect the nRF7120 DK to you computer using the IMCU USB port on the DK.
+First, connect the nRF7120 DK to your computer using the IMCU USB port on the DK.
 Next, build the sample by running the following command:
 
 .. zephyr-app-commands::
@@ -81,7 +83,7 @@ Next, build the sample by running the following command:
    :board: nrf7120dk/nrf7120/cpuapp
    :goals: build flash
 
-Testing the LEDs and buttons in the nRF7120 DK
-************************************************
+Testing the LEDs and buttons on the nRF7120 DK
+**********************************************
 
-Test the nRF7120 DK with a :zephyr:code-sample:`blinky` sample.
+Test the nRF7120 DK with :zephyr:code-sample:`blinky` or :zephyr:code-sample:`button` samples.

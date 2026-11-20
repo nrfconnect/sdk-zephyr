@@ -195,11 +195,11 @@ enum mspi_dev_cfg_mask {
 };
 
 /**
- * @brief MSPI XIP access permissions
+ * @brief MSPI memory map access permissions
  */
-enum mspi_xip_permit {
-	MSPI_XIP_READ_WRITE     = 0,
-	MSPI_XIP_READ_ONLY      = 1,
+enum mspi_memmap_permit {
+	MSPI_MEMMAP_READ_WRITE     = 0, /**< Allow read/write access to the memory mapped region */
+	MSPI_MEMMAP_READ_ONLY      = 1, /**< Allow read only access to the memory mapped region */
 };
 
 /**
@@ -316,19 +316,19 @@ struct mspi_dev_cfg {
 };
 
 /**
- * @brief MSPI controller XIP configuration
+ * @brief MSPI controller memory map configuration
  */
-struct mspi_xip_cfg {
-	/** @brief XIP enable */
+struct mspi_memmap_cfg {
+	/** @brief Memory map enable */
 	bool                    enable;
-	/** @brief XIP region start address =
+	/** @brief Memory map region start address =
 	 * hardware default + address offset
 	 */
 	uint32_t                address_offset;
-	/** @brief XIP region size */
+	/** @brief Memory map region size */
 	uint32_t                size;
-	/** @brief XIP access permission */
-	enum mspi_xip_permit    permission;
+	/** @brief Memory map access permission */
+	enum mspi_memmap_permit permission;
 };
 
 /**
@@ -481,49 +481,96 @@ typedef void (*mspi_callback_handler_t)(struct mspi_callback_context *mspi_cb_ct
 /** @} */
 
 /**
- * MSPI driver API definition and system call entry points
+ * @def_driverbackendgroup{MSPI,mspi_interface}
+ * @{
+ */
+
+/**
+ * @brief Configure an MSPI controller.
+ * See mspi_config() for argument description.
  */
 typedef int (*mspi_api_config)(const struct mspi_dt_spec *spec);
 
+/**
+ * @brief Configure an MSPI controller with device specific parameters.
+ * See mspi_dev_config() for argument description.
+ */
 typedef int (*mspi_api_dev_config)(const struct device *controller,
 				   const struct mspi_dev_id *dev_id,
 				   const enum mspi_dev_cfg_mask param_mask,
 				   const struct mspi_dev_cfg *cfg);
 
+/**
+ * @brief Query to see if it a channel is ready.
+ * See mspi_get_channel_status() for argument description.
+ */
 typedef int (*mspi_api_get_channel_status)(const struct device *controller, uint8_t ch);
 
+/**
+ * @brief Transfer request over MSPI.
+ * See mspi_transceive() for argument description.
+ */
 typedef int (*mspi_api_transceive)(const struct device *controller,
 				   const struct mspi_dev_id *dev_id,
 				   const struct mspi_xfer *req);
 
+/**
+ * @brief Register the mspi callback functions.
+ * See mspi_register_callback() for argument description.
+ */
 typedef int (*mspi_api_register_callback)(const struct device *controller,
 					  const struct mspi_dev_id *dev_id,
 					  const enum mspi_bus_event evt_type,
 					  mspi_callback_handler_t cb,
 					  struct mspi_callback_context *ctx);
 
-typedef int (*mspi_api_xip_config)(const struct device *controller,
-				   const struct mspi_dev_id *dev_id,
-				   const struct mspi_xip_cfg *xip_cfg);
+/**
+ * @brief Configure MSPI memory map settings.
+ * See mspi_memmap_config() for argument description.
+ */
+typedef int (*mspi_api_memmap_config)(const struct device *controller,
+				      const struct mspi_dev_id *dev_id,
+				      const struct mspi_memmap_cfg *memmap_cfg);
 
+/**
+ * @brief Configure MSPI scrambling settings.
+ * See mspi_scramble_config() for argument description.
+ */
 typedef int (*mspi_api_scramble_config)(const struct device *controller,
 					const struct mspi_dev_id *dev_id,
 					const struct mspi_scramble_cfg *scramble_cfg);
 
+/**
+ * @brief Configure MSPI timing settings.
+ * See mspi_timing_config() for argument description.
+ */
 typedef int (*mspi_api_timing_config)(const struct device *controller,
 				      const struct mspi_dev_id *dev_id, const uint32_t param_mask,
 				      void *timing_cfg);
 
+/**
+ * @driver_ops{MSPI}
+ */
 __subsystem struct mspi_driver_api {
+	/** @driver_ops_mandatory @copybrief mspi_config */
 	mspi_api_config                config;
+	/** @driver_ops_mandatory @copybrief mspi_dev_config */
 	mspi_api_dev_config            dev_config;
+	/** @driver_ops_mandatory @copybrief mspi_get_channel_status */
 	mspi_api_get_channel_status    get_channel_status;
+	/** @driver_ops_optional @copybrief mspi_transceive */
 	mspi_api_transceive            transceive;
+	/** @driver_ops_optional @copybrief mspi_register_callback */
 	mspi_api_register_callback     register_callback;
-	mspi_api_xip_config            xip_config;
+	/** @driver_ops_optional @copybrief mspi_memmap_config */
+	mspi_api_memmap_config         memmap_config;
+	/** @driver_ops_optional @copybrief mspi_scramble_config */
 	mspi_api_scramble_config       scramble_config;
+	/** @driver_ops_optional @copybrief mspi_timing_config */
 	mspi_api_timing_config         timing_config;
 };
+
+/** @} */
 
 /**
  * @addtogroup mspi_configure_api
@@ -531,7 +578,7 @@ __subsystem struct mspi_driver_api {
  */
 
 /**
- * @brief Configure a MSPI controller.
+ * @brief Configure an MSPI controller.
  *
  * This routine provides a generic interface to override MSPI controller
  * capabilities.
@@ -559,7 +606,7 @@ static inline int z_impl_mspi_config(const struct mspi_dt_spec *spec)
 }
 
 /**
- * @brief Configure a MSPI controller with device specific parameters.
+ * @brief Configure an MSPI controller with device specific parameters.
  *
  * This routine provides a generic interface to override MSPI controller
  * device specific settings that should be derived from device datasheets.
@@ -724,38 +771,38 @@ static inline int mspi_transceive_data_only(const struct device *controller,
  */
 
 /**
- * @brief Configure a MSPI XIP settings.
+ * @brief Configure MSPI memory map settings.
  *
- * This routine provides a generic interface to configure the XIP feature.
+ * This routine provides a generic interface to configure the memory map feature.
  *
  * @param controller Pointer to the device structure for the driver instance.
  * @param dev_id Pointer to the device ID structure from a device.
- * @param cfg The controller XIP configuration for MSPI.
+ * @param cfg The controller memory map configuration for MSPI.
  *
  * @retval 0 If successful.
  * @retval -EIO General input / output error, failed to configure device.
  * @retval -EINVAL invalid capabilities, failed to configure device.
  * @retval -ENOTSUP capability not supported by MSPI peripheral.
  */
-__syscall int mspi_xip_config(const struct device *controller,
-			      const struct mspi_dev_id *dev_id,
-			      const struct mspi_xip_cfg *cfg);
+__syscall int mspi_memmap_config(const struct device *controller,
+				 const struct mspi_dev_id *dev_id,
+				 const struct mspi_memmap_cfg *cfg);
 
-static inline int z_impl_mspi_xip_config(const struct device *controller,
-					 const struct mspi_dev_id *dev_id,
-					 const struct mspi_xip_cfg *cfg)
+static inline int z_impl_mspi_memmap_config(const struct device *controller,
+					    const struct mspi_dev_id *dev_id,
+					    const struct mspi_memmap_cfg *cfg)
 {
 	const struct mspi_driver_api *api = DEVICE_API_GET(mspi, controller);
 
-	if (!api->xip_config) {
+	if (!api->memmap_config) {
 		return -ENOTSUP;
 	}
 
-	return api->xip_config(controller, dev_id, cfg);
+	return api->memmap_config(controller, dev_id, cfg);
 }
 
 /**
- * @brief Configure a MSPI scrambling settings.
+ * @brief Configure MSPI scrambling settings.
  *
  * This routine provides a generic interface to configure the scrambling
  * feature.
@@ -787,7 +834,7 @@ static inline int z_impl_mspi_scramble_config(const struct device *controller,
 }
 
 /**
- * @brief Configure a MSPI timing settings.
+ * @brief Configure MSPI timing settings.
  *
  * This routine provides a generic interface to configure MSPI controller
  * timing if necessary.
@@ -871,16 +918,16 @@ static inline int mspi_register_callback(const struct device *controller,
 #include <zephyr/sys/util_macro.h>
 
 /**
- * @brief Declare the optional XIP config in peripheral driver.
+ * @brief Declare the optional memory map config in peripheral driver.
  */
-#define MSPI_XIP_CFG_STRUCT_DECLARE(_name)                                                        \
-	IF_ENABLED(CONFIG_MSPI_XIP, (struct mspi_xip_cfg _name;))
+#define MSPI_MEMMAP_CFG_STRUCT_DECLARE(_name)                                                     \
+	IF_ENABLED(CONFIG_MSPI_MEMMAP, (struct mspi_memmap_cfg _name;))
 
 /**
- * @brief Declare the optional XIP base address in peripheral driver.
+ * @brief Declare the optional memory map base address in peripheral driver.
  */
-#define MSPI_XIP_BASE_ADDR_DECLARE(_name)                                                         \
-	IF_ENABLED(CONFIG_MSPI_XIP, (uint32_t _name;))
+#define MSPI_MEMMAP_BASE_ADDR_DECLARE(_name)                                                      \
+	IF_ENABLED(CONFIG_MSPI_MEMMAP, (uint32_t _name;))
 
 /**
  * @brief Declare the optional scramble config in peripheral driver.
@@ -907,10 +954,10 @@ static inline int mspi_register_callback(const struct device *controller,
 	IF_ENABLED(code, (._name = _object,))
 
 /**
- * @brief Initialize the optional XIP base address in peripheral driver.
+ * @brief Initialize the optional memory map base address in peripheral driver.
  */
-#define MSPI_XIP_BASE_ADDR_INIT(_name, _bus)                                                      \
-	IF_ENABLED(CONFIG_MSPI_XIP, (._name = DT_REG_ADDR_BY_IDX(_bus, 1),))
+#define MSPI_MEMMAP_BASE_ADDR_INIT(_name, _bus)                                                   \
+	IF_ENABLED(CONFIG_MSPI_MEMMAP, (._name = DT_REG_ADDR_BY_IDX(_bus, 1),))
 
 /** @} */
 

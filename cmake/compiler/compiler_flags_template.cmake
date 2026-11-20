@@ -72,6 +72,7 @@ set_property(TARGET compiler-cpp PROPERTY dialect_cpp2a)
 set_property(TARGET compiler-cpp PROPERTY dialect_cpp20)
 set_property(TARGET compiler-cpp PROPERTY dialect_cpp2b)
 set_property(TARGET compiler-cpp PROPERTY dialect_cpp23)
+set_property(TARGET compiler-cpp PROPERTY dialect_cpp26)
 
 # Flag for disabling strict aliasing rule in C and C++
 set_compiler_property(PROPERTY no_strict_aliasing)
@@ -110,6 +111,7 @@ set_compiler_property(PROPERTY security_canaries)
 set_compiler_property(PROPERTY security_canaries_strong)
 set_compiler_property(PROPERTY security_canaries_all)
 set_compiler_property(PROPERTY security_canaries_explicit)
+set_compiler_property(PROPERTY security_canaries_none)
 
 set_compiler_property(PROPERTY security_fortify_compile_time)
 set_compiler_property(PROPERTY security_fortify_run_time)

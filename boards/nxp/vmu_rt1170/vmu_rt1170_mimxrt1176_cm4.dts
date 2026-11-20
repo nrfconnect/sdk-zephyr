@@ -6,14 +6,14 @@
 
 /dts-v1/;
 
-#include <nxp/imxrt/nxp_rt1170_cm4.dtsi>
+#include <nxp/imxrt/imxrt11xx/nxp_rt1170_cm4.dtsi>
 #include <zephyr/dt-bindings/led/led.h>
 #include "vmu_rt1170.dtsi"
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 
 / {
-	model = "NXP VMU RT1170 (CM4)";
 	compatible = "nxp,mimxrt1176";
+	model = "NXP VMU RT1170 (CM4)";
 
 	chosen {
 		/* Follow mimxrt1170_evk CM4 choices */
@@ -29,8 +29,8 @@
 };
 
 &lpuart1 {
-	status = "okay";
 	current-speed = <115200>;
+	status = "okay";
 };
 
 &mailbox_b {

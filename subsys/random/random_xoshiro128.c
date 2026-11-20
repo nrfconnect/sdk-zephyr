@@ -29,6 +29,7 @@
 #include <zephyr/device.h>
 #include <zephyr/drivers/entropy.h>
 #include <zephyr/kernel.h>
+#include <errno.h>
 #include <string.h>
 
 static uint32_t state[4];
@@ -41,17 +42,26 @@ static inline uint32_t rotl(const uint32_t x, int k)
 
 static void xoshiro128_init_state(void)
 {
-	int rc;
+	int rc = -ENODEV;
 	const struct device *const entropy_driver = entropy_get_default_device();
 
 	/* This is not thread safe but it doesn't matter as we will just end
 	 * up with a mix of random bytes from both threads.
 	 */
-	rc = entropy_get_entropy(entropy_driver, (uint8_t *)&state, sizeof(state));
-	if (rc == 0) {
+	if (device_is_ready(entropy_driver)) {
+		rc = entropy_get_entropy(entropy_driver, (uint8_t *)&state, sizeof(state));
+	}
+
+	/* Reject an all-zero seed: xoshiro128++ has a fixed point at
+	 * state = {0,0,0,0}. Leaving initialized=false on rejection lets
+	 * the next sys_rand_get() retry the entropy source.
+	 */
+	if (rc == 0 &&
+	    (state[0] | state[1] | state[2] | state[3]) != 0) {
 		initialized = true;
 	} else {
-		/* Entropy device failed or is not yet ready.
+		/* Entropy device failed, is not yet ready, or returned an
+		 * all-zero buffer.
 		 * Reseed the PRNG state with pseudo-random data until it can
 		 * be properly seeded. This may be needed if random numbers are
 		 * requested before the backing entropy device has been enabled.

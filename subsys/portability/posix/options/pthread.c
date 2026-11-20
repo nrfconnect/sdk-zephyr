@@ -357,7 +357,7 @@ int pthread_attr_setstack(pthread_attr_t *_attr, void *stackaddr, size_t stacksi
 		return EINVAL;
 	}
 
-	if (attr->stack != NULL) {
+	if (attr->stack != NULL && attr->stack != stackaddr) {
 		ret = k_thread_stack_free(attr->stack);
 		if (ret == 0) {
 			LOG_DBG("Freed attr %p thread stack %zu@%p", _attr,
@@ -467,38 +467,70 @@ extern struct sys_sem pthread_key_lock;
 
 static void posix_thread_finalize(struct posix_thread *t, void *retval)
 {
-	sys_snode_t *node_l, *node_s;
+	sys_snode_t *node_l = NULL;
 	pthread_key_obj *key_obj;
 	pthread_thread_data *thread_spec_data;
-	sys_snode_t *node_key_data, *node_key_data_s, *node_key_data_prev = NULL;
 	struct pthread_key_data *key_data;
 
-	SYS_SLIST_FOR_EACH_NODE_SAFE(&t->key_list, node_l, node_s) {
-		thread_spec_data = (pthread_thread_data *)node_l;
-		if (thread_spec_data != NULL) {
-			key_obj = thread_spec_data->key;
-			if (key_obj->destructor != NULL) {
-				(key_obj->destructor)(thread_spec_data->spec_data);
-			}
+	/*
+	 * PTHREAD_DESTRUCTOR_ITERATIONS limits passes over the thread's keys, not destructor
+	 * calls. Each pass only visits entries present when it starts; a value set by a
+	 * destructor is appended to key_list and handled by the next pass.
+	 */
+	for (int pass = 0; pass < PTHREAD_DESTRUCTOR_ITERATIONS; pass++) {
+		size_t pending = 0;
 
+		SYS_SEM_LOCK(&pthread_key_lock) {
+			pending = sys_slist_len(&t->key_list);
+		}
+
+		if (pending == 0) {
+			break;
+		}
+
+		for (; pending > 0; pending--) {
+			void (*destructor)(void *value) = NULL;
+			void *spec_data = NULL;
+
+			node_l = NULL;
 			SYS_SEM_LOCK(&pthread_key_lock) {
-				SYS_SLIST_FOR_EACH_NODE_SAFE(
-					&key_obj->key_data_l,
-					node_key_data,
-					node_key_data_s) {
-					key_data = (struct pthread_key_data *)node_key_data;
-					if (&key_data->thread_data == thread_spec_data) {
-						sys_slist_remove(
-							&key_obj->key_data_l,
-							node_key_data_prev,
-							node_key_data
-						);
-						k_free(key_data);
-						break;
+				node_l = sys_slist_get(&t->key_list);
+				if (node_l != NULL) {
+					thread_spec_data = (pthread_thread_data *)node_l;
+					key_obj = thread_spec_data->key;
+					if (key_obj != NULL) {
+						destructor = key_obj->destructor;
+						spec_data = thread_spec_data->spec_data;
 					}
-					node_key_data_prev = node_key_data;
+
+					key_data = CONTAINER_OF(thread_spec_data,
+								struct pthread_key_data,
+								thread_data);
+					sys_dlist_remove(&key_data->node);
+					k_free(key_data);
 				}
 			}
+
+			if (node_l == NULL) {
+				/* entries were unlinked concurrently by pthread_key_delete() */
+				break;
+			}
+
+			if (destructor != NULL && spec_data != NULL) {
+				destructor(spec_data);
+			}
+		}
+	}
+
+	/* Drain any remaining entries without executing destructors */
+	SYS_SEM_LOCK(&pthread_key_lock) {
+		while ((node_l = sys_slist_get(&t->key_list)) != NULL) {
+			thread_spec_data = (pthread_thread_data *)node_l;
+			key_data = CONTAINER_OF(thread_spec_data,
+						struct pthread_key_data,
+						thread_data);
+			sys_dlist_remove(&key_data->node);
+			k_free(key_data);
 		}
 	}
 
@@ -585,7 +617,7 @@ static void posix_thread_recycle(void)
  *
  * See IEEE 1003.1
  */
-int pthread_create(pthread_t *th, const pthread_attr_t *_attr, void *(*threadroutine)(void *),
+int pthread_create(pthread_t *th, const pthread_attr_t *_attr, void *(*threadroutine)(void *arg),
 		   void *arg)
 {
 	int err;
@@ -1017,6 +1049,14 @@ int pthread_once(pthread_once_t *once, void (*init_func)(void))
 
 	if (init_func == NULL) {
 		return EINVAL;
+	}
+
+	/* Nothing to do once the flag is set: it is never cleared, and since it is
+	 * set before init_func() is called, taking the lock would not make this
+	 * caller wait for initialization to finish anyway.
+	 */
+	if (_once->flag) {
+		return 0;
 	}
 
 	SYS_SEM_LOCK(&pthread_pool_lock) {

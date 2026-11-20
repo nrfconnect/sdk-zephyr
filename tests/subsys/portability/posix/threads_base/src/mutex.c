@@ -223,6 +223,81 @@ ZTEST(mutex, test_mutex_timedlock)
 	zassert_ok(pthread_mutex_destroy(&mutex));
 }
 
+static void *static_init_contender(void *arg)
+{
+	pthread_mutex_t *m = arg;
+
+	/* The main thread holds the mutex, so a non-blocking lock must fail. */
+	zassert_equal(EBUSY, pthread_mutex_trylock(m));
+	return NULL;
+}
+
+/**
+ * @brief Verify a statically-initialized mutex works without pthread_mutex_init()
+ *
+ * @details A PTHREAD_MUTEX_INITIALIZER mutex must auto-initialize on first use
+ *          and provide mutual exclusion, exercising the lazy-init path in
+ *          to_posix_mutex().
+ */
+ZTEST(mutex, test_mutex_static_initializer)
+{
+	static pthread_mutex_t m = PTHREAD_MUTEX_INITIALIZER;
+	pthread_t th;
+
+	/* First lock triggers auto-initialization. */
+	zassert_ok(pthread_mutex_lock(&m));
+
+	/* A second thread must observe the mutex as held. */
+	zassert_ok(pthread_create(&th, NULL, static_init_contender, &m));
+	zassert_ok(pthread_join(th, NULL));
+
+	zassert_ok(pthread_mutex_unlock(&m));
+
+	/* Usable again after being released. */
+	zassert_ok(pthread_mutex_lock(&m));
+	zassert_ok(pthread_mutex_unlock(&m));
+
+	zassert_ok(pthread_mutex_destroy(&m));
+}
+
+/**
+ * @brief Verify a statically-initialized mutex reuses a slot with default type
+ *
+ * @details Destroying a recursive mutex must reset the pool slot's type. A
+ *          subsequently auto-initialized static mutex reusing that slot must
+ *          behave as PTHREAD_MUTEX_DEFAULT (non-recursive).
+ */
+ZTEST(mutex, test_mutex_static_initializer_after_destroy)
+{
+	static pthread_mutex_t m_static = PTHREAD_MUTEX_INITIALIZER;
+	pthread_mutexattr_t attr;
+	pthread_mutex_t m_rec;
+
+	zassert_ok(pthread_mutexattr_init(&attr));
+	zassert_ok(pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE));
+	zassert_ok(pthread_mutex_init(&m_rec, &attr));
+	zassert_ok(pthread_mutexattr_destroy(&attr));
+
+	/* Lock twice and unlock twice to verify recursive behavior */
+	zassert_ok(pthread_mutex_lock(&m_rec));
+	zassert_ok(pthread_mutex_lock(&m_rec));
+	zassert_ok(pthread_mutex_unlock(&m_rec));
+	zassert_ok(pthread_mutex_unlock(&m_rec));
+
+	/* Destroy recursive mutex to return slot to pool */
+	zassert_ok(pthread_mutex_destroy(&m_rec));
+
+	/* Lock statically-initialized mutex, which reclaims the pool slot */
+	zassert_ok(pthread_mutex_lock(&m_static));
+
+	/* Relocking from the same thread must return EBUSY, not succeed */
+	zassert_equal(EBUSY, pthread_mutex_trylock(&m_static),
+		      "static mutex inherited recursive type from destroyed slot");
+
+	zassert_ok(pthread_mutex_unlock(&m_static));
+	zassert_ok(pthread_mutex_destroy(&m_static));
+}
+
 static void before(void *arg)
 {
 	ARG_UNUSED(arg);
