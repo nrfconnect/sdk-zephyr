@@ -16,7 +16,6 @@
 #include <zephyr/net/net_stats.h>
 #include <zephyr/net/wifi.h>
 #include <zephyr/net/wifi_mgmt.h>
-#include <zephyr/net/wifi_utils.h>
 #include <zephyr/net/ethernet.h>
 #include <zephyr/logging/log.h>
 
@@ -186,7 +185,7 @@ static int bflb_wifi_channel(const struct device *dev, struct net_if *iface,
 
 		if (ch > 0) {
 			channel->channel = ch;
-			channel->band = wifi_utils_chan_to_band(ch);
+			channel->band = (ch <= 14) ? WIFI_FREQ_BAND_2_4_GHZ : WIFI_FREQ_BAND_5_GHZ;
 		}
 		return 0;
 	}
@@ -327,7 +326,8 @@ static int bflb_wifi_status(const struct device *dev, struct net_if *iface,
 
 		if (wl80211_glb.ap_chan_freq > 0) {
 			status->channel = wl80211_freq_to_channel(wl80211_glb.ap_chan_freq);
-			status->band = wifi_utils_chan_to_band(status->channel);
+			status->band = (status->channel <= 14) ? WIFI_FREQ_BAND_2_4_GHZ
+							       : WIFI_FREQ_BAND_5_GHZ;
 		}
 		status->beacon_interval = wl80211_glb.ap_beacon_interval;
 
@@ -355,7 +355,7 @@ static int bflb_wifi_status(const struct device *dev, struct net_if *iface,
 	ch = wl80211_sta_get_channel();
 	if (ch > 0) {
 		status->channel = ch;
-		status->band = wifi_utils_chan_to_band(ch);
+		status->band = (ch <= 14) ? WIFI_FREQ_BAND_2_4_GHZ : WIFI_FREQ_BAND_5_GHZ;
 	} else {
 		status->band = WIFI_FREQ_BAND_UNKNOWN;
 	}
