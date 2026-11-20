@@ -303,8 +303,7 @@ int nordicsemi_nrf71_init(void)
 	nrf_gpio_port_pwrctrl_set(NRF_P4, pwrctrl);
 
 	/* Configure LFXO capacitive load if internal load capacitors are used */
-#if DT_ENUM_HAS_VALUE(LFXO_NODE, load_capacitors, internal) && \
-	!defined(CONFIG_SOC_SERIES_NRF71_SKIP_PREV_IMAGE_INIT)
+#if DT_ENUM_HAS_VALUE(LFXO_NODE, load_capacitors, internal)
 	nrf_lfxo_cload_set(NRF_LFXO,
 			(uint8_t)(DT_PROP(LFXO_NODE, load_capacitance_femtofarad) / 1000));
 #endif
