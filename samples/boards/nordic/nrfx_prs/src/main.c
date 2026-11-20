@@ -146,8 +146,10 @@ static bool switch_to_spim(void)
 		NRF_SPIM_PIN_NOT_CONNECTED,
 		NRF_DT_GPIOS_TO_PSEL(SPIM_NODE, cs_gpios));
 	spim_config.frequency = MHZ(1);
+#if !IS_ENABLED(CONFIG_NRFX_SPIM_SKIP_PIN_CFG)
 	spim_config.skip_gpio_cfg = true;
 	spim_config.skip_psel_cfg = true;
+#endif
 
 	ret = pinctrl_apply_state(PINCTRL_DT_DEV_CONFIG_GET(SPIM_NODE),
 				  PINCTRL_STATE_DEFAULT);
