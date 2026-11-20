@@ -113,11 +113,15 @@ static void nrf_wifi_rpu_recovery_work_handler(struct k_work *work)
 		return;
 	}
 
-	if (!sys_timepoint_expired(rpu_ctx_zep->rpu_recovery_quiet_end)) {
+	if (rpu_ctx_zep->last_rpu_recovery_time_ms &&
+		((k_uptime_get() - rpu_ctx_zep->last_rpu_recovery_time_ms) <
+	    CONFIG_NRF_WIFI_RPU_RECOVERY_QUIET_PERIOD_MS)) {
 #ifdef CONFIG_NRF_WIFI_RPU_RECOVERY_DEBUG
-		LOG_ERR("%s: In quiet period, ignoring", __func__);
+		LOG_ERR("%s: In quiet period (last_rpu_recovery_time_ms=%ld), ignoring",
+			__func__, rpu_ctx_zep->last_rpu_recovery_time_ms);
 #else
-		LOG_DBG("%s: In quiet period, ignoring", __func__);
+		LOG_DBG("%s: In quiet period (last_rpu_recovery_time_ms=%ld), ignoring",
+			__func__, rpu_ctx_zep->last_rpu_recovery_time_ms);
 #endif
 		return;
 	}
@@ -129,14 +133,19 @@ static void nrf_wifi_rpu_recovery_work_handler(struct k_work *work)
 #endif
 	k_mutex_lock(&rpu_ctx_zep->rpu_lock, K_FOREVER);
 #if CONFIG_NRF_WIFI_RPU_RECOVERY_MAX_RETRIES > 0
-	if (sys_timepoint_expired(rpu_ctx_zep->rpu_recovery_retry_window_end)) {
+	if (!rpu_ctx_zep->last_rpu_recovery_time_ms ||
+		(k_uptime_get() - rpu_ctx_zep->last_rpu_recovery_time_ms) <
+	    CONFIG_NRF_WIFI_RPU_RECOVERY_RETRY_WINDOW_S * MSEC_PER_SEC) {
+		if (rpu_ctx_zep->rpu_recovery_retries >=
+		    CONFIG_NRF_WIFI_RPU_RECOVERY_MAX_RETRIES) {
+			LOG_ERR("%s: Maximum recovery retries reached, rebooting system",
+				__func__);
+			sys_reboot(SYS_REBOOT_COLD);
+		}
+		rpu_ctx_zep->rpu_recovery_retries++;
+	} else {
 		rpu_ctx_zep->rpu_recovery_retries = 0;
 	}
-	if (rpu_ctx_zep->rpu_recovery_retries >= CONFIG_NRF_WIFI_RPU_RECOVERY_MAX_RETRIES) {
-		LOG_ERR("%s: Maximum recovery retries reached, rebooting system", __func__);
-		sys_reboot(SYS_REBOOT_COLD);
-	}
-	rpu_ctx_zep->rpu_recovery_retries++;
 #endif
 	rpu_ctx_zep->rpu_recovery_in_progress = true;
 	rpu_ctx_zep->wdt_irq_received += hal_dev_ctx->wdt_irq_received;
@@ -181,10 +190,7 @@ static void nrf_wifi_rpu_recovery_bringup_work_handler(struct k_work *work)
 		LOG_ERR("%s: net_if_up failed: %d", __func__, ret);
 	}
 	rpu_ctx_zep->rpu_recovery_in_progress = false;
-	rpu_ctx_zep->rpu_recovery_quiet_end =
-		sys_timepoint_calc(K_MSEC(CONFIG_NRF_WIFI_RPU_RECOVERY_QUIET_PERIOD_MS));
-	rpu_ctx_zep->rpu_recovery_retry_window_end =
-		sys_timepoint_calc(K_SECONDS(CONFIG_NRF_WIFI_RPU_RECOVERY_RETRY_WINDOW_S));
+	rpu_ctx_zep->last_rpu_recovery_time_ms = k_uptime_get();
 	k_mutex_unlock(&rpu_ctx_zep->rpu_lock);
 #ifdef CONFIG_NRF_WIFI_RPU_RECOVERY_DEBUG
 	LOG_ERR("%s: RPU recovery done", __func__);
