@@ -798,7 +798,6 @@
 				#gpio-cells = <2>;
 				port = <4>;
 				ngpios = <12>;
-				gpiote-instance = <&gpiote20>;
 				status = "disabled";
 			};
 
