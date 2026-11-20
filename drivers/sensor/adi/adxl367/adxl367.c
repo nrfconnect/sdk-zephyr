@@ -1008,11 +1008,9 @@ static int adxl367_probe(const struct device *dev)
 		return ret;
 	}
 
-	if (cfg->self_test_enable) {
-		ret = adxl367_self_test(dev);
-		if (ret != 0) {
-			return ret;
-		}
+	ret = adxl367_self_test(dev);
+	if (ret != 0) {
+		return ret;
 	}
 
 	ret = adxl367_temp_read_en(dev, cfg->temp_en);
@@ -1139,8 +1137,7 @@ static int adxl367_init(const struct device *dev)
 		.fifo_config.fifo_samples = 128,					\
 		.fifo_config.fifo_read_mode = ADXL367_14B_CHID,				\
 		.op_mode = ADXL367_MEASURE,						\
-		.chip_id = chipid,							\
-		.self_test_enable = DT_INST_PROP(inst, self_test_enable),
+		.chip_id = chipid,
 
 /*
  * Instantiation macros used when a device is on a SPI bus.
