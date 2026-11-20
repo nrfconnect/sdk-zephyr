@@ -270,7 +270,6 @@ config SOC_HFXO_CAP_EXTERNAL
 
 config SOC_HFXO_CAP_INTERNAL
 	bool "Use internal load capacitors"
-	depends on NRF_SOC_SECURE_SUPPORTED
 	select DEPRECATED
 	help
 	  This option is deprecated, use DT instead. Example configuration:
