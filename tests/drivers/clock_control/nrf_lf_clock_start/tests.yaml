@@ -273,7 +273,7 @@ tests:
       - ophelia4ev/nrf54l15/cpuapp
     extra_configs:
       - CONFIG_CLOCK_CONTROL_NRF=y
-      - CONFIG_DEPRECATION_TEST=y
+      - CONFIG_WARN_DEPRECATED=n
       - CONFIG_SYSTEM_CLOCK_WAIT_FOR_STABILITY=y
       - CONFIG_CLOCK_CONTROL_NRF_K32SRC_XTAL=y
     integration_platforms:
@@ -297,7 +297,7 @@ tests:
       - ophelia4ev/nrf54l15/cpuapp
     extra_configs:
       - CONFIG_CLOCK_CONTROL_NRF=y
-      - CONFIG_DEPRECATION_TEST=y
+      - CONFIG_WARN_DEPRECATED=n
       - CONFIG_SYSTEM_CLOCK_WAIT_FOR_AVAILABILITY=y
       - CONFIG_CLOCK_CONTROL_NRF_K32SRC_XTAL=y
     integration_platforms:
@@ -317,7 +317,7 @@ tests:
       - nrf51dk/nrf51822
     extra_configs:
       - CONFIG_CLOCK_CONTROL_NRF=y
-      - CONFIG_DEPRECATION_TEST=y
+      - CONFIG_WARN_DEPRECATED=n
       - CONFIG_SYSTEM_CLOCK_NO_WAIT=y
       - CONFIG_CLOCK_CONTROL_NRF_K32SRC_XTAL=y
 
@@ -341,7 +341,7 @@ tests:
       - nrf52dk/nrf52832
     extra_configs:
       - CONFIG_CLOCK_CONTROL_NRF=y
-      - CONFIG_DEPRECATION_TEST=y
+      - CONFIG_WARN_DEPRECATED=n
       - CONFIG_SYSTEM_CLOCK_WAIT_FOR_STABILITY=y
       - CONFIG_CLOCK_CONTROL_NRF_K32SRC_RC=y
 
@@ -365,7 +365,7 @@ tests:
       - nrf52dk/nrf52832
     extra_configs:
       - CONFIG_CLOCK_CONTROL_NRF=y
-      - CONFIG_DEPRECATION_TEST=y
+      - CONFIG_WARN_DEPRECATED=n
       - CONFIG_SYSTEM_CLOCK_WAIT_FOR_AVAILABILITY=y
       - CONFIG_CLOCK_CONTROL_NRF_K32SRC_RC=y
 
@@ -389,7 +389,7 @@ tests:
       - nrf52dk/nrf52832
     extra_configs:
       - CONFIG_CLOCK_CONTROL_NRF=y
-      - CONFIG_DEPRECATION_TEST=y
+      - CONFIG_WARN_DEPRECATED=n
       - CONFIG_SYSTEM_CLOCK_NO_WAIT=y
       - CONFIG_CLOCK_CONTROL_NRF_K32SRC_RC=y
 
@@ -412,7 +412,7 @@ tests:
       - nrf51dk/nrf51822
     extra_configs:
       - CONFIG_CLOCK_CONTROL_NRF=y
-      - CONFIG_DEPRECATION_TEST=y
+      - CONFIG_WARN_DEPRECATED=n
       - CONFIG_SYSTEM_CLOCK_WAIT_FOR_STABILITY=y
       - CONFIG_CLOCK_CONTROL_NRF_K32SRC_SYNTH=y
 
@@ -435,7 +435,7 @@ tests:
       - nrf51dk/nrf51822
     extra_configs:
       - CONFIG_CLOCK_CONTROL_NRF=y
-      - CONFIG_DEPRECATION_TEST=y
+      - CONFIG_WARN_DEPRECATED=n
       - CONFIG_SYSTEM_CLOCK_WAIT_FOR_AVAILABILITY=y
       - CONFIG_CLOCK_CONTROL_NRF_K32SRC_SYNTH=y
 
@@ -458,6 +458,6 @@ tests:
       - nrf51dk/nrf51822
     extra_configs:
       - CONFIG_CLOCK_CONTROL_NRF=y
-      - CONFIG_DEPRECATION_TEST=y
+      - CONFIG_WARN_DEPRECATED=n
       - CONFIG_SYSTEM_CLOCK_NO_WAIT=y
       - CONFIG_CLOCK_CONTROL_NRF_K32SRC_SYNTH=y
