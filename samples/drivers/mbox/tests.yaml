@@ -14,7 +14,6 @@ tests:
       - nrf54lm20dk/nrf54lm20a/cpuapp
       - nrf54lm20dk/nrf54lm20b/cpuapp
       - nrf7120dk/nrf7120/cpuapp
-      - nrf7120dk/nrf7120e/cpuapp
     integration_platforms:
       - nrf5340bsim/nrf5340/cpuapp
     harness: console
@@ -84,11 +83,9 @@ tests:
       - nrf54lm20dk/nrf54lm20a/cpuapp
       - nrf54lm20dk/nrf54lm20b/cpuapp
       - nrf7120dk/nrf7120/cpuapp
-      - nrf7120dk/nrf7120e/cpuapp
     integration_platforms:
       - nrf54l15dk/nrf54l15/cpuapp
       - nrf7120dk/nrf7120/cpuapp
-      - nrf7120dk/nrf7120e/cpuapp
     extra_args: mbox_SNIPPET=nordic-flpr
     sysbuild: true
     harness: console
@@ -105,7 +102,6 @@ tests:
       - nrf54lm20dk/nrf54lm20a/cpuapp
       - nrf54lm20dk/nrf54lm20b/cpuapp
       - nrf7120dk/nrf7120/cpuapp
-      - nrf7120dk/nrf7120e/cpuapp
     integration_platforms:
       - nrf54l15dk/nrf54l15/cpuapp
     extra_args:
@@ -127,7 +123,6 @@ tests:
       - nrf54lm20dk/nrf54lm20a/cpuapp
       - nrf54lm20dk/nrf54lm20b/cpuapp
       - nrf7120dk/nrf7120/cpuapp
-      - nrf7120dk/nrf7120e/cpuapp
     integration_platforms:
       - nrf54l15dk/nrf54l15/cpuapp
     extra_args:
