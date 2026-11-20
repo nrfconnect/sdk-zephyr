@@ -176,11 +176,7 @@ static void wifi_setup(void)
 #endif
 #endif
 
-/**
- * This function is used by TF-M (see target_cfg_71.c, nrf71_init.c). You must align the TF-M
- * implementation if you want to change this function.
- */
-int nordicsemi_nrf71_init(void)
+void soc_early_init_hook(void)
 {
 #if defined(CONFIG_HAS_NORDIC_RAM_CTRL) && !defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)
 	nrfx_ram_ctrl_retention_enable_all_set(false);
@@ -205,7 +201,6 @@ int nordicsemi_nrf71_init(void)
 
 	if (ret != 0) {
 		LOG_ERR("WICR programming failed: %d", ret);
-		return ret;
 	}
 #endif
 
@@ -229,12 +224,6 @@ int nordicsemi_nrf71_init(void)
 #elif defined(NRF_ICACHE)
 	nrf_cache_enable(NRF_ICACHE);
 #endif
-	return 0;
-}
-
-void soc_early_init_hook(void)
-{
-	(void)nordicsemi_nrf71_init();
 }
 
 void arch_busy_wait(uint32_t time_us)
