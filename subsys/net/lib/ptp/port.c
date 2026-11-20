@@ -1704,25 +1704,16 @@ enum ptp_port_event ptp_port_event_gen(struct ptp_port *port, int idx)
 	}
 
 	cnt = ptp_transport_recv(port, msg, idx);
-	if (cnt < 0) {
+	if (cnt <= 0) {
 		LOG_ERR("Error during message reception");
 		ptp_msg_unref(msg);
 		return PTP_EVT_FAULT_DETECTED;
 	}
 
-	if (cnt == 0) {
-		/* Nothing to process, e.g. an empty datagram */
-		ptp_msg_unref(msg);
-		return PTP_EVT_NONE;
-	}
-
-	/* Anyone on the multicast group can send an unsupported or malformed
-	 * message, so it is discarded and does not fault the port.
-	 */
 	ret = ptp_msg_post_recv(port, msg, cnt);
-	if (ret != 0) {
+	if (ret) {
 		ptp_msg_unref(msg);
-		return PTP_EVT_NONE;
+		return PTP_EVT_FAULT_DETECTED;
 	}
 
 	if (ptp_port_id_eq(&msg->header.src_port_id, &port->port_ds.id)) {
