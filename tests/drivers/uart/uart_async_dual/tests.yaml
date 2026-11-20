@@ -11,6 +11,7 @@ tests:
     depends_on: gpio
     platform_allow:
       - nrf54l15dk/nrf54l15/cpuapp
+      - nrf54h20dk/nrf54h20/cpurad
       - nrf54h20dk/nrf54h20/cpuppr
       - nrf9160dk/nrf9160
       - nrf52_bsim
@@ -22,6 +23,7 @@ tests:
     depends_on: gpio
     platform_allow:
       - nrf54l15dk/nrf54l15/cpuapp
+      - nrf54h20dk/nrf54h20/cpurad
       - nrf54h20dk/nrf54h20/cpuppr
       - nrf9160dk/nrf9160
       - nrf52_bsim
@@ -35,6 +37,7 @@ tests:
     platform_allow:
       - nrf54l15dk/nrf54l15/cpuapp
       - nrf54h20dk/nrf54h20/cpuapp
+      - nrf54h20dk/nrf54h20/cpurad
       - nrf54h20dk/nrf54h20/cpuppr
       - nrf9160dk/nrf9160
       - nrf52_bsim
@@ -49,6 +52,7 @@ tests:
     platform_allow:
       - nrf54l15dk/nrf54l15/cpuapp
       - nrf54h20dk/nrf54h20/cpuapp
+      - nrf54h20dk/nrf54h20/cpurad
       - nrf54h20dk/nrf54h20/cpuppr
       - nrf9160dk/nrf9160
       - nrf52_bsim
@@ -64,6 +68,7 @@ tests:
     platform_allow:
       - nrf54l15dk/nrf54l15/cpuapp
       - nrf54h20dk/nrf54h20/cpuapp
+      - nrf54h20dk/nrf54h20/cpurad
       - nrf54h20dk/nrf54h20/cpuppr
       - nrf9160dk/nrf9160
       - nrf52_bsim
