@@ -30,10 +30,6 @@
 #include <zephyr/sys/math_extras.h>
 #include <zephyr/sys/slist.h>
 
-#if defined(CONFIG_COAP_OSCORE)
-struct coap_oscore_context;
-#endif /* defined(CONFIG_COAP_OSCORE) */
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -341,10 +337,10 @@ struct coap_observer {
 	uint8_t tkl;
 #if defined(CONFIG_COAP_OSCORE) || defined(__DOXYGEN__)
 	/**
-	 * Not-NULL if the observer is OSCORE protected
+	 * True if the observer is OSCORE protected
 	 * @kconfig_dep{CONFIG_COAP_OSCORE}
 	 */
-	struct coap_oscore_context *oscore_ctx;
+	bool is_oscore;
 #endif
 };
 
@@ -367,10 +363,10 @@ struct coap_packet {
 #endif
 #if defined(CONFIG_COAP_OSCORE) || defined(__DOXYGEN__)
 	/**
-	 * Not-NULL if the packet was received OSCORE protected
+	 * True if the packet was received OSCORE protected
 	 * @kconfig_dep{CONFIG_COAP_OSCORE}
 	 */
-	struct coap_oscore_context *oscore_ctx;
+	bool is_oscore;
 #endif
 };
 
@@ -1073,11 +1069,10 @@ void coap_observer_init(struct coap_observer *observer,
  * @param observer Observer to be initialized
  * @param request Request on which the observer will be based
  * @param addr Address of the remote device
- * @param oscore_ctx OSCORE context to be used for the observer
+ * @param is_oscore True if the remote device is sending OSCORE protected
  */
 void coap_observer_init_oscore(struct coap_observer *observer, const struct coap_packet *request,
-			       const struct net_sockaddr *addr,
-			       struct coap_oscore_context *oscore_ctx);
+			       const struct net_sockaddr *addr, bool is_oscore);
 #endif /* CONFIG_COAP_OSCORE */
 
 /**
