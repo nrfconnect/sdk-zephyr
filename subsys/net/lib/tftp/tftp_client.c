@@ -225,10 +225,10 @@ static int send_data(int sock, struct tftpc *client, const struct net_sockaddr *
 					};
 
 					evt.param.error.msg = error_msg(client, ret);
-					evt.param.error.code = blockno;
+					evt.param.error.code = block_no;
 					client->callback(&evt);
 				}
-				LOG_WRN("Server rejected the data block.");
+				LOG_WRN("Server responded with obsolete block number.");
 				break;
 			} else {
 				LOG_ERR("Server responded with invalid opcode or block number.");
