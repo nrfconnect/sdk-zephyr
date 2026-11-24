@@ -3,10 +3,15 @@
 
 # PSA Crypto Random source configuration options
 
+DT_CHOSEN_Z_ENTROPY := zephyr,entropy
+
 config ENTROPY_PSA_CRYPTO_RNG
 	bool "PSA Crypto Random source Entropy driver"
 	depends on DT_HAS_ZEPHYR_PSA_CRYPTO_RNG_ENABLED
 	depends on PSA_CRYPTO
+	# Mbed TLS seeds its PSA core from the chosen entropy device.
+	depends on !(PSA_CRYPTO_PROVIDER_MBEDTLS && \
+		$(dt_chosen_has_compat,$(DT_CHOSEN_Z_ENTROPY),$(DT_COMPAT_ZEPHYR_PSA_CRYPTO_RNG)))
 	select ENTROPY_HAS_DRIVER
 	default y
 	help
