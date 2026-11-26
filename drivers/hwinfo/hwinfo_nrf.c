@@ -23,6 +23,10 @@
 #include <hal/nrf_ficr.h>
 #endif
 
+#if defined(CONFIG_IRONSIDE_TE_CLIENT)
+#include <ironside_client/services/boot_report.h>
+#endif
+
 #if defined(CONFIG_HAS_IRONSIDE_SE)
 #include <ironside/se/boot_report.h>
 #if defined(IRONSIDE_SE_APPLICATION_BOOT_REPORT_ADDRESS) && \
@@ -114,11 +118,52 @@ ssize_t z_impl_hwinfo_get_device_id(uint8_t *buffer, size_t length)
 
 #endif /* NRF_RESETINFO */
 
+#if defined(CONFIG_IRONSIDE_TE_CLIENT)
+/* IronSide TE reads and clears RESETREAS on every boot and hands it over in the boot report. */
+static bool s_reset_reason_cleared;
+
+static int boot_report_reset_reason_get(uint32_t *reason)
+{
+	struct ironside_boot_report report;
+	size_t len;
+
+	if (s_reset_reason_cleared) {
+		*reason = 0U;
+		return 0;
+	}
+
+	if (ironside_boot_report_get(&report, sizeof(report), &len) != 0) {
+		return -EIO;
+	}
+
+	*reason = report.reset_reason;
+
+	/* IronSide TE resets the device on the application faults it takes, which only
+	 * leaves a software reset. A lockup is the closest cause to tell a crash by.
+	 */
+	if ((report.fault.present != 0U) &&
+	    (report.fault.source == IRONSIDE_FAULT_SOURCE_CPU_EXCEPTION)) {
+		*reason |= REASON_LOCKUP;
+	}
+
+	return 0;
+}
+#endif /* CONFIG_IRONSIDE_TE_CLIENT */
+
 int z_impl_hwinfo_get_reset_cause(uint32_t *cause)
 {
 	uint32_t flags = 0;
 
+#if defined(CONFIG_IRONSIDE_TE_CLIENT)
+	uint32_t reason;
+	int err = boot_report_reset_reason_get(&reason);
+
+	if (err != 0) {
+		return err;
+	}
+#else
 	uint32_t reason = nrfx_reset_reason_get();
+#endif
 
 	if (reason & NRFX_RESET_REASON_RESETPIN_MASK) {
 		flags |= RESET_PIN;
@@ -221,9 +266,13 @@ int z_impl_hwinfo_get_reset_cause(uint32_t *cause)
 
 int z_impl_hwinfo_clear_reset_cause(void)
 {
+#if defined(CONFIG_IRONSIDE_TE_CLIENT)
+	s_reset_reason_cleared = true;
+#else
 	uint32_t reason = -1;
 
 	nrfx_reset_reason_clear(reason);
+#endif
 
 	return 0;
 }

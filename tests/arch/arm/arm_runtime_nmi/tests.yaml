@@ -1,7 +1,7 @@
 tests:
   arch.arm.interrupt.nmi:
     filter: CONFIG_ARMV6_M_ARMV8_M_BASELINE or CONFIG_ARMV7_M_ARMV8_M_MAINLINE and
-      not CONFIG_BUILD_WITH_TFM
+      not CONFIG_TRUSTED_EXECUTION_NONSECURE
     arch_allow: arm
     tags:
       - nmi

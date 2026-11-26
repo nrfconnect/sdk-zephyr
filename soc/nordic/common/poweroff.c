@@ -4,10 +4,13 @@
  */
 
 #include <zephyr/sys/poweroff.h>
+#include <zephyr/sys/util.h>
 #include <zephyr/toolchain.h>
 #include <zephyr/drivers/retained_mem/nrf_retained_mem.h>
 
-#if defined(CONFIG_TFM_NRF_SYSTEM_OFF_SERVICE)
+#if defined(CONFIG_IRONSIDE_TE_CLIENT)
+#include <ironside_client/services/platform.h>
+#elif defined(CONFIG_TFM_NRF_SYSTEM_OFF_SERVICE)
 #include "tfm_platform_api.h"
 #elif defined(CONFIG_SOC_SERIES_NRF51) || defined(CONFIG_SOC_SERIES_NRF52)
 #include <hal/nrf_power.h>
@@ -32,7 +35,32 @@
 
 void z_sys_poweroff(void)
 {
-#if defined(CONFIG_TFM_NRF_SYSTEM_OFF_SERVICE)
+#if defined(CONFIG_IRONSIDE_TE_CLIENT)
+	/* MEMCONF and REGULATORS are secure-only here: a non-secure store to
+	 * either of them takes a SecureFault that IronSide TE turns into a reset.
+	 * IronSide TE enters System OFF with RAM retention as it finds it, and
+	 * retention resets enabled, so disable it first as on the other targets.
+	 * A refused write leaves retention on and costs System OFF current only.
+	 */
+	const uint32_t vpr_ret_addr = (uint32_t)&NRF_MEMCONF_S->POWER[VPR_POWER_IDX].RET;
+	const struct ironside_client_platform_mem_write_pair ret_off[] = {
+		{.addr = (uint32_t)&NRF_MEMCONF_S->POWER[0].RET, .value = 0U},
+#if NRF_MEMCONF_HAS_RET2
+		{.addr = (uint32_t)&NRF_MEMCONF_S->POWER[0].RET2, .value = 0U},
+#endif
+	};
+	uint32_t vpr_ret;
+
+	(void)ironside_platform_mem_write(ret_off, ARRAY_SIZE(ret_off), NULL, 0U);
+
+	/* Set VPR to remain in its reset state when waking from OFF */
+	if (ironside_platform_reg_read(vpr_ret_addr, &vpr_ret) == 0) {
+		(void)ironside_platform_reg_write(vpr_ret_addr, vpr_ret & ~BIT(VPR_RET_BIT), NULL);
+	}
+
+	(void)ironside_platform_system_off();
+
+#elif defined(CONFIG_TFM_NRF_SYSTEM_OFF_SERVICE)
 	tfm_platform_system_off();
 #else
 
@@ -69,7 +97,7 @@ void z_sys_poweroff(void)
 	nrf_regulators_system_off(NRF_REGULATORS);
 #endif
 
-#endif /* CONFIG_TFM_NRF_SYSTEM_OFF_SERVICE */
+#endif /* CONFIG_IRONSIDE_TE_CLIENT */
 
 	CODE_UNREACHABLE;
 }

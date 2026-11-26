@@ -20,6 +20,8 @@ tests:
       - CONFIG_MBEDTLS_PSA_CRYPTO_EXTERNAL_RNG=y
       - CONFIG_MBEDTLS_PSA_CRYPTO_EXTERNAL_RNG_ALLOW_NON_CSPRNG=y
   libraries.encoding.jwt.rsa.psa:
+    # IronSide TE has no RSA.
+    filter: not CONFIG_PSA_CRYPTO_PROVIDER_IRONSIDE_TE
     extra_configs:
       - CONFIG_JWT_SIGN_RSA_PSA=y
       # Explicitly select CONFIG_MBEDTLS_PSA_CRYPTO_EXTERNAL_RNG because this
