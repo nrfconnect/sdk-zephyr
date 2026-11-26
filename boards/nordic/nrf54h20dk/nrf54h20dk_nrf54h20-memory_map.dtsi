@@ -85,15 +85,15 @@
 		};
 
 		cpuppr_code_data: memory@2fc00000 {
-			reg = <0x2fc00000 DT_SIZE_K(62)>;
+			reg = <0x2fc00000 DT_SIZE_K(63)>;
 		};
 
 		cpuapp_cpuppr_ipc_shm: memory@2fc0f800 {
-			reg = <0x2fc0f800 DT_SIZE_K(1)>;
+			reg = <0x2fc0fc00 512>;
 		};
 
 		cpuppr_cpuapp_ipc_shm: memory@2fc0fc00 {
-			reg = <0x2fc0fc00 DT_SIZE_K(1)>;
+			reg = <0x2fc0fe00 512>;
 		};
 
 		cpuapp_dma_region: memory@2fc12000 {
