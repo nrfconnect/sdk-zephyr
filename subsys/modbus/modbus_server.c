@@ -139,14 +139,6 @@ static bool mbs_fc01_coil_read(struct modbus_context *ctx)
 
 	/* Calculate byte count for response. */
 	num_bytes = ((coil_qty - 1) / 8) + 1;
-
-	/* Byte count and data bytes must fit into the response buffer. */
-	if ((num_bytes + 1U) > sizeof(ctx->tx_adu.data)) {
-		LOG_ERR("Response for %u coils exceeds buffer size", coil_qty);
-		mbs_exception_rsp(ctx, MODBUS_EXC_ILLEGAL_DATA_VAL);
-		return true;
-	}
-
 	/* Number of data bytes + byte count. */
 	ctx->tx_adu.length = num_bytes + 1;
 	/* Set number of data bytes in response message. */
@@ -246,14 +238,6 @@ static bool mbs_fc02_di_read(struct modbus_context *ctx)
 
 	/* Get number of bytes needed for response. */
 	num_bytes = ((di_qty - 1) / 8) + 1;
-
-	/* Byte count and data bytes must fit into the response buffer. */
-	if ((num_bytes + 1U) > sizeof(ctx->tx_adu.data)) {
-		LOG_ERR("Response for %u inputs exceeds buffer size", di_qty);
-		mbs_exception_rsp(ctx, MODBUS_EXC_ILLEGAL_DATA_VAL);
-		return true;
-	}
-
 	/* Number of data bytes + byte count. */
 	ctx->tx_adu.length = num_bytes + 1;
 	/* Set number of data bytes in response message. */
@@ -347,13 +331,6 @@ static bool mbs_fc03_hreg_read(struct modbus_context *ctx)
 
 	/* Get number of bytes needed for response. */
 	num_bytes = (uint8_t)(reg_qty * sizeof(uint16_t));
-
-	/* Byte count and data bytes must fit into the response buffer. */
-	if ((num_bytes + 1U) > sizeof(ctx->tx_adu.data)) {
-		LOG_ERR("Response for %u registers exceeds buffer size", reg_qty);
-		mbs_exception_rsp(ctx, MODBUS_EXC_ILLEGAL_DATA_VAL);
-		return true;
-	}
 
 	if ((reg_addr < MODBUS_FP_EXTENSIONS_ADDR) ||
 	    !IS_ENABLED(CONFIG_MODBUS_FP_EXTENSIONS)) {
@@ -466,13 +443,6 @@ static bool mbs_fc04_inreg_read(struct modbus_context *ctx)
 
 	/* Get number of bytes needed for response. */
 	num_bytes = (uint8_t)(reg_qty * sizeof(uint16_t));
-
-	/* Byte count and data bytes must fit into the response buffer. */
-	if ((num_bytes + 1U) > sizeof(ctx->tx_adu.data)) {
-		LOG_ERR("Response for %u registers exceeds buffer size", reg_qty);
-		mbs_exception_rsp(ctx, MODBUS_EXC_ILLEGAL_DATA_VAL);
-		return true;
-	}
 
 	if ((reg_addr < MODBUS_FP_EXTENSIONS_ADDR) ||
 	    !IS_ENABLED(CONFIG_MODBUS_FP_EXTENSIONS)) {
