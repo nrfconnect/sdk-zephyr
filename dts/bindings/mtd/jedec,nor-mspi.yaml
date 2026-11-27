@@ -11,7 +11,6 @@ include:
     property-allowlist:
       - jedec-id
       - size
-      - page-size
       - sfdp-bfp
       - sfdp-ff05
       - sfdp-ff84
