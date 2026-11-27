@@ -2037,9 +2037,17 @@ static int dev_pm_action_cb(const struct device *dev,
 		bool xip_enabled = COND_CODE_1(CONFIG_MSPI_XIP,
 					       (dev_data->xip_enabled != 0),
 					       (false));
-		int rc = 0;
 
+#if defined(CONFIG_PINCTRL)
+		const struct mspi_dw_config *dev_config = dev->config;
+		int rc = pinctrl_apply_state(dev_config->pcfg,
+					     PINCTRL_STATE_SLEEP);
 
+		if (rc < 0) {
+			LOG_ERR("Cannot apply sleep pins state (%d)", rc);
+			return rc;
+		}
+#endif
 #if defined(CONFIG_MULTITHREADING)
 		if (xip_enabled ||
 		    k_sem_take(&dev_data->ctx_lock, K_NO_WAIT) != 0) {
@@ -2050,25 +2058,15 @@ static int dev_pm_action_cb(const struct device *dev,
 			return -EBUSY;
 		}
 
-#if defined(CONFIG_PINCTRL)
-		const struct mspi_dw_config *dev_config = dev->config;
+		dev_data->suspended = true;
 
-		rc = pinctrl_apply_state(dev_config->pcfg, PINCTRL_STATE_SLEEP);
-		if (rc < 0) {
-			LOG_ERR("Cannot apply sleep pins state (%d)", rc);
-		}
-#endif
-		if (rc >= 0) {
-			dev_data->suspended = true;
-
-			vendor_specific_suspend(dev);
-		}
+		vendor_specific_suspend(dev);
 
 #if defined(CONFIG_MULTITHREADING)
 		k_sem_give(&dev_data->ctx_lock);
 #endif
 
-		return rc;
+		return 0;
 	}
 
 	return -ENOTSUP;
