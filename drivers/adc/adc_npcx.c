@@ -394,7 +394,7 @@ static void adc_npcx_isr(const struct device *dev)
 
 /*
  * Validate the buffer size with adc channels mask. If it is lower than what
- * we need return -ENOMEM.
+ * we need return -ENOSPC.
  */
 static int adc_npcx_validate_buffer_size(const struct device *dev,
 					const struct adc_sequence *sequence)
@@ -416,7 +416,7 @@ static int adc_npcx_validate_buffer_size(const struct device *dev,
 	}
 
 	if (sequence->buffer_size < needed) {
-		return -ENOMEM;
+		return -ENOSPC;
 	}
 
 	return 0;
