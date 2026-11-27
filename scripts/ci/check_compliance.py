@@ -377,11 +377,11 @@ class CheckPatch(ComplianceTest):
 
 class BoardYmlCheck(ComplianceTest):
     """
-    Check the board.yml files
+    Check the board.yml and shield.yml files
     """
 
     name = "BoardYml"
-    doc = "Check the board.yml file format"
+    doc = "Check the board.yml and shield.yml file format"
 
     def check_board_file(self, file, vendor_prefixes):
         """Validate a single board file."""
@@ -418,8 +418,9 @@ class BoardYmlCheck(ComplianceTest):
             if vendor_prefix_file.exists():
                 vendor_prefixes |= get_vendor_prefixes(vendor_prefix_file, self.error)
 
-        for file in path.glob("**/board.yml"):
-            self.check_board_file(file, vendor_prefixes)
+        for pattern in ("**/board.yml", "**/shield.yml"):
+            for file in path.glob(pattern):
+                self.check_board_file(file, vendor_prefixes)
 
 
 class ClangFormatCheck(ComplianceTest):
@@ -471,7 +472,36 @@ class ClangFormatCheck(ComplianceTest):
             except subprocess.CalledProcessError as ex:
                 patchset = unidiff.PatchSet.from_string(ex.output, encoding="utf-8")
                 for patch in patchset:
+                    # .clang-format-ignore: clang-format skips the file (exit 0, empty stdout).
+                    # clang-format-diff diffs against that empty output, yielding a spurious
+                    # full-file removal diff; unidiff reports that as is_removed_file.
+                    if patch.is_removed_file:
+                        continue
                     self._process_patch_error(file, patch)
+
+
+class FileNameCheck(ComplianceTest):
+    """
+    Check if Kconfig files have wrongly be named overlays
+    """
+
+    name = "FileName"
+    doc = zephyr_doc_detail_builder("/develop/application/index.html#application-configuration")
+
+    def run(self):
+        for file in get_files(filter="d"):
+            file_path = Path(file)
+            if file_path.suffix != '.conf':
+                continue
+
+            if file_path.name.lower().startswith('overlay'):
+                self.fmtd_failure(
+                    "error",
+                    "FileNameDisallowed",
+                    file_path,
+                    0,
+                    desc='Kconfig fragment files are not overlay files',
+                )
 
 
 class StyleCheckMixin:
@@ -829,6 +859,11 @@ class KconfigCheck(ComplianceTest):
     # Kconfig symbol prefix/namespace.
     CONFIG_ = "CONFIG_"
 
+    # Additional guidance appended to the "Undefined Kconfig symbols" failure
+    # message. Subclasses can override this to describe probable causes
+    # specific to the Kconfig tree being checked.
+    UNDEF_SYMBOL_HINT = ""
+
     # If modules should be excluded from checks.
     EXCLUDE_MODULES = False
 
@@ -880,6 +915,23 @@ class KconfigCheck(ComplianceTest):
         self.check_soc_name_sync(kconf)
         self.check_no_undef_outside_kconfig(kconf)
         self.check_disallowed_defconfigs(kconf)
+        self.check_no_parser_warnings(kconf)
+        self.check_hardening_data(kconf)
+        self.check_deprecated_experimental_in_prompt(kconf)
+
+    def check_no_parser_warnings(self, kconf):
+        """
+        Checks that the Kconfig parser emitted no warnings, for example a
+        symbol left without a type because the definition carrying it lives
+        in a module.
+        """
+        if not kconf.warnings:
+            return
+
+        self.failure(
+            "Kconfig parser warnings:\n\n"
+            + "\n".join(warning.strip() for warning in kconf.warnings)
+        )
 
     def get_modules(self, _module_dirs_file, modules_file, sysbuild_modules_file, settings_file):
         """
@@ -1053,10 +1105,16 @@ class KconfigCheck(ComplianceTest):
                     ).upper()
                     fp.write('config  ' + board_str + '\n')
                     fp.write('\t bool\n')
-                for board_dir in board.directories:
-                    fp.write(
-                        'source "' + (board_dir / ('Kconfig.' + board.name)).as_posix() + '"\n'
-                    )
+                fp.write(
+                    'source "'
+                    + (board.directories[0] / ('Kconfig.' + board.name)).as_posix()
+                    + '"\n'
+                )
+                if len(board.directories) > 1:
+                    for board_dir in board.directories[1:]:
+                        fp.write(
+                            'osource "' + (board_dir / ('Kconfig.' + board.name)).as_posix() + '"\n'
+                        )
 
         with open(kconfig_file, 'w') as fp:
             for board in v2_boards:
@@ -1472,6 +1530,150 @@ Found disallowed Kconfig symbol in SoC Kconfig files: {sym_name:35}
             [sym.name for sym in kconf_syms] + re.findall(regex, grep_stdout, re.MULTILINE)
         ).union(self.get_logging_syms(kconf))
 
+    def check_hardening_data(self, kconf):
+        """
+        Checks that the hardening database (scripts/kconfig/hardening.yaml
+        plus the hardening.yaml fragments next to subsystem Kconfig files)
+        parses, matches its schema, and only references Kconfig symbols that
+        exist, with values coherent with each symbol's type.
+        """
+        # scripts/kconfig is on sys.path since parse_kconfig() ran
+        import hardeninglib
+
+        # A misnamed fragment would silently not be loaded; make it loud.
+        fragment_name_re = re.compile(r"harden.*\.ya?ml$", re.IGNORECASE)
+        for root in hardeninglib.FRAGMENT_ROOTS:
+            root_dir = Path(ZEPHYR_BASE) / root
+            if not root_dir.is_dir():
+                continue
+            for path in root_dir.rglob("*.y*ml"):
+                if fragment_name_re.search(path.name) and path.name != hardeninglib.FRAGMENT_NAME:
+                    self.failure(
+                        f"{path.relative_to(ZEPHYR_BASE)} looks like a "
+                        "hardening database fragment but is not named "
+                        f"'{hardeninglib.FRAGMENT_NAME}', so it will not be "
+                        "loaded. Hint: rename it."
+                    )
+
+        try:
+            database = hardeninglib.load_database()
+        except hardeninglib.HardeningDatabaseError as e:
+            self.failure(f"Malformed hardening database: {e}")
+            return
+
+        profile_errors = hardeninglib.check_profile_integrity(database)
+        for error in profile_errors:
+            self.failure(
+                f"Hardening database: {error}\n"
+                "Hint: profiles are defined in scripts/kconfig/hardening.yaml."
+            )
+
+        defined_syms = self.get_defined_syms(kconf)
+        for name, rule in database['rules'].items():
+            hint = f"Hint: update '{rule['source']}' accordingly."
+
+            if name not in defined_syms:
+                self.failure(f"CONFIG_{name} in {rule['source']} does not exist in Kconfig. {hint}")
+                continue
+
+            sym = kconf.syms.get(name)
+            if sym is None:
+                # Defined only in a sample/test Kconfig tree; the symbol's
+                # type is not available for further checking.
+                continue
+
+            is_numeric = sym.orig_type in (kconfiglib.INT, kconfiglib.HEX)
+
+            # The schema guarantees a rule carries either a value or a
+            # min/max constraint, so 'value' is set in the branches below.
+            if rule['min'] is not None or rule['max'] is not None:
+                if not is_numeric:
+                    self.failure(
+                        f"CONFIG_{name} in {rule['source']} has a min/max "
+                        f"constraint, but is not an int/hex symbol. {hint}"
+                    )
+            elif sym.orig_type in (kconfiglib.BOOL, kconfiglib.TRISTATE):
+                valid = ('y', 'n', 'm') if sym.orig_type is kconfiglib.TRISTATE else ('y', 'n')
+                if rule['value'] not in valid:
+                    self.failure(
+                        f"CONFIG_{name} in {rule['source']} recommends value "
+                        f"'{rule['value']}', which is not valid for a "
+                        f"{kconfiglib.TYPE_TO_STR[sym.orig_type]} symbol. {hint}"
+                    )
+            elif is_numeric:
+                try:
+                    int(rule['value'], 0)
+                except ValueError:
+                    self.failure(
+                        f"CONFIG_{name} in {rule['source']} recommends "
+                        f"value '{rule['value']}', which is not valid "
+                        f"for an int/hex symbol. {hint}"
+                    )
+
+        # The redundancy analysis resolves profile inheritance, so it can
+        # only run once the profiles themselves are known to be consistent.
+        if not profile_errors:
+            self.check_no_redundant_hardening_rules(kconf, database)
+
+    def check_no_redundant_hardening_rules(self, kconf, database):
+        """
+        Checks that no 'n' rule in the hardening database is redundant: a
+        rule for a symbol that can only be enabled while violating another
+        'n' rule applying to at least the same profiles adds nothing (e.g.
+        FILE_SYSTEM_SHELL=n is pointless when SHELL=n is already flagged
+        for the same profiles and FILE_SYSTEM_SHELL depends on SHELL).
+        Rules for symbols that merely 'select' a flagged symbol are not
+        redundant; they point at the actionable option.
+        """
+        # scripts/kconfig is on sys.path since parse_kconfig() ran
+        import hardeninglib
+
+        profiles = database['profiles']
+
+        def applies_to(rule):
+            # profiles a rule is active in, following 'extends'
+            return {
+                p
+                for p in profiles
+                if hardeninglib.profile_closure(profiles, p) & set(rule['profiles'])
+            }
+
+        off_rules = {name: rule for name, rule in database['rules'].items() if rule['value'] == 'n'}
+
+        def required_syms(sym, seen):
+            # Symbols that must be enabled for 'sym' to be enabled:
+            # positive AND-branches of the direct dependencies, followed
+            # transitively. Conservative: OR/NOT branches are skipped.
+            out = []
+
+            def walk(expr):
+                if isinstance(expr, kconfiglib.Symbol):
+                    if not expr.is_constant and expr.name not in seen:
+                        seen.add(expr.name)
+                        out.append(expr)
+                        walk(expr.direct_dep)
+                elif isinstance(expr, tuple) and expr[0] == kconfiglib.AND:
+                    walk(expr[1])
+                    walk(expr[2])
+
+            walk(sym.direct_dep)
+            return out
+
+        for name, rule in off_rules.items():
+            sym = kconf.syms.get(name)
+            if sym is None:
+                continue
+            for dep in required_syms(sym, {name}):
+                other = off_rules.get(dep.name)
+                if other and applies_to(rule) <= applies_to(other):
+                    self.failure(
+                        f"CONFIG_{name} in {rule['source']} is redundant: "
+                        f"it requires CONFIG_{dep.name}, which "
+                        f"{other['source']} already recommends disabling "
+                        "for the same profiles. Hint: remove the "
+                        f"CONFIG_{name} rule."
+                    )
+
     def check_top_menu_not_too_long(self, kconf):
         """
         Checks that there aren't too many items in the top-level menu (which
@@ -1619,7 +1821,10 @@ https://docs.zephyrproject.org/latest/build/kconfig/tips.html#menuconfig-symbols
         )
 
         if undef_ref_warnings:
-            self.failure(f"Undefined Kconfig symbols:\n\n {undef_ref_warnings}")
+            msg = f"Undefined Kconfig symbols:\n\n {undef_ref_warnings}"
+            if self.UNDEF_SYMBOL_HINT:
+                msg += f"\n\n{self.UNDEF_SYMBOL_HINT}"
+            self.failure(msg)
 
     def check_soc_name_sync(self, kconf):
         root_args = argparse.Namespace(**{'soc_roots': [ZEPHYR_BASE]})
@@ -1705,6 +1910,7 @@ Missing SoC names or CONFIG_SOC vs soc.yml out of sync:
             ":!/doc/nrf/app_dev/device_guides/nrf70/wifi_advanced_security_modes.rst",
             ":!/doc/nrf-bm/release_notes",
             cwd=GIT_TOP,
+            ignore_non_zero=True,
         )
 
         self_folder = Path(__file__).resolve().parent
@@ -1783,6 +1989,99 @@ flagged.
 
 {undef_desc}""")
 
+    def check_deprecated_experimental_in_prompt(self, kconf):
+        # Checks that deprecated Kconfigs end with ` [DEPRECATED]` in the prompt string and that
+        # experimental Kconfigs end with ` [EXPERIMENTAL]` in the prompt string (if they have them)
+
+        for node in kconf.node_iter():
+            # Skip Kconfig nodes not in-tree (will present an absolute path)
+            if os.path.isabs(node.filename):
+                continue
+
+            # 'kconfiglib' is global
+            # pylint: disable=undefined-variable
+
+            if (
+                not isinstance(node.item, kconfiglib.Symbol)
+                or not node.prompt
+                or not node.prompt[0]
+            ):
+                continue
+
+            if node.item.type != kconfiglib.BOOL:
+                if node.prompt[0].endswith(" [EXPERIMENTAL]"):
+                    self.failure(f"""
+Non-bool Kconfig '{node.item.name}' prompt wrongfully has ` [EXPERIMENTAL]` string at the end.
+Please check Kconfig guidelines.
+""")
+
+                continue
+
+            selects_deprecated = False
+            deprecated_kconfig = kconf.syms['DEPRECATED']
+            selects_experimental = False
+            experimental_kconfig = kconf.syms['EXPERIMENTAL']
+
+            for select_node in node.orig_selects:
+                if select_node[0] == deprecated_kconfig:
+                    selects_deprecated = True
+
+                    i = 1
+                    while i < len(select_node):
+                        if (
+                            isinstance(select_node[i], kconfiglib.Symbol)
+                            and select_node[i] != kconf.y
+                        ) or isinstance(select_node[i], tuple):
+                            self.failure(f"""
+Deprecated Kconfig '{node.item.name}' selects DEPRECATED using if conditions, it must only
+outright select DEPRECATED.
+Please check Kconfig guidelines.
+""")
+                            break
+                        i = i + 1
+                    break
+                if select_node[0] == experimental_kconfig:
+                    selects_experimental = True
+
+                    i = 1
+                    while i < len(select_node):
+                        if (
+                            isinstance(select_node[i], kconfiglib.Symbol)
+                            and select_node[i] != kconf.y
+                        ) or isinstance(select_node[i], tuple):
+                            self.failure(f"""
+Experimental Kconfig '{node.item.name}' selects EXPERIMENTAL using if conditions, it must only
+outright select EXPERIMENTAL.
+Please check Kconfig guidelines.
+""")
+                            break
+                        i = i + 1
+                    break
+
+            if selects_deprecated is False and node.prompt[0].endswith(" [DEPRECATED]"):
+                self.failure(f"""
+Non-deprecated Kconfig '{node.item.name}' prompt wrongfully has ` [DEPRECATED]` string at the end.
+Please check Kconfig guidelines.
+""")
+
+            if selects_experimental is False and node.prompt[0].endswith(" [EXPERIMENTAL]"):
+                self.failure(f"""
+Non-experimental Kconfig '{node.item.name}' prompt wrongfully has ` [EXPERIMENTAL]` string at the
+end. Please check Kconfig guidelines.
+""")
+
+            if selects_deprecated is True and not node.prompt[0].endswith(" [DEPRECATED]"):
+                self.failure(f"""
+Deprecated Kconfig '{node.item.name}' prompt lacks ` [DEPRECATED]` string at the end. Please
+check Kconfig guidelines.
+""")
+
+            if selects_experimental is True and not node.prompt[0].endswith(" [EXPERIMENTAL]"):
+                self.failure(f"""
+Experimental Kconfig '{node.item.name}' prompt lacks ` [EXPERIMENTAL]` string at the end. Please
+check Kconfig guidelines.
+""")
+
 
 class KconfigBasicCheck(KconfigCheck):
     """
@@ -1795,6 +2094,9 @@ class KconfigBasicCheck(KconfigCheck):
     name = "KconfigBasic"
 
     def check_no_undef_outside_kconfig(self, kconf):
+        pass
+
+    def check_hardening_data(self, kconf):
         pass
 
 
@@ -1830,10 +2132,26 @@ class KconfigHWMv2Check(KconfigBasicCheck):
     """
 
     name = "KconfigHWMv2"
+    doc = zephyr_doc_detail_builder("/hardware/porting/board_porting.html#write-kconfig-files")
 
     # Use dedicated Kconfig board / soc v2 scheme file.
     # This file sources only v2 scheme tree.
     FILENAME = os.path.join(os.path.dirname(__file__), "Kconfig.board.v2")
+
+    UNDEF_SYMBOL_HINT = """\
+This check loads only the board and SoC Kconfig trees (Kconfig.<board> and
+Kconfig.soc files) without the rest of the Zephyr Kconfig tree, because those
+files must be loadable standalone; for example, sysbuild also loads them.
+
+Probable causes of the undefined symbol warnings above:
+- A Kconfig.<board> or Kconfig.soc file references a symbol defined outside
+  the board and SoC Kconfig trees, for example a driver or subsystem symbol.
+  Move the reference to the Kconfig or Kconfig.defconfig file of the board or
+  SoC instead, as those files are only loaded in the full Zephyr Kconfig tree.
+- The symbol name is misspelled, or the file defining it is not sourced."""
+
+    def check_deprecated_experimental_in_prompt(self, kconf):
+        return
 
 
 class SysbuildKconfigCheck(KconfigCheck):
@@ -1882,6 +2200,11 @@ class SysbuildKconfigCheck(KconfigCheck):
         "SUPPORT_NETCORE_PERIPHERAL_RADIO_TEST",  # Used by wifi radio test sample
         # zephyr-keep-sorted-stop
     }
+
+    def check_hardening_data(self, kconf):
+        # The hardening database references application Kconfig symbols,
+        # which do not exist in the sysbuild Kconfig tree.
+        pass
 
 
 class SysbuildKconfigBasicCheck(SysbuildKconfigCheck, KconfigBasicCheck):
