@@ -25,7 +25,6 @@
 #ifdef CONFIG_HL78XX_GNSS
 #include "hl78xx_gnss.h"
 #endif /* CONFIG_HL78XX_GNSS */
-#define MAX_SCRIPT_AT_CMD_RETRY 3
 
 #define MDM_NODE                         DT_ALIAS(modem)
 /* Check phandle target status for a specific phandle index */
@@ -102,8 +101,8 @@ static const char *hl78xx_state_str(enum hl78xx_state state)
 		return "set baudrate";
 	case MODEM_HL78XX_STATE_RUN_INIT_SCRIPT:
 		return "run init script";
-	case MODEM_HL78XX_STATE_RUN_INIT_FAIL_DIAGNOSTIC_SCRIPT:
-		return "init fail diagnostic script ";
+	case MODEM_HL78XX_STATE_RECOVERY:
+		return "recovery";
 	case MODEM_HL78XX_STATE_RUN_RAT_CONFIG_SCRIPT:
 		return "run rat cfg script";
 	case MODEM_HL78XX_STATE_RUN_PMC_CONFIG_SCRIPT:
@@ -276,6 +275,13 @@ static void hl78xx_handle_restart_requested_event(struct hl78xx_data *data)
 	 * emitted again when the modem returns to AWAIT_REGISTERED.
 	 */
 	data->status.at_cmd_ready_sent = false;
+
+	/* A restart abandons whatever the chat was doing (e.g. a power-off
+	 * script orphaned by a failed +KSUP boot). Release the chat now so the
+	 * scripts that follow the reset are not refused with -EBUSY by a
+	 * script that can no longer complete.
+	 */
+	hl78xx_chat_abort_active_script(data);
 
 	if (mode == HL78XX_MODEM_RESTART_HARD) {
 		if (!hl78xx_gpio_is_enabled(&config->mdm_gpio_reset)) {
@@ -457,6 +463,15 @@ static bool hl78xx_should_request_kcellmeas_manual(struct hl78xx_data *data)
 	const struct hl78xx_config *config = data->devices.hl78xx->config;
 
 #ifdef CONFIG_MODEM_HL78XX_LOW_POWER_MODE
+	/* After a carrier-off the host has no addresses and no DNS state, and
+	 * the measurement that brings the carrier back follows a wake, not a
+	 * registration: a registration that comes back after a coverage loss
+	 * has no wake behind it, so the wait requests the measurement itself.
+	 */
+	if (data->status.lpm.host_config_lost) {
+		return true;
+	}
+
 	if (data->status.kcellmeas.bootstrap_done) {
 		return false;
 	}
@@ -495,6 +510,11 @@ void hl78xx_start_timer(struct hl78xx_data *data, k_timeout_t timeout)
 void hl78xx_reschedule_timer(struct hl78xx_data *data, k_timeout_t timeout)
 {
 	(void)k_work_reschedule(&data->work.timeout_work, timeout);
+}
+
+uint32_t hl78xx_get_timer_remaining(struct hl78xx_data *data)
+{
+	return k_ticks_to_ms_floor32(k_work_delayable_remaining_get(&data->work.timeout_work));
 }
 
 void hl78xx_stop_timer(struct hl78xx_data *data)
@@ -646,6 +666,22 @@ void hl78xx_on_cxreg(struct modem_chat *chat, char **argv, uint16_t argc, void *
 		return;
 	}
 
+	if (data->status.phone_functionality.in_progress &&
+	    data->status.phone_functionality.functionality != HL78XX_FULLY_FUNCTIONAL) {
+		/* A transition to CFUN=0/4 is in flight (SIM switch, GNSS entry,
+		 * shutdown). The detach can take many seconds, and the modem
+		 * flushes queued URCs from the old state around the OK — a late
+		 * registration here is stale by definition. Parsed and stored
+		 * above, but it must not drive events: dispatching it arms
+		 * post-registration work (AT+KCELL, the power-down feed) against
+		 * a SIM that is about to be gone.
+		 */
+		LOG_WRN("Recording %s (stat %d) without dispatch: CFUN transition to %d in flight",
+			argv[0], registration_status,
+			data->status.phone_functionality.functionality);
+		return;
+	}
+
 	HL78XX_LOG_DBG("%s: %d", argv[0], registration_status);
 	if (registration_status == data->status.registration.network_state_current) {
 		/* Check if RAT mode changed even if registration status didn't */
@@ -683,26 +719,48 @@ void hl78xx_on_ksup(struct modem_chat *chat, char **argv, uint16_t argc, void *u
 	}
 	module_status = ATOI(argv[1], 0, "module_status");
 	data->status.boot.status = module_status;
-	/* Check for unexpected restart */
-	if (data->status.boot.is_booted_previously == true &&
-	    module_status == (int)HL78XX_MODULE_READY) {
+
+	/* Only +KSUP: 0 means the module is ready to take commands. Every other
+	 * value (SIM not present, SIMlock, unrecoverable error, ...) is a startup
+	 * failure and must be treated as one on EVERY boot -- the readiness test
+	 * comes first, before the was-it-a-restart question. Keying the failure
+	 * arm off is_booted_previously used to let any status through on the
+	 * first +KSUP of a power cycle and log it as "started successfully".
+	 */
+	if (module_status != (int)HL78XX_MODULE_READY) {
+		LOG_ERR("Modem reported startup failure, +KSUP: %d", module_status);
+		/* Do NOT latch is_booted_previously here: the module never
+		 * reached a usable state, so a later +KSUP: 0 must still be
+		 * treated as a first successful boot rather than a restart.
+		 */
+		hl78xx_delegate_event(data, MODEM_HL78XX_EVENT_SUSPEND);
+	} else if (data->status.boot.is_booted_previously == true) {
+		/* Check for unexpected restart */
 #if defined(CONFIG_MODEM_HL78XX_LOW_POWER_MODE)
 		const struct hl78xx_config *config = data->devices.hl78xx->config;
 
 		config->variant->on_ksup_lpm(data);
 #else
 		LOG_DBG("Modem unexpected restart detected %d", module_status);
+		/* The sockets of the ended session are gone with it; closing
+		 * them in the new one gets +CME ERROR: 910 (08-10 bench).
+		 */
+		hl78xx_invalidate_socket_contexts(data);
+		hl78xx_reset_modem_session_state(data);
+#ifdef CONFIG_HL78XX_GNSS
+		hl78xx_gnss_reset_session_state(data);
+#endif /* CONFIG_HL78XX_GNSS */
 		hl78xx_delegate_event(data, MODEM_HL78XX_EVENT_MDM_RESTART);
 #endif /* CONFIG_MODEM_HL78XX_LOW_POWER_MODE */
-	} else if (data->status.boot.is_booted_previously == true &&
-		   module_status != (int)HL78XX_MODULE_READY) {
-		LOG_DBG("Modem failed to start %d", module_status);
-		hl78xx_delegate_event(data, MODEM_HL78XX_EVENT_SUSPEND);
 	} else {
 		data->status.boot.is_booted_previously = true;
 		LOG_DBG("Modem started successfully %d %d", module_status,
 			data->status.boot.is_booted_previously);
 	}
+
+	/* content.value carries the raw status so the application can tell a
+	 * failed startup from a successful one -- they share this event type.
+	 */
 	event.content.value = module_status;
 	event_dispatcher_dispatch(&event);
 	HL78XX_LOG_DBG("Module status: %d", module_status);
@@ -796,7 +854,11 @@ void hl78xx_on_iccid(struct modem_chat *chat, char **argv, uint16_t argc, void *
 {
 	struct hl78xx_data *data = (struct hl78xx_data *)user_data;
 
-	if (argc != 2) {
+	/* argc is 2 for a plain SIM ("+CCID: <iccid>") and 3 for an eUICC, which
+	 * appends its EID ("+CCID: <iccid>,<eid>"). argv[1] is the ICCID either
+	 * way; the EID is not stored.
+	 */
+	if (argc < 2) {
 		return;
 	}
 	HL78XX_LOG_DBG("ICCID: %s %s", argv[0], argv[1]);
@@ -1157,6 +1219,7 @@ void hl78xx_on_cfun(struct modem_chat *chat, char **argv, uint16_t argc, void *u
 	}
 	data->status.phone_functionality.functionality = ATOI(argv[1], 0, "phone_func");
 	data->status.phone_functionality.in_progress = false;
+	data->status.phone_functionality.valid = true;
 	event.content.value = data->status.phone_functionality.functionality;
 	event_dispatcher_dispatch(&event);
 	hl78xx_delegate_event(data, MODEM_HL78XX_EVENT_PHONE_FUNCTIONALITY_CHANGED);
@@ -1858,6 +1921,53 @@ static void hl78xx_resume_uart(const struct hl78xx_config *config)
 #endif /* CONFIG_PM_DEVICE */
 }
 
+static void hl78xx_clear_script_failure(struct hl78xx_data *data)
+{
+	data->script_failure.recovery_rule = NULL;
+	data->script_failure.result = MODEM_CHAT_SCRIPT_RESULT_SUCCESS;
+	data->script_failure.origin_state = MODEM_HL78XX_STATE_IDLE;
+	data->script_failure.script_chat_index = 0U;
+	data->script_failure.valid = false;
+}
+
+static void hl78xx_clear_recovery(struct hl78xx_data *data)
+{
+	data->script_recovery.attempted_rule = NULL;
+	data->script_recovery.attempts = 0U;
+	hl78xx_clear_script_failure(data);
+}
+
+static void hl78xx_confirm_recovery(struct hl78xx_data *data, enum hl78xx_state state,
+				    enum hl78xx_event event)
+{
+	const struct hl78xx_script_recovery_rule *rule = data->script_recovery.attempted_rule;
+
+	if ((rule == NULL) || (rule->success_state != state) || (rule->success_event != event)) {
+		return;
+	}
+
+	LOG_INF("Script recovery successful after %u attempt(s)", data->script_recovery.attempts);
+
+	hl78xx_clear_recovery(data);
+}
+
+static void hl78xx_handle_recovery_unavailable(struct hl78xx_data *data)
+{
+	if (!data->script_failure.valid) {
+		hl78xx_clear_recovery(data);
+		hl78xx_enter_restart_fallback_state(data);
+		return;
+	}
+
+	/*
+	 * Clear the active failure context, but retain attempted_rule and
+	 * attempts until recovery is confirmed, idle is entered, or a new
+	 * lifecycle is explicitly started.
+	 */
+	hl78xx_clear_script_failure(data);
+	hl78xx_enter_restart_fallback_state(data);
+}
+
 /* -------------------------------------------------------------------------
  * State machine handlers
  * - state enter/leave and per-state event handlers
@@ -2005,6 +2115,11 @@ static int hl78xx_on_await_power_on_state_enter(struct hl78xx_data *data)
 {
 	const struct hl78xx_config *config = data->devices.hl78xx->config;
 
+	data->status.boot.init_sequence_completed = false;
+	hl78xx_reset_modem_session_state(data);
+#ifdef CONFIG_HL78XX_GNSS
+	hl78xx_gnss_reset_session_state(data);
+#endif /* CONFIG_HL78XX_GNSS */
 	hl78xx_start_timer(data, K_MSEC(config->startup_time_ms));
 #ifdef CONFIG_MODEM_HL78XX_POWER_DOWN
 	hl78xx_power_down_allow_feeding(data);
@@ -2040,8 +2155,6 @@ static void hl78xx_await_power_on_event_handler(struct hl78xx_data *data, enum h
 		(void)hl78xx_get_uart_config(data);
 		/* Reset per-cycle flag so AT_CMD_READY is dispatched exactly once. */
 		data->status.at_cmd_ready_sent = false;
-		data->status.boot.init_sequence_completed = false;
-
 		LOG_DBG("Current baudrate after post-restart script: %d",
 			data->status.uart.current_baudrate);
 #if defined(CONFIG_MODEM_HL78XX_AUTOBAUD_ONLY_IF_COMMS_FAIL) ||                                    \
@@ -2061,10 +2174,11 @@ static void hl78xx_await_power_on_event_handler(struct hl78xx_data *data, enum h
 #ifdef CONFIG_MODEM_HL78XX_AUTO_BAUDRATE
 		hl78xx_enter_state(data, MODEM_HL78XX_STATE_SET_BAUDRATE);
 #else
-		hl78xx_enter_state(data, MODEM_HL78XX_STATE_RUN_INIT_FAIL_DIAGNOSTIC_SCRIPT);
+		hl78xx_enter_state(data, MODEM_HL78XX_STATE_RECOVERY);
 #endif /* CONFIG_MODEM_HL78XX_AUTO_BAUDRATE */
+		break;
 	case MODEM_HL78XX_EVENT_AT_CMD_TIMEOUT:
-		hl78xx_enter_state(data, MODEM_HL78XX_STATE_RUN_INIT_FAIL_DIAGNOSTIC_SCRIPT);
+		hl78xx_enter_state(data, MODEM_HL78XX_STATE_RECOVERY);
 		break;
 
 	default:
@@ -2121,8 +2235,7 @@ static void hl78xx_set_baudrate_event_handler(struct hl78xx_data *data, enum hl7
 		} else {
 			LOG_ERR("Baud rate configuration failed after %d attempts",
 				data->status.uart.baudrate_detection_retry);
-			hl78xx_enter_state(data,
-					   MODEM_HL78XX_STATE_RUN_INIT_FAIL_DIAGNOSTIC_SCRIPT);
+			hl78xx_enter_state(data, MODEM_HL78XX_STATE_RECOVERY);
 		}
 		break;
 
@@ -2152,6 +2265,8 @@ static void hl78xx_run_init_script_event_handler(struct hl78xx_data *data, enum 
 {
 	switch (evt) {
 	case MODEM_HL78XX_EVENT_SCRIPT_SUCCESS:
+		hl78xx_confirm_recovery(data, MODEM_HL78XX_STATE_RUN_INIT_SCRIPT, evt);
+
 		hl78xx_enter_state(data, MODEM_HL78XX_STATE_RUN_RAT_CONFIG_SCRIPT);
 		break;
 
@@ -2162,88 +2277,76 @@ static void hl78xx_run_init_script_event_handler(struct hl78xx_data *data, enum 
 		hl78xx_enter_state(data, MODEM_HL78XX_STATE_IDLE);
 		break;
 
-	case MODEM_HL78XX_EVENT_SCRIPT_FAILED:
-		hl78xx_enter_state(data, MODEM_HL78XX_STATE_RUN_INIT_FAIL_DIAGNOSTIC_SCRIPT);
-		break;
-
-	default:
-		break;
-	}
-}
-
-static int hl78xx_on_run_init_diagnose_script_state_enter(struct hl78xx_data *data)
-{
-	hl78xx_run_init_fail_script_async(data);
-	return 0;
-}
-
-static void hl78xx_run_init_fail_script_event_handler(struct hl78xx_data *data,
-						      enum hl78xx_event evt)
-{
-	const struct hl78xx_config *config = data->devices.hl78xx->config;
-
-	switch (evt) {
-	case MODEM_HL78XX_EVENT_SCRIPT_SUCCESS:
-		if (data->status.ksrep == 0) {
-			hl78xx_run_enable_ksup_urc_script_async(data);
-			hl78xx_start_timer(data, K_MSEC(config->shutdown_time_ms));
-		} else {
-			if (hl78xx_gpio_is_enabled(&config->mdm_gpio_reset)) {
-				hl78xx_enter_state(data, MODEM_HL78XX_STATE_RESET_PULSE);
-			}
-		}
-		break;
-	case MODEM_HL78XX_EVENT_TIMEOUT:
-		LOG_ERR("Modem initialization failed after diagnostic script");
-		hl78xx_enter_state(data, MODEM_HL78XX_STATE_IDLE);
-		break;
 	case MODEM_HL78XX_EVENT_AT_CMD_TIMEOUT:
-#ifdef CONFIG_MODEM_HL78XX_AUTO_BAUDRATE
-		hl78xx_enter_state(data, MODEM_HL78XX_STATE_SET_BAUDRATE);
-#else
-		if (hl78xx_gpio_is_enabled(&config->mdm_gpio_pwr_on)) {
-			hl78xx_enter_state(data, MODEM_HL78XX_STATE_POWER_ON_PULSE);
-			break;
-		}
-
-		if (hl78xx_gpio_is_enabled(&config->mdm_gpio_reset)) {
-			hl78xx_enter_state(data, MODEM_HL78XX_STATE_RESET_PULSE);
-			break;
-		}
-
-		hl78xx_enter_state(data, MODEM_HL78XX_STATE_IDLE);
-#endif /* CONFIG_MODEM_HL78XX_AUTO_BAUDRATE */
-		break;
-	case MODEM_HL78XX_EVENT_BUS_CLOSED:
-		break;
-
-	case MODEM_HL78XX_EVENT_SUSPEND:
-		hl78xx_enter_state(data, MODEM_HL78XX_STATE_IDLE);
-		break;
-
 	case MODEM_HL78XX_EVENT_SCRIPT_FAILED:
-		if (!hl78xx_gpio_is_enabled(&config->mdm_gpio_wake) &&
-		    IS_ENABLED(CONFIG_MODEM_HL78XX_LOW_POWER_MODE)) {
-			LOG_ERR("The modem wake pin is not enabled. Make sure that modem low-power "
-				"mode is disabled. If you’re unsure, enable it by adding the "
-				"corresponding DTS configuration entry.");
-		}
-
-		if (data->status.script_fail_counter++ < MAX_SCRIPT_AT_CMD_RETRY) {
-			if (hl78xx_gpio_is_enabled(&config->mdm_gpio_pwr_on)) {
-				hl78xx_enter_state(data, MODEM_HL78XX_STATE_POWER_ON_PULSE);
-				break;
-			}
-			if (hl78xx_gpio_is_enabled(&config->mdm_gpio_reset)) {
-				hl78xx_enter_state(data, MODEM_HL78XX_STATE_RESET_PULSE);
-				break;
-			}
-		}
-		hl78xx_enter_state(data, MODEM_HL78XX_STATE_IDLE);
+		hl78xx_enter_state(data, MODEM_HL78XX_STATE_RECOVERY);
 		break;
+
 	default:
 		break;
 	}
+}
+
+static int hl78xx_on_recovery_state_enter(struct hl78xx_data *data)
+{
+	struct hl78xx_script_failure *script_failure = &data->script_failure;
+	const struct hl78xx_script_recovery_rule *rule;
+
+	enum hl78xx_state resume_state;
+	int ret;
+
+	if (!script_failure->valid) {
+		LOG_WRN("Recovery entered without script failure context");
+
+		hl78xx_handle_recovery_unavailable(data);
+		return 0;
+	}
+
+	rule = script_failure->recovery_rule;
+
+	if (rule == NULL) {
+		LOG_WRN("No recovery rule for failed script command");
+
+		hl78xx_clear_recovery(data);
+		hl78xx_enter_restart_fallback_state(data);
+		return 0;
+	}
+
+	if (rule->action == NULL) {
+		LOG_ERR("Recovery rule has no action");
+
+		hl78xx_clear_recovery(data);
+		hl78xx_enter_restart_fallback_state(data);
+		return 0;
+	}
+
+	if (data->script_recovery.attempted_rule != rule) {
+		data->script_recovery.attempted_rule = rule;
+		data->script_recovery.attempts = 0U;
+	}
+
+	if (data->script_recovery.attempts >= rule->max_attempts) {
+		LOG_ERR("Script recovery attempts exhausted");
+
+		hl78xx_handle_recovery_unavailable(data);
+		return 0;
+	}
+
+	data->script_recovery.attempts++;
+
+	ret = rule->action(data, script_failure);
+	if (ret < 0) {
+		LOG_ERR("Script recovery action failed: %d", ret);
+
+		hl78xx_handle_recovery_unavailable(data);
+		return 0;
+	}
+
+	resume_state = rule->resume_state;
+	hl78xx_clear_script_failure(data);
+	hl78xx_enter_state(data, resume_state);
+
+	return 0;
 }
 
 static int hl78xx_on_rat_cfg_script_state_enter(struct hl78xx_data *data)
@@ -2413,8 +2516,6 @@ error:
 
 static void hl78xx_run_pmc_cfg_script_event_handler(struct hl78xx_data *data, enum hl78xx_event evt)
 {
-	const struct hl78xx_config *config = data->devices.hl78xx->config;
-
 	switch (evt) {
 	case MODEM_HL78XX_EVENT_TIMEOUT:
 		if (hl78xx_is_config_restart_pending(data)) {
@@ -2438,23 +2539,14 @@ static void hl78xx_run_pmc_cfg_script_event_handler(struct hl78xx_data *data, en
 		hl78xx_enter_state(data, MODEM_HL78XX_STATE_INIT_POWER_OFF);
 		break;
 	case MODEM_HL78XX_EVENT_SCRIPT_REQUIRE_RESTART:
-		if (hl78xx_gpio_is_enabled(&config->mdm_gpio_pwr_on)) {
-			hl78xx_enter_state(data, MODEM_HL78XX_STATE_POWER_ON_PULSE);
-			break;
-		}
-
-		if (hl78xx_gpio_is_enabled(&config->mdm_gpio_reset)) {
-			hl78xx_enter_state(data, MODEM_HL78XX_STATE_RESET_PULSE);
-			break;
-		}
-		hl78xx_enter_state(data, MODEM_HL78XX_STATE_IDLE);
+		hl78xx_enter_restart_fallback_state(data);
 		break;
 	default:
 		break;
 	}
 }
 
-static int hl78xx_on_run_pmc_cfg_script_state_leave(struct hl78xx_data *data)
+static int hl78xx_on_pmc_cfg_script_state_leave(struct hl78xx_data *data)
 {
 	data->status.restart.config_pending = false;
 	return 0;
@@ -2533,6 +2625,15 @@ static void hl78xx_enable_gprs_event_handler(struct hl78xx_data *data, enum hl78
 	case MODEM_HL78XX_EVENT_REGISTERED:
 		hl78xx_enter_state(data, MODEM_HL78XX_STATE_AWAIT_REGISTERED);
 		hl78xx_delegate_event(data, MODEM_HL78XX_EVENT_REGISTERED);
+		break;
+
+	case MODEM_HL78XX_EVENT_MDM_RESTART:
+		/* The restart arrived while this state ran its commands, so their
+		 * result is already queued behind it. Leave the way that result
+		 * would and handle the restart in the next state.
+		 */
+		hl78xx_enter_state(data, MODEM_HL78XX_STATE_AWAIT_REGISTERED);
+		hl78xx_delegate_event(data, MODEM_HL78XX_EVENT_MDM_RESTART);
 		break;
 
 	case MODEM_HL78XX_EVENT_SOCKET_READY:
@@ -2731,34 +2832,15 @@ static int hl78xx_on_await_registered_state_leave(struct hl78xx_data *data)
 	return 0;
 }
 
-static int hl78xx_on_carrier_on_state_enter(struct hl78xx_data *data)
+/**
+ * @brief Run everything that may only happen once the PDP context is up.
+ *
+ * Split out of the state-enter path so the retry in the carrier_on timeout
+ * handler resumes at exactly the same point a first-attempt success would.
+ */
+static int hl78xx_carrier_on_pdp_ready(struct hl78xx_data *data)
 {
 	int ret;
-
-#ifdef CONFIG_HL78XX_GNSS
-	/* Check and process any pending GNSS mode entry request */
-	if (hl78xx_gnss_is_pending(data)) {
-		const struct hl78xx_config *config = data->devices.hl78xx->config;
-
-		if (config->variant->carrier_on_gnss_pending &&
-		    config->variant->carrier_on_gnss_pending(data)) {
-			return 0;
-		}
-
-		LOG_INF("Processing pending GNSS mode request (queued before modem ready)");
-		hl78xx_enter_state(data, MODEM_HL78XX_STATE_RUN_GNSS_INIT_SCRIPT);
-		return 0;
-	}
-	notif_carrier_on(data->devices.hl78xx);
-#endif /* CONFIG_HL78XX_GNSS */
-
-	/* Activate the PDP context */
-	ret = hl78xx_gsm_pdp_activate(data);
-	if (ret) {
-		LOG_ERR("Failed to activate PDP context: %d", ret);
-		hl78xx_delegate_event(data, MODEM_HL78XX_EVENT_SCRIPT_FAILED);
-		return ret;
-	}
 
 	notif_carrier_on(data->devices.hl78xx);
 #ifdef CONFIG_MODEM_HL78XX_LOW_POWER_MODE
@@ -2768,10 +2850,16 @@ static int hl78xx_on_carrier_on_state_enter(struct hl78xx_data *data)
 	if (config->variant->carrier_on_enter_lpm) {
 		ret = config->variant->carrier_on_enter_lpm(data, &is_lpm);
 
-		if (ret != 0) {
+		if ((ret != 0) && !data->status.lpm.host_config_lost) {
 			return 0;
 		}
 	}
+
+	/* A carrier-off since the last carrier-on removed the addresses and
+	 * the DNS state, so the host needs the restore even where the wake
+	 * classification would skip it.
+	 */
+	is_lpm = is_lpm || data->status.lpm.host_config_lost;
 
 #ifdef CONFIG_MODEM_HL78XX_POWER_DOWN
 	LOG_DBG("POWER_DOWN: current=%d previous=%d", data->status.lpm.power_down.current,
@@ -2794,6 +2882,81 @@ static int hl78xx_on_carrier_on_state_enter(struct hl78xx_data *data)
 	return 0;
 }
 
+static int hl78xx_on_carrier_on_state_enter(struct hl78xx_data *data)
+{
+	int ret;
+
+#ifdef CONFIG_HL78XX_GNSS
+	/* A GNSS mode request queued while the modem was registering must not
+	 * be executed here: entering GNSS mode now takes the carrier that just
+	 * came up (CFUN=4) and discards a fresh registration -- a 7-minute-old
+	 * queued request once killed a registration and stranded a device.
+	 * Drop the request and tell the application it was blocked; it decides
+	 * whether and when to ask again.
+	 */
+	if (hl78xx_gnss_check_and_clear_pending(data)) {
+		struct hl78xx_evt gnss_evt = {
+			.type = HL78XX_GNSS_EVENT_START_BLOCKED,
+			.content.status = false,
+		};
+
+		LOG_WRN("Dropping queued GNSS mode request: the carrier is on, notifying the "
+			"application");
+		event_dispatcher_dispatch(&gnss_evt);
+	}
+	notif_carrier_on(data->devices.hl78xx);
+#endif /* CONFIG_HL78XX_GNSS */
+
+	/* Activate the PDP context */
+	ret = hl78xx_gsm_pdp_activate(data);
+	if (ret) {
+		LOG_ERR("Failed to activate PDP context: %d", ret);
+		/* Without a context there is nothing to hand the application:
+		 * CGCONTRDP would report the previous cycle's address and the
+		 * DNS refresh would then latch ready on a link that cannot
+		 * carry traffic. Drop the carrier instead - that notifies the
+		 * application the link is down, removes its addresses, re-runs the
+		 * GPRS enable script for a fresh attach while the modem is still
+		 * registered or waits for it to register again, and lets the
+		 * search policy move on to another RAT.
+		 *
+		 * Retrying in place is not an option: a second AT+CGACT=1,1
+		 * costs another 190 s, more than the whole budget the
+		 * application allows the modem to stay powered.
+		 */
+#ifdef CONFIG_MODEM_HL78XX_POWER_DOWN
+		if (data->status.lpm.power_down.shutdown_pending) {
+			/* The activation was cut short by the power down, which
+			 * owns the state machine from here. Dropping to
+			 * CARRIER_OFF would re-run the GPRS enable script and
+			 * take the interface back off the shutdown. An aborted
+			 * power down hands the failure back.
+			 */
+			LOG_INF("PDP activation abandoned for a pending power down");
+			/* A shutdown confirmed at once has left CARRIER_ON while the
+			 * activation was still in flight: nothing to hand back then.
+			 */
+			if (data->status.state == MODEM_HL78XX_STATE_CARRIER_ON) {
+				data->status.lpm.power_down.pdp_activation_held = true;
+			}
+			/* An abort that landed between the check above and the
+			 * record found nothing held and replayed nothing: take the
+			 * failure here, as the abort would have.
+			 */
+			if (data->status.lpm.power_down.shutdown_pending ||
+			    (data->status.state != MODEM_HL78XX_STATE_CARRIER_ON)) {
+				return ret;
+			}
+			data->status.lpm.power_down.pdp_activation_held = false;
+		}
+#endif /* CONFIG_MODEM_HL78XX_POWER_DOWN */
+		hl78xx_enter_state(data, MODEM_HL78XX_STATE_CARRIER_OFF);
+		return ret;
+	}
+
+	return hl78xx_carrier_on_pdp_ready(data);
+}
+
 static void hl78xx_carrier_on_timeout_handler(struct hl78xx_data *data
 #ifdef CONFIG_MODEM_HL78XX_LOW_POWER_MODE
 					      ,
@@ -2804,16 +2967,68 @@ static void hl78xx_carrier_on_timeout_handler(struct hl78xx_data *data
 	struct hl78xx_evt ready_event = {.type = HL78XX_LTE_DNS_READY};
 	int ret;
 
+#ifdef CONFIG_MODEM_HL78XX_POWER_DOWN
+	if (data->status.lpm.power_down.pdp_activation_held) {
+		if (data->status.lpm.power_down.shutdown_pending) {
+			/* A timeout queued before the activation failed: the
+			 * shutdown still owns the state machine, and the failure
+			 * stays held for its abort.
+			 */
+			return;
+		}
+		/* The power down that cut the PDP activation short was
+		 * aborted: the carrier has no context to offer, so take it
+		 * down as a failed activation does.
+		 */
+		data->status.lpm.power_down.pdp_activation_held = false;
+		hl78xx_enter_state(data, MODEM_HL78XX_STATE_CARRIER_OFF);
+		return;
+	}
+#endif /* CONFIG_MODEM_HL78XX_POWER_DOWN */
+
 #ifdef CONFIG_MODEM_HL78XX_LOW_POWER_MODE
 #ifdef CONFIG_MODEM_HL78XX_PSM
 	if (data->status.lpm.awaiting_psm_confirmation) {
-		LOG_WRN("PSM confirmation timeout - deregistration likely due to "
-			"coverage loss, not low power transition");
+		bool resume_step;
+
+		if (k_work_delayable_remaining_get(&data->work.timeout_work) > 0) {
+			/* Not the window's expiry, since the timer is still running:
+			 * either the expiry of a deadline a later report has moved,
+			 * or a timeout queued before the window took the timer over,
+			 * whose step is due again when the window ends.
+			 */
+			if (data->status.lpm.psm_window_expiry_voided) {
+				data->status.lpm.psm_window_expiry_voided = false;
+			} else {
+				data->status.lpm.psm_window_displaced_step = true;
+			}
+			return;
+		}
+		resume_step = data->status.lpm.psm_window_displaced_step;
 		data->status.lpm.awaiting_psm_confirmation = false;
+		data->status.lpm.psm_window_displaced_step = false;
+		/* The reschedule cancels an expiry a report voided while its timer
+		 * was due but not yet announced: nothing else clears the mark.
+		 */
+		data->status.lpm.psm_window_expiry_voided = false;
+		if (!hl78xx_is_registered(data)) {
+			LOG_WRN("PSM confirmation timeout - deregistration likely due to "
+				"coverage loss, not low power transition");
+			data->status.carrier_off_registration_loss = true;
+			hl78xx_enter_state(data, MODEM_HL78XX_STATE_CARRIER_OFF);
+		} else if (resume_step) {
+			/* Registered again: the step the window displaced is still due */
+			LOG_DBG("PSM window over, registered: resuming the carrier-on step");
+			hl78xx_start_timer(data, K_SECONDS(2));
+		} else {
+			/* Registered again and no step displaced: the carrier stays on */
+		}
 		return;
 	}
 #endif /* CONFIG_MODEM_HL78XX_PSM */
+#endif /* CONFIG_MODEM_HL78XX_LOW_POWER_MODE */
 
+#ifdef CONFIG_MODEM_HL78XX_LOW_POWER_MODE
 	if (data->status.lpm.restore_pending) {
 		data->status.lpm.restore_pending = false;
 		if (config->variant->carrier_on_dns_complete) {
@@ -2854,6 +3069,8 @@ static void hl78xx_carrier_on_timeout_handler(struct hl78xx_data *data
 
 	LOG_DBG("DNS work callback succeeded");
 #ifdef CONFIG_MODEM_HL78XX_LOW_POWER_MODE
+	/* The host configuration a carrier-off removed is complete again */
+	data->status.lpm.host_config_lost = false;
 	if (config->variant->carrier_on_dns_complete) {
 		config->variant->carrier_on_dns_complete(data);
 	}
@@ -2872,6 +3089,24 @@ static void hl78xx_carrier_on_timeout_handler(struct hl78xx_data *data
 #endif /* CONFIG_MODEM_HL78XX_POWER_DOWN */
 }
 
+/**
+ * @brief Arm a carrier-on step, or record it while the PSM window holds the timer.
+ *
+ * A timer that is only started does not replace the window's deadline, so
+ * the step is recorded as displaced and runs when the window ends with the
+ * modem registered.
+ */
+static void hl78xx_carrier_on_arm_step(struct hl78xx_data *data, k_timeout_t timeout)
+{
+#ifdef CONFIG_MODEM_HL78XX_PSM
+	if (data->status.lpm.awaiting_psm_confirmation) {
+		data->status.lpm.psm_window_displaced_step = true;
+		return;
+	}
+#endif /* CONFIG_MODEM_HL78XX_PSM */
+	hl78xx_start_timer(data, timeout);
+}
+
 static void hl78xx_carrier_on_event_handler(struct hl78xx_data *data, enum hl78xx_event evt)
 {
 #ifdef CONFIG_MODEM_HL78XX_LOW_POWER_MODE
@@ -2880,12 +3115,12 @@ static void hl78xx_carrier_on_event_handler(struct hl78xx_data *data, enum hl78x
 
 	switch (evt) {
 	case MODEM_HL78XX_EVENT_SCRIPT_SUCCESS:
-		hl78xx_start_timer(data, K_SECONDS(2));
+		hl78xx_carrier_on_arm_step(data, K_SECONDS(2));
 
 		break;
 	case MODEM_HL78XX_EVENT_SCRIPT_FAILED:
 		LOG_WRN("carrier_on script failed, retrying after backoff");
-		hl78xx_start_timer(data, K_SECONDS(5));
+		hl78xx_carrier_on_arm_step(data, K_SECONDS(5));
 		break;
 
 	case MODEM_HL78XX_EVENT_TIMEOUT:
@@ -2907,21 +3142,48 @@ static void hl78xx_carrier_on_event_handler(struct hl78xx_data *data, enum hl78x
 			break;
 		}
 #ifdef CONFIG_MODEM_HL78XX_LOW_POWER_MODE
+#ifdef CONFIG_MODEM_HL78XX_PSM
 		/* Start a brief timer to distinguish PSM-entry from real network loss.
 		 * If GPIO6 fires DEVICE_ASLEEP within this window, the modem is entering
-		 * PSM and we transition to SLEEP. Otherwise, the deregistration is due
-		 * to coverage loss or SIM issue and we go to AWAIT_REGISTERED.
+		 * PSM and we transition to SLEEP. Otherwise the timeout handler takes
+		 * the carrier down, unless the modem has registered again by then.
 		 */
-		hl78xx_start_timer(data, K_SECONDS(MDM_REGISTRATION_TIMEOUT));
-#ifdef CONFIG_MODEM_HL78XX_PSM
+		if (!data->status.lpm.awaiting_psm_confirmation) {
+			/* The window takes over the state timer; a carrier-on step
+			 * it displaces is due again if the registration comes back.
+			 */
+			data->status.lpm.psm_window_displaced_step =
+				k_work_delayable_remaining_get(&data->work.timeout_work) > 0;
+		} else if (k_work_delayable_remaining_get(&data->work.timeout_work) == 0) {
+			/* The window has expired and its timeout is queued behind
+			 * this report: moving the deadline voids that timeout.
+			 */
+			data->status.lpm.psm_window_expiry_voided = true;
+		} else {
+			/* The window is running: the reschedule below moves its deadline */
+		}
+		hl78xx_reschedule_timer(data, K_SECONDS(MDM_REGISTRATION_TIMEOUT));
 		data->status.lpm.awaiting_psm_confirmation = true;
 		if (config->variant->carrier_on_deregistered_psm) {
 			config->variant->carrier_on_deregistered_psm(data);
 		}
+#else
+		/* Without PSM a deregistration cannot be a sleep entry: the link is
+		 * gone. Take the same path as a failed PDP activation, with the same
+		 * power-down guard.
+		 */
+#ifdef CONFIG_MODEM_HL78XX_POWER_DOWN
+		if (data->status.lpm.power_down.shutdown_pending) {
+			LOG_INF("Registration lost during a pending power down");
+			break;
+		}
+#endif /* CONFIG_MODEM_HL78XX_POWER_DOWN */
+		data->status.carrier_off_registration_loss = true;
+		hl78xx_enter_state(data, MODEM_HL78XX_STATE_CARRIER_OFF);
 #endif /* CONFIG_MODEM_HL78XX_PSM */
-		break;
 #else
 		hl78xx_enter_state(data, MODEM_HL78XX_STATE_AWAIT_REGISTERED);
+		hl78xx_start_timer(data, K_SECONDS(MDM_REGISTRATION_TIMEOUT));
 #endif /* CONFIG_MODEM_HL78XX_LOW_POWER_MODE */
 		break;
 #ifdef CONFIG_MODEM_HL78XX_LOW_POWER_MODE
@@ -3022,6 +3284,18 @@ static int hl78xx_on_carrier_on_state_leave(struct hl78xx_data *data)
 	hl78xx_stop_timer(data);
 #ifdef CONFIG_MODEM_HL78XX_LOW_POWER_MODE
 	data->status.lpm.restore_pending = false;
+#ifdef CONFIG_MODEM_HL78XX_PSM
+	/* The window, and the step it displaced, end with the state: left
+	 * open, it would take the next carrier-on's first timeout for its
+	 * expiry.
+	 */
+	data->status.lpm.awaiting_psm_confirmation = false;
+	data->status.lpm.psm_window_displaced_step = false;
+	data->status.lpm.psm_window_expiry_voided = false;
+#endif /* CONFIG_MODEM_HL78XX_PSM */
+#ifdef CONFIG_MODEM_HL78XX_POWER_DOWN
+	data->status.lpm.power_down.pdp_activation_held = false;
+#endif /* CONFIG_MODEM_HL78XX_POWER_DOWN */
 #endif /* CONFIG_MODEM_HL78XX_LOW_POWER_MODE */
 	return 0;
 }
@@ -3143,6 +3417,9 @@ static int hl78xx_on_fota_state_leave(struct hl78xx_data *data)
 static int hl78xx_on_carrier_off_state_enter(struct hl78xx_data *data)
 {
 	notif_carrier_off(data->devices.hl78xx);
+#ifdef CONFIG_MODEM_HL78XX_LOW_POWER_MODE
+	data->status.lpm.host_config_lost = true;
+#endif /* CONFIG_MODEM_HL78XX_LOW_POWER_MODE */
 	/* Check whether or not there is any sockets are connected,
 	 * if true, wait until sockets are closed properly
 	 */
@@ -3161,6 +3438,29 @@ static void hl78xx_carrier_off_event_handler(struct hl78xx_data *data, enum hl78
 	case MODEM_HL78XX_EVENT_SCRIPT_SUCCESS:
 	case MODEM_HL78XX_EVENT_SCRIPT_FAILED:
 	case MODEM_HL78XX_EVENT_TIMEOUT:
+		if ((!hl78xx_is_registered(data) || data->status.carrier_off_registration_loss) &&
+		    (data->status.apn.state != APN_STATE_REFRESH_REQUESTED)) {
+			/* Registration loss: the modem keeps its configuration and
+			 * PDP context and searches again by itself. Wait for it, as
+			 * the build without low-power mode does, also when it has
+			 * registered again during this wait: the GPRS enable would
+			 * detach it. The registration timer does not end the wait:
+			 * it logs a modem still unregistered, or, where the build
+			 * requests the signal quality by hand, requests it for one
+			 * that registered. An APN the application changed meanwhile
+			 * is applied by the GPRS enable, so that change still takes
+			 * the LTE restore path. A GNSS request made during this
+			 * wait stays pending with the others: GNSS does not start
+			 * on an unregistered modem, so the check below comes after.
+			 */
+			hl78xx_enter_state(data, MODEM_HL78XX_STATE_AWAIT_REGISTERED);
+			hl78xx_start_timer(data, K_SECONDS(MDM_REGISTRATION_TIMEOUT));
+			if (hl78xx_is_registered(data)) {
+				/* The registration this state dropped while waiting */
+				hl78xx_delegate_event(data, MODEM_HL78XX_EVENT_REGISTERED);
+			}
+			break;
+		}
 #ifdef CONFIG_HL78XX_GNSS
 		/*
 		 * Check if GNSS mode entry is pending - if so, transition to airplane mode
@@ -3186,7 +3486,14 @@ static void hl78xx_carrier_off_event_handler(struct hl78xx_data *data, enum hl78
 		break;
 
 	case MODEM_HL78XX_EVENT_DEREGISTERED:
-		hl78xx_enter_state(data, MODEM_HL78XX_STATE_AWAIT_REGISTERED);
+		/* An unregistered modem keeps reporting while it searches. The
+		 * timeout of this state decides where to go: leaving on a report
+		 * would skip its APN refresh and GNSS request checks.
+		 */
+		break;
+
+	case MODEM_HL78XX_EVENT_MDM_RESTART:
+		hl78xx_enter_state(data, MODEM_HL78XX_STATE_RUN_INIT_SCRIPT);
 		break;
 
 	case MODEM_HL78XX_EVENT_SUSPEND:
@@ -3201,6 +3508,7 @@ static void hl78xx_carrier_off_event_handler(struct hl78xx_data *data, enum hl78
 static int hl78xx_on_carrier_off_state_leave(struct hl78xx_data *data)
 {
 	hl78xx_stop_timer(data);
+	data->status.carrier_off_registration_loss = false;
 	return 0;
 }
 
@@ -3391,6 +3699,18 @@ static int hl78xx_on_airplane_mode_state_leave(struct hl78xx_data *data)
 /* pwroff script moved to hl78xx_chat.c */
 static int hl78xx_on_init_power_off_state_enter(struct hl78xx_data *data)
 {
+	int ret;
+
+	/* This session is ending: whatever the driver believed about the
+	 * modem's functionality or GNSS engine must not survive into the next
+	 * power-up (the pwroff script below also changes CFUN without going
+	 * through the cache).
+	 */
+	hl78xx_reset_modem_session_state(data);
+#ifdef CONFIG_HL78XX_GNSS
+	hl78xx_gnss_reset_session_state(data);
+#endif /* CONFIG_HL78XX_GNSS */
+
 	/**
 	 * Even though you have power switch or etc.., start the power off script first
 	 * to gracefully disconnect from the network
@@ -3398,21 +3718,73 @@ static int hl78xx_on_init_power_off_state_enter(struct hl78xx_data *data)
 	 * IMSI detach before powering down IS recommended by the AT command manual
 	 *
 	 */
-	return hl78xx_run_pwroff_script_async(data);
+	ret = hl78xx_run_pwroff_script_async(data);
+	if (ret < 0) {
+		LOG_WRN("Power off script could not be started (%d); powering down anyway", ret);
+		hl78xx_enter_state(data, MODEM_HL78XX_STATE_IDLE);
+		return 0;
+	}
+
+	/* Backstop for a modem that never answers the detach - a GSM PDP
+	 * activation cut short by this shutdown can still be occupying the modem
+	 * itself for another couple of minutes. Nothing else arms a timer in this
+	 * state, so without this the shutdown would have no way to finish and the
+	 * modem would stay powered.
+	 */
+	hl78xx_start_timer(data, K_SECONDS(HL78XX_SCRIPT_TIMEOUT_POWEROFF + 5));
+
+	return 0;
 }
 
 static void hl78xx_init_power_off_event_handler(struct hl78xx_data *data, enum hl78xx_event evt)
 {
 	switch (evt) {
 	case MODEM_HL78XX_EVENT_SCRIPT_SUCCESS:
+		hl78xx_stop_timer(data);
 		hl78xx_enter_state(data, MODEM_HL78XX_STATE_IDLE);
 		break;
 
+	case MODEM_HL78XX_EVENT_SCRIPT_FAILED:
+	case MODEM_HL78XX_EVENT_AT_CMD_TIMEOUT:
 	case MODEM_HL78XX_EVENT_TIMEOUT:
+		/* The graceful detach did not land. Powering down is not optional
+		 * at this point, so continue to where a successful detach goes
+		 * rather than waiting in a state with nothing left to leave it.
+		 */
+		LOG_WRN("Power off script did not complete; powering down anyway");
+		hl78xx_stop_timer(data);
+		hl78xx_enter_state(data, MODEM_HL78XX_STATE_IDLE);
 		break;
 
 	case MODEM_HL78XX_EVENT_DEREGISTERED:
 		hl78xx_stop_timer(data);
+		break;
+
+	case MODEM_HL78XX_EVENT_MDM_RESTART:
+		/* The modem rebooted underneath the power-off (its +KSUP banner
+		 * arrived while AT+CFUN=0/AT+CPWROFF was in flight), so the
+		 * response the script is waiting for will never come. The
+		 * decision to power off is already final: drop the orphaned
+		 * script and complete the power-off now instead of stalling
+		 * for the full script timeout with the board unrecoverable.
+		 */
+		LOG_WRN("Modem restarted during power-off; completing power-off immediately");
+		hl78xx_stop_timer(data);
+		hl78xx_chat_abort_active_script(data);
+		hl78xx_enter_state(data, MODEM_HL78XX_STATE_IDLE);
+		break;
+
+	case MODEM_HL78XX_EVENT_SUSPEND:
+		/* A PM suspend arrived while the graceful detach was still
+		 * running. The suspend caller blocks on suspended_sem, which is
+		 * only given from idle, so finish the power-off now — the
+		 * detach response may never come (the suspend is typically
+		 * issued exactly because the AT channel is unusable).
+		 */
+		LOG_WRN("Suspend requested during power-off; completing power-off immediately");
+		hl78xx_stop_timer(data);
+		hl78xx_chat_abort_active_script(data);
+		hl78xx_enter_state(data, MODEM_HL78XX_STATE_IDLE);
 		break;
 
 	default:
@@ -3422,6 +3794,7 @@ static void hl78xx_init_power_off_event_handler(struct hl78xx_data *data, enum h
 
 static int hl78xx_on_init_power_off_state_leave(struct hl78xx_data *data)
 {
+	hl78xx_stop_timer(data);
 	return 0;
 }
 
@@ -3471,6 +3844,8 @@ static int hl78xx_on_idle_state_enter(struct hl78xx_data *data)
 #ifdef CONFIG_MODEM_HL78XX_POWER_DOWN
 	}
 #endif /* CONFIG_MODEM_HL78XX_POWER_DOWN */
+	hl78xx_clear_recovery(data);
+
 	modem_chat_release(&data->chat);
 	modem_pipe_attach(data->uart_pipe, hl78xx_bus_pipe_handler, data);
 	modem_pipe_close_async(data->uart_pipe);
@@ -3502,7 +3877,6 @@ static void hl78xx_idle_event_handler(struct hl78xx_data *data, enum hl78xx_even
 			hl78xx_enter_state(data, MODEM_HL78XX_STATE_AWAIT_POWER_ON);
 			break;
 		}
-		hl78xx_enter_state(data, MODEM_HL78XX_STATE_RUN_INIT_FAIL_DIAGNOSTIC_SCRIPT);
 		break;
 
 	case MODEM_HL78XX_EVENT_SUSPEND:
@@ -3529,6 +3903,8 @@ static int hl78xx_on_idle_state_leave(struct hl78xx_data *data)
 	}
 #ifdef CONFIG_MODEM_HL78XX_POWER_DOWN
 	data->status.lpm.power_down.is_power_down_requested = false;
+	data->status.lpm.power_down.shutdown_pending = false;
+	data->status.lpm.power_down.pdp_activation_held = false;
 	data->status.lpm.power_down.previous = data->status.lpm.power_down.current;
 	data->status.lpm.power_down.current = POWER_DOWN_EVENT_EXIT;
 
@@ -3601,6 +3977,17 @@ static void hl78xx_event_handler(struct hl78xx_data *data, enum hl78xx_event evt
 		}
 		return;
 	}
+
+#ifdef CONFIG_HL78XX_GNSS
+	if ((evt == MODEM_HL78XX_EVENT_GNSS_MODE_ENTER_REQUESTED) &&
+	    !hl78xx_gnss_is_pending(data)) {
+		/* Dropped at the carrier-on entry or revoked by the application
+		 * while this event sat in the queue: no state may act on it.
+		 */
+		LOG_INF("Ignoring a GNSS mode request that is no longer pending");
+		return;
+	}
+#endif /* CONFIG_HL78XX_GNSS */
 
 	if ((int)s < MODEM_HL78XX_STATE_COUNT && hl78xx_state_table[s].on_event) {
 		hl78xx_state_table[s].on_event(data, evt);
@@ -3914,10 +4301,10 @@ const static struct hl78xx_state_handlers hl78xx_state_table[] = {
 		NULL,
 		hl78xx_run_init_script_event_handler
 	},
-	[MODEM_HL78XX_STATE_RUN_INIT_FAIL_DIAGNOSTIC_SCRIPT] = {
-		hl78xx_on_run_init_diagnose_script_state_enter,
+	[MODEM_HL78XX_STATE_RECOVERY] = {
+		hl78xx_on_recovery_state_enter,
 		NULL,
-		hl78xx_run_init_fail_script_event_handler
+		NULL
 	},
 	[MODEM_HL78XX_STATE_RUN_RAT_CONFIG_SCRIPT] = {
 		hl78xx_on_rat_cfg_script_state_enter,
@@ -3926,7 +4313,7 @@ const static struct hl78xx_state_handlers hl78xx_state_table[] = {
 	},
 	[MODEM_HL78XX_STATE_RUN_PMC_CONFIG_SCRIPT] = {
 		hl78xx_on_pmc_cfg_script_state_enter,
-		hl78xx_on_run_pmc_cfg_script_state_leave,
+		hl78xx_on_pmc_cfg_script_state_leave,
 		hl78xx_run_pmc_cfg_script_event_handler
 	},
 	[MODEM_HL78XX_STATE_RUN_ENABLE_GPRS_SCRIPT] = {

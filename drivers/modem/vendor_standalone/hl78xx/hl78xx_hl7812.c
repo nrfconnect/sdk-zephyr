@@ -160,13 +160,6 @@ static bool hl78xx_hl7812_cfg_skip_band_for_rat(struct hl78xx_data *data,
 }
 
 #ifdef CONFIG_HL78XX_GNSS
-static bool hl78xx_hl7812_carrier_on_gnss_pending(struct hl78xx_data *data)
-{
-	LOG_INF("Processing pending GNSS mode request (queued before modem ready)");
-	hl78xx_enter_state(data, MODEM_HL78XX_STATE_RUN_GNSS_INIT_SCRIPT);
-	return true;
-}
-
 static bool hl78xx_hl7812_on_gnss_mode_enter_lpm(struct hl78xx_data *data)
 {
 	ARG_UNUSED(data);
@@ -182,12 +175,6 @@ static bool hl78xx_hl7812_on_gnss_mode_enter_lpm(struct hl78xx_data *data)
 	return true;
 }
 #else
-static bool hl78xx_hl7812_carrier_on_gnss_pending(struct hl78xx_data *data)
-{
-	ARG_UNUSED(data);
-	return false;
-}
-
 static bool hl78xx_hl7812_on_gnss_mode_enter_lpm(struct hl78xx_data *data)
 {
 	ARG_UNUSED(data);
@@ -196,9 +183,6 @@ static bool hl78xx_hl7812_on_gnss_mode_enter_lpm(struct hl78xx_data *data)
 #endif /* CONFIG_HL78XX_GNSS */
 
 #ifdef CONFIG_MODEM_HL78XX_LOW_POWER_MODE
-
-/* Defined in hl78xx_sockets.c */
-extern void hl78xx_invalidate_socket_contexts(struct hl78xx_data *data);
 
 /* -------------------------------------------------------------------------
  * GPIO6 handler
@@ -382,6 +366,10 @@ static void hl78xx_hl7812_on_ksup_lpm(struct hl78xx_data *data)
 	 */
 	LOG_DBG("Modem restart detected");
 	hl78xx_invalidate_socket_contexts(data);
+	hl78xx_reset_modem_session_state(data);
+#ifdef CONFIG_HL78XX_GNSS
+	hl78xx_gnss_reset_session_state(data);
+#endif /* CONFIG_HL78XX_GNSS */
 	hl78xx_delegate_event(data, MODEM_HL78XX_EVENT_MDM_RESTART);
 }
 
@@ -599,6 +587,5 @@ const struct hl78xx_variant_ops hl78xx_variant_ops_hl7812 = {
 	.on_registered_ready = NULL,
 	.on_kcellmeas_ready = hl78xx_hl7812_on_kcellmeas_ready,
 #endif /* CONFIG_MODEM_HL78XX_LOW_POWER_MODE */
-	.carrier_on_gnss_pending = hl78xx_hl7812_carrier_on_gnss_pending,
 	.on_gnss_mode_enter_lpm = hl78xx_hl7812_on_gnss_mode_enter_lpm,
 };
