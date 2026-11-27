@@ -119,7 +119,7 @@
 		};
 
 		lfclk: lfclk {
-			compatible = "nordic,nrfs-lfclk";
+			compatible = "nordic,nrf-lfclk";
 			#clock-cells = <0>;
 			clock-frequency = <32768>;
 			status = "okay";
