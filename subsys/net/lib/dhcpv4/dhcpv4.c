@@ -1635,6 +1635,7 @@ static void dhcpv4_handle_msg_nak(struct net_if *iface)
 		}
 
 		break;
+	case NET_DHCPV4_DISABLED:
 	case NET_DHCPV4_INIT:
 	case NET_DHCPV4_SELECTING:
 	case NET_DHCPV4_REQUESTING:
@@ -1651,8 +1652,6 @@ static void dhcpv4_handle_msg_nak(struct net_if *iface)
 		break;
 	case NET_DHCPV4_BOUND:
 	case NET_DHCPV4_DECLINE:
-	/* A stopped client has no exchange to restart. */
-	case NET_DHCPV4_DISABLED:
 		break;
 	case NET_DHCPV4_RENEWING:
 	case NET_DHCPV4_REBINDING:
@@ -1762,11 +1761,6 @@ static enum net_verdict net_dhcpv4_input(struct net_conn *conn,
 
 	if (msg->hlen != net_if_get_link_addr(iface)->len) {
 		NET_DBG("Unexpected hlen (%d)", msg->hlen);
-		goto drop;
-	}
-
-	if (iface->config.dhcpv4.state == NET_DHCPV4_DISABLED) {
-		NET_DBG("Client stopped, ignoring reply");
 		goto drop;
 	}
 
