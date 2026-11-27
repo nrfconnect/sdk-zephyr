@@ -15,7 +15,6 @@
 };
 
 &dut2 {
-	/* Change to "okay" to test fast uart instance. */
-	status = "disabled";
+	status = "okay";
 	memory-regions = <&dma_fast_region>;
 };
