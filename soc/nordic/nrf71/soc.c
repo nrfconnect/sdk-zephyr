@@ -323,7 +323,7 @@ void arch_busy_wait(uint32_t time_us)
 	nrfx_coredep_delay_us(time_us);
 }
 
-#if defined(CONFIG_SOC_RESET_HOOK) && defined(CONFIG_ARM)
+#ifdef CONFIG_SOC_RESET_HOOK
 void soc_reset_hook(void)
 {
 	SystemInit();
