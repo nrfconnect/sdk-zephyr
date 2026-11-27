@@ -6,13 +6,13 @@
 
 /dts-v1/;
 
-#include <nxp/mcx/nxp_mcxa346.dtsi>
+#include <nxp/mcx/mcxa/nxp_mcxa346.dtsi>
 #include "frdm_mcxa346-pinctrl.dtsi"
 #include "board_common.dtsi"
 
 / {
-	model = "NXP FRDM_MCXA346 board";
 	compatible = "nxp,mcxa346", "nxp,mcx";
+	model = "NXP FRDM_MCXA346 board";
 };
 
 &cpu0 {

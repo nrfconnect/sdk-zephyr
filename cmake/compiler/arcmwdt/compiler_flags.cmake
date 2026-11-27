@@ -127,11 +127,12 @@ set_property(TARGET compiler-cpp PROPERTY dialect_cpp11 "-std=c++11")
 set_property(TARGET compiler-cpp PROPERTY dialect_cpp14 "-std=c++14")
 set_property(TARGET compiler-cpp PROPERTY dialect_cpp17 "-std=c++17")
 
-# no support of C++2a, C++20, C++2b, C++23
+# no support of C++2a, C++20, C++2b, C++23, C++26
 set_property(TARGET compiler-cpp PROPERTY dialect_cpp2a "")
 set_property(TARGET compiler-cpp PROPERTY dialect_cpp20 "")
 set_property(TARGET compiler-cpp PROPERTY dialect_cpp2b "")
 set_property(TARGET compiler-cpp PROPERTY dialect_cpp23 "")
+set_property(TARGET compiler-cpp PROPERTY dialect_cpp26 "")
 
 # Flag for disabling strict aliasing rule in C and C++
 set_compiler_property(PROPERTY no_strict_aliasing -fno-strict-aliasing)
@@ -163,6 +164,18 @@ set_compiler_property(PROPERTY no_common -fno-common)
 # mwdt's coverage mechanism is different with gnu
 # at present, zephyr only support gnu coverage
 set_compiler_property(PROPERTY coverage "")
+
+# Clang-style heap KASAN. Recover so ccac emits the _noabort callbacks.
+set_compiler_property(PROPERTY heap_kasan
+  -fsanitize=kernel-address
+  -fsanitize-recover=kernel-address
+  -mllvm;-asan-instrumentation-with-call-threshold=0
+  -mllvm;-asan-globals=0
+  -mllvm;-asan-stack=0
+  -mllvm;-asan-instrument-reads=0)
+
+# ccac has no -fno-sanitize= form; instrumentation is opt-in.
+set_compiler_property(PROPERTY no_heap_kasan "")
 
 # mwdt compiler flags for imacros. The specific header must be appended by user.
 set_compiler_property(PROPERTY imacros -imacros)

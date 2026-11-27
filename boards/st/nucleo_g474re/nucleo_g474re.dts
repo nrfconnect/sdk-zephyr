@@ -12,8 +12,8 @@
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 
 / {
-	model = "STMicroelectronics STM32G474RE-NUCLEO board";
 	compatible = "st,stm32g474re-nucleo";
+	model = "STMicroelectronics STM32G474RE-NUCLEO board";
 
 	chosen {
 		zephyr,console = &lpuart1;
@@ -22,6 +22,7 @@
 		zephyr,flash = &flash0;
 		zephyr,canbus = &fdcan1;
 		zephyr,code-partition = &slot0_partition;
+		zephyr,system-timer = &lptim1;
 	};
 
 	leds: leds {
@@ -144,9 +145,9 @@
 	status = "okay";
 
 	pwm2: pwm {
-		status = "okay";
 		pinctrl-0 = <&tim2_ch1_pa5>;
 		pinctrl-names = "default";
+		status = "okay";
 	};
 };
 
@@ -155,13 +156,13 @@
 	status = "okay";
 
 	pwm3: pwm {
-		status = "okay";
 		pinctrl-0 = <&tim3_ch1_pb4>;
 		pinctrl-names = "default";
+		status = "okay";
 	};
 };
 
-stm32_lp_tick_source: &lptim1 {
+&lptim1 {
 	clocks = <&rcc STM32_CLOCK(APB1, 31)>,
 		 <&rcc STM32_SRC_LSI LPTIM1_SEL(1)>;
 	status = "okay";
@@ -175,32 +176,32 @@ stm32_lp_tick_source: &lptim1 {
 
 &flash0 {
 	partitions {
+		ranges;
 		#address-cells = <1>;
 		#size-cells = <1>;
-		ranges;
 
 		boot_partition: partition@0 {
 			compatible = "zephyr,mapped-partition";
-			label = "mcuboot";
 			reg = <0x00000000 DT_SIZE_K(48)>;
+			label = "mcuboot";
 		};
 
 		slot0_partition: partition@c000 {
 			compatible = "zephyr,mapped-partition";
-			label = "image-0";
 			reg = <0x0000c000 DT_SIZE_K(228)>;
+			label = "image-0";
 		};
 
 		slot1_partition: partition@45000 {
 			compatible = "zephyr,mapped-partition";
-			label = "image-1";
 			reg = <0x00045000 DT_SIZE_K(230)>;
+			label = "image-1";
 		};
 
 		storage_partition: partition@7e800 {
 			compatible = "zephyr,mapped-partition";
-			label = "storage";
 			reg = <0x0007e800 DT_SIZE_K(6)>;
+			label = "storage";
 		};
 	};
 };
@@ -213,11 +214,15 @@ stm32_lp_tick_source: &lptim1 {
 	status = "okay";
 };
 
+&adc12_common {
+	st,adc-clock-source = "SYNC";
+	st,adc-prescaler = <4>;
+	status = "okay";
+};
+
 &adc1 {
 	pinctrl-0 = <&adc1_in1_pa0>;
 	pinctrl-names = "default";
-	st,adc-clock-source = "SYNC";
-	st,adc-prescaler = <4>;
 	status = "okay";
 };
 

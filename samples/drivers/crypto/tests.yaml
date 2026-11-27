@@ -23,6 +23,27 @@ tests:
         - ".*: CCM mode DECRYPT - Match"
         - ".*: GCM mode ENCRYPT - Match"
         - ".*: GCM mode DECRYPT - Match"
+  sample.drivers.crypto.bee:
+    tags: crypto
+    filter: dt_compat_enabled("realtek,bee-aes")
+    integration_platforms:
+      - rtl87x2g_evb_a/rtl8762gku
+      - rtl8752h_evb/rtl8752hjl
+    harness: console
+    harness_config:
+      type: multi_line
+      regex:
+        - ".*: Cipher Sample"
+        - ".*: ECB mode ENCRYPT - Match"
+        - ".*: ECB mode DECRYPT - Match"
+        - ".*: CBC mode ENCRYPT - Match"
+        - ".*: CBC mode DECRYPT - Match"
+        - ".*: CFB mode ENCRYPT - Match"
+        - ".*: CFB mode DECRYPT - Match"
+        - ".*: OFB mode ENCRYPT - Match"
+        - ".*: OFB mode DECRYPT - Match"
+        - ".*: CTR mode ENCRYPT - Match"
+        - ".*: CTR mode DECRYPT - Match"
   sample.drivers.crypto.microchip:
     tags: crypto
     filter: dt_compat_enabled("microchip,aes-g1")
@@ -122,3 +143,22 @@ tests:
         - ".*: CBC mode DECRYPT - Match"
         - ".*: CTR mode ENCRYPT - Match"
         - ".*: CTR mode DECRYPT - Match"
+
+  sample.drivers.crypto.infineon:
+    tags: crypto
+    filter: dt_compat_enabled("infineon,mxcryptolite")
+    integration_platforms:
+      - kit_psc3m6_eval/psc3m6ges3ahq1
+    harness: console
+    harness_config:
+      type: multi_line
+      regex:
+        - ".*: Cipher Sample"
+        - ".*: ECB mode ENCRYPT - Match"
+        - ".*: ECB mode DECRYPT - Match|.*does not support"
+        - ".*: CBC mode ENCRYPT - Match"
+        - ".*: CBC mode DECRYPT - Match|.*does not support"
+        - ".*: CTR mode ENCRYPT - Match"
+        - ".*: CTR mode DECRYPT - Match"
+        - ".*: CCM mode ENCRYPT - Match"
+        - ".*: CCM mode DECRYPT - Match"

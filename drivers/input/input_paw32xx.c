@@ -218,8 +218,8 @@ static void paw32xx_motion_work_handler(struct k_work *work)
 
 	LOG_DBG("x=%4d y=%4d", x, y);
 
-	input_report_rel(data->dev, cfg->axis_x, x, false, K_FOREVER);
-	input_report_rel(data->dev, cfg->axis_y, y, true, K_FOREVER);
+	input_report_rel(dev, cfg->axis_x, x, false, K_FOREVER);
+	input_report_rel(dev, cfg->axis_y, y, true, K_FOREVER);
 
 	/* Trigger one more scan if more data is available. */
 	if (gpio_pin_get_dt(&cfg->motion_gpio)) {
@@ -439,7 +439,7 @@ static int paw32xx_pm_action(const struct device *dev,
 }
 #endif
 
-#define PAW32XX_SPI_MODE (SPI_OP_MODE_MASTER | SPI_WORD_SET(8) | \
+#define PAW32XX_SPI_MODE (SPI_OP_MODE_CONTROLLER | SPI_WORD_SET(8) | \
 			  SPI_MODE_CPOL | SPI_MODE_CPHA | SPI_TRANSFER_MSB)
 
 #define PAW32XX_INIT(n)								\

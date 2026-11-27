@@ -13,6 +13,16 @@ toolchain:
 supported:
   - uart
   - gpio
+  - dma
+  - spi
+  - i2c
   - rtc
   - crc
+  - hwinfo
+  - watchdog
+  - mbox
+  - input
+  - wuc
+  - adc
+  - counter
 vendor: nxp

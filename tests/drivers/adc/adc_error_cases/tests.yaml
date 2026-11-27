@@ -27,6 +27,12 @@ tests:
       - xg29_rb4412a
       - bg29_rb4420a
       - slwrb4180a
+      - kg100s_rb4332a
+      - sixg301_rb4407a
       - pic32cx_sg41_cult
       - sam_e54_xpro
       - pic32cm_jh01_cpro
+      - it8xxx2_evb
+      - it82xx2_evb
+      - pic32cz_ca80_cult
+      - pic32cz_ca90_cult

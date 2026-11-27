@@ -10,12 +10,13 @@
  * @ingroup xen_dom0_sysctl
  */
 
-#ifndef __XEN_DOM0_SYSCTL_H__
-#define __XEN_DOM0_SYSCTL_H__
+#ifndef ZEPHYR_INCLUDE_XEN_DOM0_SYSCTL_H_
+#define ZEPHYR_INCLUDE_XEN_DOM0_SYSCTL_H_
+
+#include <xen/public/xen.h>
+#include <xen/public/sysctl.h>
 
 #include <zephyr/xen/generic.h>
-#include <zephyr/xen/public/sysctl.h>
-#include <zephyr/xen/public/xen.h>
 
 /**
  * @defgroup xen_dom0 Xen Dom0 control
@@ -41,6 +42,17 @@
  * @retval -EINVAL @p info is ``NULL``.
  */
 int xen_sysctl_physinfo(struct xen_sysctl_physinfo *info);
+
+/**
+ * @brief Performs a Xen trace buffer sysctl operation.
+ *
+ * @param[in,out] tbuf_op A pointer to a `struct xen_sysctl_tbuf_op` object
+ *                        that defines the trace buffer operation and receives
+ *                        any output values returned by Xen.
+ * @retval 0 on success.
+ * @retval -errno on failure.
+ */
+int xen_sysctl_tbuf_op(struct xen_sysctl_tbuf_op *tbuf_op);
 
 /**
  * @brief Retrieves information about Xen domains.
@@ -71,4 +83,4 @@ int xen_sysctl_cpu_hotplug(uint32_t cpu, bool enable);
 
 /** @} */
 
-#endif /* __XEN_DOM0_SYSCTL_H__ */
+#endif /* ZEPHYR_INCLUDE_XEN_DOM0_SYSCTL_H_ */

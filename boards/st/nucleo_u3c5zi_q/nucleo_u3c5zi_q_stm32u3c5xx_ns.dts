@@ -20,20 +20,21 @@
 	};
 };
 
-/* Node label sram0 initialy cover SRAM1 (192kB), SRAM2 (64kB),
- * SRAM3 (320kB) and SRAM4 (64kB). SRAM2 is owned by secure world
- * (TF-M). SRAM3 and SRAM4 are not supported as non-secure memory region.
- * So, we need to limit the sram0 node to cover only SRAM1 (192kB).
+/* Node label sram0 initially cover SRAM1 (192kB), SRAM2 (64kB), SRAM3 (320kB) and SRAM4 (64kB).
+ * In current implementation of TF-M (v2.3.0) for U3C5x devices:
+ * - SRAM1 last 64 kbytes are secure;
+ * - SRAM2, SRAM3 and SRAM4 are fully secure.
+ * Therefore we need to limit the sram0 node to cover only the first 128kByte of SRAM1.
  */
 &sram0 {
-	reg = <0x20000000 DT_SIZE_K(192)>;
+	reg = <0x20000000 DT_SIZE_K(128)>;
 };
 
 &flash0 {
 	partitions {
+		ranges;
 		#address-cells = <1>;
 		#size-cells = <1>;
-		ranges;
 
 		/*
 		 * Following flash partition is dedicated to the use of nucleo_u3c5zi_q
@@ -42,38 +43,38 @@
 		 */
 		boot_partition: partition@0 {
 			compatible = "zephyr,mapped-partition";
-			label = "mcuboot";
 			reg = <0x00000000 DT_SIZE_K(24)>;
+			label = "mcuboot";
 		};
 
 		slot0_partition: partition@6000 {
 			compatible = "zephyr,mapped-partition";
-			label = "image-0";
 			reg = <0x00006000 DT_SIZE_K(256)>;
+			label = "image-0";
 		};
 
 		slot0_ns_partition: partition@46000 {
 			compatible = "zephyr,mapped-partition";
-			label = "image-0-nonsecure";
 			reg = <0x00046000 DT_SIZE_K(512)>;
+			label = "image-0-nonsecure";
 		};
 
 		slot1_partition: partition@c6000 {
 			compatible = "zephyr,mapped-partition";
-			label = "image-1";
 			reg = <0x000c6000 DT_SIZE_K(256)>;
+			label = "image-1";
 		};
 
 		slot1_ns_partition: partition@106000 {
 			compatible = "zephyr,mapped-partition";
-			label = "image-1-nonsecure";
 			reg = <0x00106000 DT_SIZE_K(512)>;
+			label = "image-1-nonsecure";
 		};
 
 		storage_partition: partition@186000 {
 			compatible = "zephyr,mapped-partition";
-			label = "storage";
 			reg = <0x00186000 DT_SIZE_K(448)>;
+			label = "storage";
 		};
 	};
 };

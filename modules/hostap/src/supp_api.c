@@ -36,6 +36,7 @@ extern struct wpa_global *global;
 
 /* save the last wifi connection parameters */
 static struct wifi_connect_req_params last_wifi_conn_params;
+static uint8_t last_wifi_conn_ssid[WIFI_SSID_MAX_LEN];
 
 enum requested_ops {
 	CONNECT = 0,
@@ -164,7 +165,6 @@ static void supp_shell_connect_status(struct k_work *work)
 {
 	static int seconds_counter;
 	int status = CONNECTION_SUCCESS;
-	int conn_result = CONNECTION_FAILURE;
 	struct wpa_supplicant *wpa_s;
 	struct wpa_supp_api_ctrl *ctrl = &wpas_api_ctrl;
 
@@ -188,10 +188,8 @@ static void supp_shell_connect_status(struct k_work *work)
 				goto out;
 			}
 
-			conn_result = -ETIMEDOUT;
-			supplicant_send_wifi_mgmt_event(wpa_s->ifname,
-							NET_EVENT_WIFI_CMD_CONNECT_RESULT,
-							(void *)&conn_result, sizeof(int));
+			supplicant_send_wifi_mgmt_conn_status(wpa_s,
+							      WIFI_STATUS_CONN_TIMEOUT);
 			status = CONNECTION_FAILURE;
 			goto out;
 		}
@@ -457,6 +455,7 @@ enum wifi_security_type wpas_key_mgmt_to_zephyr(bool is_hapd, void *config, int 
 	case WPA_KEY_MGMT_SAE | WPA_KEY_MGMT_PSK_SHA256:
 	case WPA_KEY_MGMT_SAE | WPA_KEY_MGMT_PSK_SHA256 | WPA_KEY_MGMT_PSK:
 		return WIFI_SECURITY_TYPE_WPA_AUTO_PERSONAL;
+	case WPA_KEY_MGMT_PSK | WPA_KEY_MGMT_FT_PSK:
 	case WPA_KEY_MGMT_FT_PSK:
 		return WIFI_SECURITY_TYPE_FT_PSK;
 	case WPA_KEY_MGMT_FT_SAE:
@@ -521,6 +520,34 @@ static int wpas_config_process_blob(struct wpa_config *config, char *name, uint8
 
 #if defined CONFIG_WIFI_NM_WPA_SUPPLICANT_CRYPTO_ENTERPRISE || \
 	defined CONFIG_WIFI_NM_HOSTAPD_CRYPTO_ENTERPRISE
+static void supplicant_clear_enterprise_creds(void)
+{
+	bin_clear_free(enterprise_creds.ca_cert, enterprise_creds.ca_cert_len);
+	bin_clear_free(enterprise_creds.client_cert, enterprise_creds.client_cert_len);
+	bin_clear_free(enterprise_creds.client_key, enterprise_creds.client_key_len);
+	bin_clear_free(enterprise_creds.ca_cert2, enterprise_creds.ca_cert2_len);
+	bin_clear_free(enterprise_creds.client_cert2, enterprise_creds.client_cert2_len);
+	bin_clear_free(enterprise_creds.client_key2, enterprise_creds.client_key2_len);
+	os_memset(&enterprise_creds, 0, sizeof(enterprise_creds));
+}
+
+static int supplicant_copy_enterprise_cred(uint8_t **dst, uint32_t *dst_len, const uint8_t *src,
+					   uint32_t src_len)
+{
+	if (src == NULL || src_len == 0) {
+		return 0;
+	}
+
+	*dst = os_memdup(src, src_len);
+	if (*dst == NULL) {
+		return -ENOMEM;
+	}
+
+	*dst_len = src_len;
+
+	return 0;
+}
+
 int supplicant_add_enterprise_creds(const struct device *dev __unused,
 				    struct net_if *iface __unused,
 				    struct wifi_enterprise_creds_params *creds)
@@ -533,8 +560,45 @@ int supplicant_add_enterprise_creds(const struct device *dev __unused,
 		goto out;
 	}
 
-	memcpy((void *)&enterprise_creds, (void *)creds,
-			sizeof(struct wifi_enterprise_creds_params));
+	k_mutex_lock(&wpa_supplicant_mutex, K_FOREVER);
+
+	supplicant_clear_enterprise_creds();
+
+	ret = supplicant_copy_enterprise_cred(&enterprise_creds.ca_cert,
+					      &enterprise_creds.ca_cert_len, creds->ca_cert,
+					      creds->ca_cert_len);
+	if (ret == 0) {
+		ret = supplicant_copy_enterprise_cred(&enterprise_creds.client_cert,
+						      &enterprise_creds.client_cert_len,
+						      creds->client_cert, creds->client_cert_len);
+	}
+	if (ret == 0) {
+		ret = supplicant_copy_enterprise_cred(&enterprise_creds.client_key,
+						      &enterprise_creds.client_key_len,
+						      creds->client_key, creds->client_key_len);
+	}
+	if (ret == 0) {
+		ret = supplicant_copy_enterprise_cred(&enterprise_creds.ca_cert2,
+						      &enterprise_creds.ca_cert2_len,
+						      creds->ca_cert2, creds->ca_cert2_len);
+	}
+	if (ret == 0) {
+		ret = supplicant_copy_enterprise_cred(&enterprise_creds.client_cert2,
+						      &enterprise_creds.client_cert2_len,
+						      creds->client_cert2, creds->client_cert2_len);
+	}
+	if (ret == 0) {
+		ret = supplicant_copy_enterprise_cred(&enterprise_creds.client_key2,
+						      &enterprise_creds.client_key2_len,
+						      creds->client_key2, creds->client_key2_len);
+	}
+
+	if (ret != 0) {
+		wpa_printf(MSG_ERROR, "failed to copy enterprise creds");
+		supplicant_clear_enterprise_creds();
+	}
+
+	k_mutex_unlock(&wpa_supplicant_mutex);
 
 out:
 	return ret;
@@ -812,8 +876,11 @@ static int wpas_add_and_config_network(struct wpa_supplicant *wpa_s,
 			goto out;
 		}
 
-		/* SAP - only open and WPA2-PSK are supported for now */
-		if (mode_ap && params->security != WIFI_SECURITY_TYPE_PSK) {
+		/* SAP - only open, WPA2-PSK and WPA3-SAE are supported for now */
+		if (mode_ap && params->security != WIFI_SECURITY_TYPE_PSK &&
+		    params->security != WIFI_SECURITY_TYPE_SAE &&
+		    params->security != WIFI_SECURITY_TYPE_SAE_H2E &&
+		    params->security != WIFI_SECURITY_TYPE_SAE_AUTO) {
 			ret = -1;
 			wpa_printf(MSG_ERROR, "Unsupported security type: %d",
 				params->security);
@@ -890,6 +957,16 @@ static int wpas_add_and_config_network(struct wpa_supplicant *wpa_s,
 			}
 
 			if (!wpa_cli_cmd_v("set_network %d pairwise CCMP", resp.network_id)) {
+				goto out;
+			}
+
+			/*
+			 * WPA3-SAE mandates management-frame protection; honor
+			 * the requested MFP level (callers must request at least
+			 * WIFI_MFP_OPTIONAL for SAE).
+			 */
+			if (!wpa_cli_cmd_v("set_network %d ieee80211w %d",
+					   resp.network_id, params->mfp)) {
 				goto out;
 			}
 		}
@@ -1096,9 +1173,14 @@ static int wpas_add_and_config_network(struct wpa_supplicant *wpa_s,
 			if (params->security == WIFI_SECURITY_TYPE_EAP_PEAP_MSCHAPV2 ||
 			    params->security == WIFI_SECURITY_TYPE_EAP_PEAP_GTC ||
 			    params->security == WIFI_SECURITY_TYPE_EAP_PEAP_TLS) {
-				snprintk(phase1, sizeof(phase1),
-					 "peapver=%d peaplabel=0 crypto_binding=0",
-					 params->eap_ver);
+				if (params->eap_ver == -1) {
+					snprintk(phase1, sizeof(phase1),
+						"peaplabel=0 crypto_binding=0");
+				} else {
+					snprintk(phase1, sizeof(phase1),
+						"peapver=%d peaplabel=0 crypto_binding=0",
+						params->eap_ver);
+				}
 
 				if (!wpa_cli_cmd_v("set_network %d phase1 \"%s\"", resp.network_id,
 						   &phase1[0])) {
@@ -1148,9 +1230,9 @@ static int wpas_add_and_config_network(struct wpa_supplicant *wpa_s,
 				}
 			}
 
-			if (false == ((params->security == WIFI_SECURITY_TYPE_EAP_PEAP_MSCHAPV2 ||
-			    params->security == WIFI_SECURITY_TYPE_EAP_TTLS_MSCHAPV2) &&
-			    (!params->verify_peer_cert))) {
+			if (false == (params->security == WIFI_SECURITY_TYPE_EAP_PEAP_MSCHAPV2 ||
+			    params->security == WIFI_SECURITY_TYPE_EAP_TTLS_MSCHAPV2 ||
+				params->security == WIFI_SECURITY_TYPE_EAP_PEAP_GTC)) {
 				if (wpas_config_process_blob(wpa_s->conf, "ca_cert",
 						   enterprise_creds.ca_cert,
 						   enterprise_creds.ca_cert_len)) {
@@ -1163,71 +1245,81 @@ static int wpas_add_and_config_network(struct wpa_supplicant *wpa_s,
 				}
 
 				if (wpas_config_process_blob(wpa_s->conf, "client_cert",
-							     enterprise_creds.client_cert,
-							     enterprise_creds.client_cert_len)) {
+						enterprise_creds.client_cert,
+						enterprise_creds.client_cert_len)) {
 					goto out;
 				}
 
-				if (!wpa_cli_cmd_v(
-					    "set_network %d client_cert \"blob://client_cert\"",
-					    resp.network_id)) {
+				if (!wpa_cli_cmd_v("set_network %d client_cert \"blob://client_cert\"",
+						resp.network_id)) {
 					goto out;
 				}
 
 				if (wpas_config_process_blob(wpa_s->conf, "private_key",
-							     enterprise_creds.client_key,
-							     enterprise_creds.client_key_len)) {
+						enterprise_creds.client_key,
+						enterprise_creds.client_key_len)) {
 					goto out;
 				}
 
-				if (!wpa_cli_cmd_v(
-					    "set_network %d private_key \"blob://private_key\"",
-					    resp.network_id)) {
+				if (!wpa_cli_cmd_v("set_network %d private_key \"blob://private_key\"",
+						resp.network_id)) {
 					goto out;
 				}
 
 				if (!wpa_cli_cmd_v("set_network %d private_key_passwd \"%s\"",
-						   resp.network_id, params->key_passwd)) {
+						resp.network_id, params->key_passwd)) {
 					goto out;
 				}
 
 				if (wpas_config_process_blob(wpa_s->conf, "ca_cert2",
-							     enterprise_creds.ca_cert2,
-							     enterprise_creds.ca_cert2_len)) {
+								enterprise_creds.ca_cert2,
+								enterprise_creds.ca_cert2_len)) {
 					goto out;
 				}
 
 				if (!wpa_cli_cmd_v("set_network %d ca_cert2 \"blob://ca_cert2\"",
-						   resp.network_id)) {
+						resp.network_id)) {
 					goto out;
 				}
 
 				if (wpas_config_process_blob(wpa_s->conf, "client_cert2",
-							     enterprise_creds.client_cert2,
-							     enterprise_creds.client_cert2_len)) {
+							enterprise_creds.client_cert2,
+							enterprise_creds.client_cert2_len)) {
 					goto out;
 				}
 
-				if (!wpa_cli_cmd_v(
-					    "set_network %d client_cert2 \"blob://client_cert2\"",
-					    resp.network_id)) {
+				if (!wpa_cli_cmd_v("set_network %d client_cert2 \"blob://client_cert2\"",
+						resp.network_id)) {
 					goto out;
 				}
 
 				if (wpas_config_process_blob(wpa_s->conf, "private_key2",
-							     enterprise_creds.client_key2,
-							     enterprise_creds.client_key2_len)) {
+								enterprise_creds.client_key2,
+								enterprise_creds.client_key2_len)) {
 					goto out;
 				}
 
-				if (!wpa_cli_cmd_v(
-					    "set_network %d private_key2 \"blob://private_key2\"",
-					    resp.network_id)) {
+				if (!wpa_cli_cmd_v("set_network %d private_key2 \"blob://private_key2\"",
+						resp.network_id)) {
 					goto out;
 				}
 
 				if (!wpa_cli_cmd_v("set_network %d private_key2_passwd \"%s\"",
-						   resp.network_id, params->key2_passwd)) {
+						resp.network_id, params->key2_passwd)) {
+					goto out;
+				}
+			} else if (params->verify_peer_cert) {
+				/* If we're using MSCHAPV2 and we're
+				 * requested a CA cert valid, load it
+				 */
+				if (wpas_config_process_blob(wpa_s->conf, "ca_cert",
+						enterprise_creds.ca_cert,
+						enterprise_creds.ca_cert_len)) {
+					goto out;
+				}
+
+				if (!wpa_cli_cmd_v("set_network %d ca_cert \"blob://ca_cert\"",
+						resp.network_id)) {
 					goto out;
 				}
 			}
@@ -1393,8 +1485,26 @@ static int wpas_add_and_config_network(struct wpa_supplicant *wpa_s,
 		goto out;
 	}
 
-	memset(&last_wifi_conn_params, 0, sizeof(struct wifi_connect_req_params));
-	memcpy((void *)&last_wifi_conn_params, params, sizeof(struct wifi_connect_req_params));
+	memset(&last_wifi_conn_params, 0, sizeof(last_wifi_conn_params));
+	last_wifi_conn_params.ssid_length = MIN(params->ssid_length, sizeof(last_wifi_conn_ssid));
+	memcpy(last_wifi_conn_ssid, params->ssid, last_wifi_conn_params.ssid_length);
+	last_wifi_conn_params.ssid = last_wifi_conn_ssid;
+	last_wifi_conn_params.psk_is_pbkdf2 = params->psk_is_pbkdf2;
+	last_wifi_conn_params.band = params->band;
+	last_wifi_conn_params.channel = params->channel;
+	last_wifi_conn_params.security = params->security;
+	last_wifi_conn_params.mfp = params->mfp;
+	memcpy(last_wifi_conn_params.bssid, params->bssid, sizeof(last_wifi_conn_params.bssid));
+	last_wifi_conn_params.timeout = params->timeout;
+	last_wifi_conn_params.wpa3_ent_mode = params->wpa3_ent_mode;
+	last_wifi_conn_params.TLS_cipher = params->TLS_cipher;
+	last_wifi_conn_params.eap_ver = params->eap_ver;
+	last_wifi_conn_params.verify_peer_cert = params->verify_peer_cert;
+	last_wifi_conn_params.ft_used = params->ft_used;
+	last_wifi_conn_params.ignore_broadcast_ssid = params->ignore_broadcast_ssid;
+	last_wifi_conn_params.bandwidth = params->bandwidth;
+	last_wifi_conn_params.ssid_protection = params->ssid_protection;
+	last_wifi_conn_params.transition_disable = params->transition_disable;
 	return 0;
 
 rem_net:
@@ -1507,6 +1617,14 @@ int supplicant_connect(const struct device *dev __unused, struct net_if *iface,
 		goto out;
 	}
 
+	/* The supplicant only clears these once it associates, so drop the codes of
+	 * the previous request to keep them from being reported against this one.
+	 * Configuring the network ends with select_network, which already starts
+	 * the attempt, so this has to happen before that.
+	 */
+	wpa_s->auth_status_code = WLAN_STATUS_SUCCESS;
+	wpa_s->assoc_status_code = WLAN_STATUS_SUCCESS;
+
 	ret = wpas_add_and_config_network(wpa_s, params, false);
 	if (ret) {
 		wpa_printf(MSG_ERROR, "Failed to add and configure network for STA mode: %d", ret);
@@ -1614,7 +1732,7 @@ int supplicant_status(const struct device *dev __unused, struct net_if *iface,
 	if (wpa_s->wpa_state >= WPA_ASSOCIATED) {
 		struct wpa_ssid *ssid = wpa_s->current_ssid;
 		u8 channel = 0;
-		struct signal_poll_resp signal_poll;
+		struct signal_poll_resp signal_poll = { 0 };
 		u8 *_ssid;
 		size_t ssid_len;
 		struct status_resp cli_status;
@@ -1902,21 +2020,58 @@ int supplicant_candidate_scan(const struct device *dev __unused, struct net_if *
 	char *end = pos + SUPPLICANT_CANDIDATE_SCAN_CMD_BUF_SIZE;
 	int freq = 0;
 	struct wpa_supplicant *wpa_s;
+	int cur_freq = 0;
+	bool first = true;
 
 	wpa_s = get_wpa_s_handle(iface);
 	if (!wpa_s) {
 		return -1;
 	}
 
+	/*
+	 * Include the current connected AP's frequency in the scan so that
+	 * wpa_supplicant's BSS cache has an up-to-date entry for the current
+	 * AP after the scan completes.
+	 *
+	 * Without this, wpa_supplicant_need_to_roam() (events.c) hits one of
+	 * two early-return paths that bypass need_to_roam_within_ess():
+	 *
+	 *   1. current_bss == NULL  (cache entry expired / not refreshed)
+	 *   2. selected->last_update_idx > current_bss->last_update_idx
+	 *      (candidate was seen in this scan round, current AP was not)
+	 *
+	 * Both cases cause an unconditional roam regardless of RSSI delta,
+	 * potentially associating to a much weaker AP.
+	 */
+	if (wpa_s->current_bss) {
+		cur_freq = wpa_s->current_bss->freq;
+	}
+
 	strcpy(pos, "freq=");
 	pos += 5;
+
+	/* Add current AP frequency first */
+	if (cur_freq > 0) {
+		pos += snprintf(pos, end - pos, "%d", cur_freq);
+		first = false;
+	}
+
+	/* Add neighbor report channels, skipping duplicates */
 	while (params->band_chan[i].channel) {
-		if (i > 0) {
+		freq = chan_to_freq(params->band_chan[i].channel);
+		i++;
+		if (freq <= 0) {
+			continue;
+		}
+		/* Skip if this neighbor channel is the same as current AP */
+		if (freq == cur_freq) {
+			continue;
+		}
+		if (!first) {
 			pos += snprintf(pos, end - pos, ",");
 		}
-		freq = chan_to_freq(params->band_chan[i].channel);
 		pos += snprintf(pos, end - pos, "%d", freq);
-		i++;
+		first = false;
 	}
 
 	if (!wpa_cli_cmd_v("scan %s", cmd)) {
@@ -1988,6 +2143,9 @@ int supplicant_reg_domain(const struct device *dev,
 {
 	const struct wifi_mgmt_ops *const wifi_mgmt_api = get_wifi_mgmt_api(dev);
 	struct wpa_supplicant *wpa_s;
+	char cmd[sizeof("SET country XX")];
+	/* Must hold the longest reply to "SET country": "OK", "FAIL" or "UNKNOWN COMMAND" */
+	char resp[32] = {0};
 	int ret = -1;
 
 	if (!wifi_mgmt_api || !wifi_mgmt_api->reg_domain) {
@@ -2016,7 +2174,17 @@ int supplicant_reg_domain(const struct device *dev,
 			goto out;
 		}
 
-		if (!wpa_cli_cmd_v("set country %s", reg_domain->country_code)) {
+		if (wpa_s->ctrl_conn == NULL) {
+			wpa_printf(MSG_ERROR, "Control interface not ready, dropping command: %s",
+				   "SET country");
+			goto out;
+		}
+
+		snprintf(cmd, sizeof(cmd), "SET country %c%c",
+			 reg_domain->country_code[0], reg_domain->country_code[1]);
+		if (zephyr_wpa_cli_cmd_resp_noprint(wpa_s->ctrl_conn, cmd, resp) ||
+		    strncmp(resp, "OK", 2) != 0) {
+			ret = -EINVAL;
 			goto out;
 		}
 
@@ -2948,6 +3116,22 @@ static void nan_transmit_to_cmd(struct wifi_nan_params *params, char **pos, char
 	append_nan_ssi(pos, end, params->transmit.ssi, params->transmit.ssi_len);
 }
 
+static int nan_set_to_cmd(struct wifi_nan_params *params, char *cmd, size_t max_len)
+{
+	int ret;
+
+	if (params->set.param[0] == '\0' || params->set.value[0] == '\0') {
+		return -EINVAL;
+	}
+
+	ret = snprintf(cmd, max_len, "NAN_SET %s %s", params->set.param, params->set.value);
+	if (ret < 0 || (size_t)ret >= max_len) {
+		return -ENOBUFS;
+	}
+
+	return 0;
+}
+
 static int nan_params_to_cmd(struct wifi_nan_params *params, char *cmd, size_t max_len)
 {
 	char *pos = cmd;
@@ -2959,6 +3143,25 @@ static int nan_params_to_cmd(struct wifi_nan_params *params, char *cmd, size_t m
 	}
 
 	switch (params->op) {
+	case WIFI_NAN_OP_START:
+		strncpy(pos, "NAN_START", end - pos);
+		break;
+
+	case WIFI_NAN_OP_STOP:
+		strncpy(pos, "NAN_STOP", end - pos);
+		break;
+
+	case WIFI_NAN_OP_SET:
+		return nan_set_to_cmd(params, pos, end - pos);
+
+	case WIFI_NAN_OP_UPDATE_CONF:
+		strncpy(pos, "NAN_UPDATE_CONF", end - pos);
+		break;
+
+	case WIFI_NAN_OP_STATUS:
+		strncpy(pos, "NAN_STATUS", end - pos);
+		break;
+
 	case WIFI_NAN_OP_PUBLISH:
 		nan_publish_to_cmd(params, &pos, end);
 		break;
@@ -3015,6 +3218,7 @@ int supplicant_nan_cfg(const struct device *dev __unused, struct net_if *iface,
 		goto out;
 	}
 
+	memset(params->resp, 0, sizeof(params->resp));
 	if (zephyr_wpa_cli_cmd_resp_noprint(wpa_s->ctrl_conn, cmd, params->resp)) {
 		ret = -ENOEXEC;
 		goto out;
@@ -3058,6 +3262,10 @@ out:
 }
 
 #ifdef CONFIG_WIFI_NM_WPA_SUPPLICANT_P2P
+BUILD_ASSERT(sizeof(CONFIG_WIFI_NM_WPA_SUPPLICANT_P2P_DEVICE_NAME) - 1 <=
+			WIFI_P2P_DEVICE_NAME_MAX_LEN,
+			"CONFIG_WIFI_NM_WPA_SUPPLICANT_P2P_DEVICE_NAME too long");
+
 static inline void extract_value(const char *src, char *dest, size_t dest_size)
 {
 	size_t i = 0;
@@ -3665,6 +3873,44 @@ int supplicant_p2p_oper(const struct device *dev __unused, struct net_if *iface,
 				   "P2P persistent_remove: invalid id %d",
 				   params->persistent_remove.id);
 			return -EINVAL;
+		}
+		ret = 0;
+		break;
+	}
+	case WIFI_P2P_SET_DEV_NAME: {
+		const char *device_name = WIFI_P2P_DEVICE_NAME;
+
+		if (!wpa_s->global->p2p) {
+			wpa_printf(MSG_ERROR, "P2P_SET_DEV_NAME command failed");
+			return -EIO;
+		}
+		if (strlen(params->device_name) > 0) {
+			device_name = params->device_name;
+		}
+		os_free(wpa_s->conf->device_name);
+		wpa_s->conf->device_name = os_strdup(device_name);
+		if (wpa_s->conf->device_name == NULL) {
+			return -ENOMEM;
+		}
+		wpa_s->conf->changed_parameters |= CFG_CHANGED_DEVICE_NAME;
+		wpa_supplicant_update_config(wpa_s);
+		ret = 0;
+		break;
+	}
+	case WIFI_P2P_STATUS: {
+		snprintk(cmd_buf, sizeof(cmd_buf), "P2P_STATUS");
+		if (params->status.buf == NULL ||
+		    params->status.buf_size < WIFI_P2P_STATUS_BUF_SIZE) {
+			wpa_printf(MSG_ERROR,
+				   "P2P_STATUS: buffer missing or too small (%zu < %d)",
+				   params->status.buf_size, WIFI_P2P_STATUS_BUF_SIZE);
+			return -EINVAL;
+		}
+		ret = zephyr_wpa_cli_cmd_resp_noprint(wpa_s->ctrl_conn,
+						      cmd_buf, params->status.buf);
+		if (ret < 0) {
+			wpa_printf(MSG_ERROR, "P2P_STATUS command failed: %d", ret);
+			return -EIO;
 		}
 		ret = 0;
 		break;

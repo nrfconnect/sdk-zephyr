@@ -6,18 +6,16 @@
 
 #define DT_DRV_COMPAT sony_imx335
 
-#include <zephyr/kernel.h>
 #include <zephyr/device.h>
-#include <zephyr/drivers/i2c.h>
 #include <zephyr/drivers/gpio.h>
+#include <zephyr/drivers/i2c.h>
 #include <zephyr/drivers/video.h>
-#include <zephyr/drivers/video-controls.h>
 #include <zephyr/dt-bindings/video/video-interfaces.h>
+#include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/video/video.h>
 
 #include "video_common.h"
-#include "video_ctrls.h"
-#include "video_device.h"
 
 LOG_MODULE_REGISTER(video_imx335, CONFIG_VIDEO_LOG_LEVEL);
 
@@ -505,16 +503,16 @@ static int imx335_set_frmival(const struct device *dev, struct video_frmival *fr
 
 	uint16_t hmax;
 
+	/* The line length is the same with and without 2x2 binning */
 	switch (match.index) {
 	case IMX335_25_FPS:
-		hmax = (drv_data->fmt.width == IMX335_BIN_2X2_WIDTH
-				&& drv_data->fmt.height == IMX335_BIN_2X2_HEIGHT) ? 0x0280 : 0x0294;
+		hmax = 0x0294;
 		break;
 	case IMX335_30_FPS:
 		hmax = 0x0226;
 		break;
 	case IMX335_50_FPS:
-		hmax = 0x0140;
+		hmax = 0x014A;
 		break;
 	case IMX335_60_FPS:
 		hmax = 0x0113;

@@ -4,15 +4,15 @@
  */
 
 /dts-v1/;
-#include <espressif/esp32s3/esp32s3_r2.dtsi>
+#include <espressif/esp32s3/esp32s3.dtsi>
 #include "rak3112-pinctrl.dtsi"
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 #include <espressif/partitions_0x0_amp_16M.dtsi>
 #include <zephyr/dt-bindings/lora/sx126x.h>
 
 / {
-	model = "RAK3112 PROCPU";
 	compatible = "espressif,esp32s3";
+	model = "RAK3112 PROCPU";
 
 	aliases {
 		i2c-1 = &i2c1;
@@ -36,6 +36,10 @@
 	ranges = <0x0 0x0 DT_SIZE_M(16)>;
 };
 
+&psram0 {
+	size = <DT_SIZE_M(2)>;
+};
+
 &gpio0 {
 	status = "okay";
 };
@@ -51,11 +55,11 @@
 };
 
 &spi2 {
-	status = "okay";
 	#address-cells = <1>;
 	#size-cells = <0>;
 	pinctrl-0 = <&spim2_default>;
 	pinctrl-names = "default";
+	status = "okay";
 
 	lora: lora@0 {
 		compatible = "semtech,sx1262";
@@ -72,10 +76,10 @@
 };
 
 &uart0 {
-	status = "okay";
 	current-speed = <115200>;
 	pinctrl-0 = <&uart0_default>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &wdt0 {

@@ -63,4 +63,21 @@
 			bias-pull-up;
 		};
 	};
+
+	rmt_default: rmt_default {
+		group1 {
+			pinmux = <RMT_OUT0_GPIO13>;
+		};
+
+		group2 {
+			pinmux = <RMT_IN0_GPIO12>;
+		};
+	};
+
+	mcpwm0_default: mcpwm0_default {
+		group1 {
+			pinmux = <MCPWM0_OUT0A_GPIO26>;
+			output-enable;
+		};
+	};
 };

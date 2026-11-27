@@ -386,6 +386,11 @@ SECTION_PROLOGUE(.x86shadowstack.arr,,)
 	__kernel_ram_start = .;
 	__bss_start = .;
 
+/* Located in generated directory. This file is populated by the
+ * zephyr_linker_sources() Cmake function.
+ */
+#include <snippets-bss.ld>
+
 	*(.bss)
 	*(".bss.*")
 	*(COMMON)
@@ -446,7 +451,6 @@ SECTION_PROLOGUE(.x86shadowstack.arr,,)
 
 #include <zephyr/linker/debug-sections.ld>
 
-	/DISCARD/ : { *(.note.GNU-stack) }
 
 /*
  * The sections below are still treated as warnings

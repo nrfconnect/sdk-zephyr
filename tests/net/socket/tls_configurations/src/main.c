@@ -16,37 +16,46 @@ LOG_MODULE_REGISTER(tls_configuration_sample, LOG_LEVEL_INF);
 #include <zephyr/net/net_if.h>
 #include <zephyr/sys/util.h>
 
+#if defined(CONFIG_TLS_CONFIGURATIONS_PSK_FORMAT_OPAQUE)
+/* Needed to create the PSA key storing PSK. */
+#include <psa/crypto.h>
+#endif
+
+#if defined(CONFIG_NET_TEST)
+#include <mbedtls/ssl.h>
+
+int ztls_get_cached_session(int fd, mbedtls_ssl_session *session);
+#endif
+
 #if defined(CONFIG_MBEDTLS_CIPHERSUITE_TLS_PSK_WITH_AES_256_CBC_SHA384) || \
 	defined(CONFIG_MBEDTLS_SSL_TLS1_3_KEY_EXCHANGE_MODE_PSK_ENABLED)
 #define USE_PSK_KEY_EXCHANGE
 #endif
 
+/* All credential related variables are declared globally because
+ * tls_credentials_volatile only takes a reference to them, it doesn't make
+ * a copy.
+ */
 #if defined(USE_PSK_KEY_EXCHANGE)
 static const unsigned char psk[] = { 0x01, 0x02, 0x03, 0x04, 0x05 };
 static const char psk_id[] = "PSK_identity";
-#endif /* USE_PSK_KEY_EXCHANGE */
-
+#if defined(CONFIG_TLS_CONFIGURATIONS_PSK_FORMAT_OPAQUE)
+static psa_key_id_t psk_key_id = PSA_KEY_ID_NULL;
+#endif /* CONFIG_TLS_CONFIGURATIONS_PSK_FORMAT_OPAQUE */
+#else /* USE_PSK_KEY_EXCHANGE */
 /* Server certificate is only used when not using PSK key exchanges for simplicity. */
-#if !defined(USE_PSK_KEY_EXCHANGE)
 #define USE_CERTIFICATE
 static const unsigned char certificate[] = {
 #include "ec.crt.inc"
 };
-#endif
+#endif /* USE_PSK_KEY_EXCHANGE */
 
 #define APP_BANNER "TLS socket configuration sample"
 
 #define INVALID_SOCKET (-1)
 
-enum {
-	_PLACEHOLDER_TAG_ = 0,
-#if defined(USE_CERTIFICATE)
-	CA_CERTIFICATE_TAG,
-#endif
-#if defined(USE_PSK_KEY_EXCHANGE)
-	PSK_TAG,
-#endif
-};
+/* Credentials have different types, so they can all share the same tag. */
+#define CREDENTIALS_TAG 1
 
 static int socket_fd = INVALID_SOCKET;
 static struct zsock_pollfd fds[1];
@@ -54,6 +63,25 @@ static struct zsock_pollfd fds[1];
 /* Keep the new line because openssl uses that to start processing the incoming data */
 #define TEST_STRING "hello world\n"
 static uint8_t test_buf[sizeof(TEST_STRING)];
+
+static int check_cached_ticket(void)
+{
+#if defined(CONFIG_NET_TEST)
+	mbedtls_ssl_session session;
+	int ret;
+
+	mbedtls_ssl_session_init(&session);
+	ret = ztls_get_cached_session(socket_fd, &session);
+	if (ret == 0 && session.MBEDTLS_PRIVATE(ticket_len) == 0) {
+		ret = -ENOENT;
+	}
+
+	mbedtls_ssl_session_free(&session);
+	return ret;
+#else
+	return 0;
+#endif
+}
 
 static int wait_for_event(void)
 {
@@ -91,12 +119,7 @@ static int create_socket(void)
 	}
 
 	sec_tag_t sec_tag_list[] = {
-#if defined(USE_CERTIFICATE)
-		CA_CERTIFICATE_TAG,
-#endif
-#if defined(USE_PSK_KEY_EXCHANGE)
-		PSK_TAG,
-#endif
+		CREDENTIALS_TAG,
 	};
 
 	ret = zsock_setsockopt(socket_fd, ZSOCK_SOL_TLS, ZSOCK_TLS_SEC_TAG_LIST, sec_tag_list,
@@ -112,6 +135,17 @@ static int create_socket(void)
 			       sizeof("localhost"));
 	if (ret < 0) {
 		LOG_ERR("Failed to set TLS_HOSTNAME option (%d)", errno);
+		return -errno;
+	}
+#endif
+
+#if defined(CONFIG_NET_TEST)
+	int session_cache = ZSOCK_TLS_SESSION_CACHE_ENABLED;
+
+	ret = zsock_setsockopt(socket_fd, ZSOCK_SOL_TLS, ZSOCK_TLS_SESSION_CACHE,
+			       &session_cache, sizeof(session_cache));
+	if (ret < 0) {
+		LOG_ERR("Failed to enable TLS session cache (%d)", errno);
 		return -errno;
 	}
 #endif
@@ -136,12 +170,37 @@ void close_socket(void)
 	}
 }
 
+#if defined(CONFIG_TLS_CONFIGURATIONS_PSK_FORMAT_OPAQUE)
+/* Import the PSK into PSA with the same policy that Mbed TLS uses for raw PSKs. */
+static int import_opaque_psk(void)
+{
+	psa_key_attributes_t attr = PSA_KEY_ATTRIBUTES_INIT;
+	psa_status_t status;
+
+	/* Only TLS 1.2 is supported: hash matches TLS_PSK_WITH_AES_256_CBC_SHA384.
+	 * PSK in TLS 1.3 is under investigation.
+	 */
+	psa_set_key_type(&attr, PSA_KEY_TYPE_DERIVE);
+	psa_set_key_usage_flags(&attr, PSA_KEY_USAGE_DERIVE);
+	psa_set_key_algorithm(&attr, PSA_ALG_TLS12_PSK_TO_MS(PSA_ALG_SHA_384));
+
+	status = psa_import_key(&attr, psk, sizeof(psk), &psk_key_id);
+	psa_reset_key_attributes(&attr);
+	if (status != PSA_SUCCESS) {
+		LOG_ERR("Failed to import PSK into PSA: %d", status);
+		return -EIO;
+	}
+
+	return 0;
+}
+#endif /* CONFIG_TLS_CONFIGURATIONS_PSK_FORMAT_OPAQUE */
+
 static int setup_credentials(void)
 {
 	__maybe_unused int err;
 
 #if defined(USE_CERTIFICATE)
-	err = tls_credential_add(CA_CERTIFICATE_TAG,
+	err = tls_credential_add(CREDENTIALS_TAG,
 				TLS_CREDENTIAL_CA_CERTIFICATE,
 				certificate,
 				sizeof(certificate));
@@ -152,14 +211,29 @@ static int setup_credentials(void)
 #endif
 
 #if defined(USE_PSK_KEY_EXCHANGE)
-	err = tls_credential_add(PSK_TAG,
+#if defined(CONFIG_TLS_CONFIGURATIONS_PSK_FORMAT_OPAQUE)
+	err = import_opaque_psk();
+	if (err < 0) {
+		return err;
+	}
+
+	err = tls_credential_add(CREDENTIALS_TAG,
+				TLS_CREDENTIAL_PSK_PSA,
+				&psk_key_id,
+				sizeof(psk_key_id));
+	if (err < 0) {
+		LOG_ERR("Failed to register opaque PSK: %d", err);
+	}
+#else
+	err = tls_credential_add(CREDENTIALS_TAG,
 				TLS_CREDENTIAL_PSK,
 				psk,
 				sizeof(psk));
 	if (err < 0) {
 		LOG_ERR("Failed to register PSK: %d", err);
 	}
-	err = tls_credential_add(PSK_TAG,
+#endif /* CONFIG_TLS_CONFIGURATIONS_PSK_FORMAT_OPAQUE */
+	err = tls_credential_add(CREDENTIALS_TAG,
 				TLS_CREDENTIAL_PSK_ID,
 				psk_id,
 				sizeof(psk_id) - 1);
@@ -226,6 +300,12 @@ int main(void)
 			goto exit;
 		}
 		LOG_DBG("Received: %s", test_buf);
+	}
+
+	ret = check_cached_ticket();
+	if (ret < 0) {
+		LOG_ERR("TLS session ticket was not cached (%d)", ret);
+		goto exit;
 	}
 
 	ret = memcmp(TEST_STRING, test_buf, data_len);

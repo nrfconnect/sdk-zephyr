@@ -120,6 +120,13 @@ void lwm2m_engine_context_close(struct lwm2m_ctx *client_ctx);
  */
 void lwm2m_engine_context_init(struct lwm2m_ctx *client_ctx);
 
+/**
+ * @brief Forgets the requests handled on this context so far.
+ *
+ * @param[in] client_ctx Context whose request cache is cleared
+ */
+void lwm2m_engine_dedup_clear(struct lwm2m_ctx *client_ctx);
+
 /* Message buffer functions */
 uint8_t *lwm2m_get_message_buf(void);
 int lwm2m_put_message_buf(uint8_t *buf);
@@ -213,7 +220,7 @@ int lwm2m_security_index_to_inst_id(int index);
 
 #if defined(CONFIG_LWM2M_FIRMWARE_UPDATE_OBJ_SUPPORT)
 /**
- * @brief Sets the update state (as specified in  LWM2M SPEC E.6 regarding the firmware update)
+ * @brief Sets the update state (as specified in  LwM2M SPEC E.6 regarding the firmware update)
  * of the Firmware object instance given by @p obj_inst_id to @p state.
  * (i.e Sets the value of resource 5/ @p obj_inst_id /3)
  *
@@ -223,7 +230,7 @@ int lwm2m_security_index_to_inst_id(int index);
 void lwm2m_firmware_set_update_state_inst(uint16_t obj_inst_id, uint8_t state);
 
 /**
- * @brief Sets the result state (as specified in  LWM2M SPEC E.6 regarding the firmware update)
+ * @brief Sets the result state (as specified in  LwM2M SPEC E.6 regarding the firmware update)
  * of the Firmware object instance given by @p obj_inst_id to @p result.
  * (i.e Sets the value of resource 5/ @p obj_inst_id /5)
  *
@@ -247,7 +254,7 @@ void lwm2m_firmware_set_update_state(uint8_t state);
 void lwm2m_firmware_set_update_result(uint8_t result);
 
 /**
- * @brief Returns the update state (as specified in  LWM2M SPEC E.6 regarding the firmware update)
+ * @brief Returns the update state (as specified in  LwM2M SPEC E.6 regarding the firmware update)
  * of the Firmware object instance given by @p obj_inst_id.
  * (i.e Gets the value of resource 5/ @p obj_inst_id /3)
  * @param[in] obj_inst_id Object instance id of the firmware object
@@ -263,7 +270,7 @@ uint8_t lwm2m_firmware_get_update_state_inst(uint16_t obj_inst_id);
 uint8_t lwm2m_firmware_get_update_state(void);
 
 /**
- * @brief Returns the result state (as specified in  LWM2M SPEC E.6 regarding the firmware update)
+ * @brief Returns the result state (as specified in  LwM2M SPEC E.6 regarding the firmware update)
  * of the Firmware object instance given by @p obj_inst_id.
  * (i.e Gets the value of resource 5/ @p obj_inst_id /5)
  * @param[in] obj_inst_id Object instance id of the firmware object

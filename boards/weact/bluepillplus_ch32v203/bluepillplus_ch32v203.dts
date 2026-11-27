@@ -11,12 +11,13 @@
 #include "bluepillplus_ch32v203-pinctrl.dtsi"
 
 / {
-	model = "bluepillplus_ch32v203";
 	compatible = "wch,ch32v203";
+	model = "bluepillplus_ch32v203";
 
 	chosen {
 		zephyr,sram = &sram0;
 		zephyr,flash = &flash0;
+		zephyr,flash-controller = &flash;
 		zephyr,console = &usart3;
 		zephyr,shell-uart = &usart3;
 	};
@@ -30,18 +31,18 @@
 		};
 	};
 
-	buttons {
+	gpio_keys {
 		compatible = "gpio-keys";
 
-		mode: sw0 {
-			gpios = <&gpioa 0 GPIO_ACTIVE_HIGH>;
+		user_button: button {
+			gpios = <&gpioa 0 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>;
 			zephyr,code = <INPUT_KEY_0>;
 		};
 	};
 
 	aliases {
 		led0 = &blue_led;
-		sw0 = &mode;
+		sw0 = &user_button;
 	};
 };
 
@@ -71,9 +72,17 @@
 	status = "okay";
 };
 
-&usart3 {
+&exti {
 	status = "okay";
+};
+
+&usart3 {
 	current-speed = <115200>;
 	pinctrl-0 = <&usart3_default>;
 	pinctrl-names = "default";
+	status = "okay";
+};
+
+&esig {
+	status = "okay";
 };

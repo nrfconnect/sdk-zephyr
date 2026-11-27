@@ -38,11 +38,8 @@
 #include <stdio.h>
 #include <string.h>
 
-static struct net_mgmt_event_callback ail_net_event_connection_cb;
-static struct net_mgmt_event_callback ail_net_event_ipv6_addr_cb;
 static bool border_router_ipv6_services_running;
 #if defined(CONFIG_OPENTHREAD_ZEPHYR_BORDER_ROUTER_IPV4)
-static struct net_mgmt_event_callback ail_net_event_ipv4_addr_cb;
 static bool has_ipv4_connectivity;
 static bool border_router_ipv4_services_running;
 #endif /* CONFIG_OPENTHREAD_ZEPHYR_BORDER_ROUTER_IPV4 */
@@ -243,8 +240,8 @@ void openthread_set_bbr_multicast_listener_cb(openthread_bbr_multicast_listener_
 	openthread_mutex_unlock();
 }
 
-static void ail_connection_handler(struct net_mgmt_event_callback *cb, uint64_t mgmt_event,
-				   struct net_if *iface)
+static void ail_connection_handler(uint64_t mgmt_event, struct net_if *iface, void *info __unused,
+				   size_t info_length __unused, void *user_data __unused)
 {
 	if (net_if_l2(iface) != &NET_L2_GET_NAME(ETHERNET)) {
 		return;
@@ -276,8 +273,12 @@ static void ail_connection_handler(struct net_mgmt_event_callback *cb, uint64_t 
 	mdns_plat_monitor_interface(iface);
 }
 
-static void ail_ipv6_address_event_handler(struct net_mgmt_event_callback *cb, uint64_t mgmt_event,
-					   struct net_if *iface)
+NET_MGMT_REGISTER_EVENT_HANDLER(ot_ail_connection_events, NET_EVENT_IF_UP | NET_EVENT_IF_DOWN,
+				ail_connection_handler, NULL);
+
+static void ail_ipv6_address_event_handler(uint64_t mgmt_event, struct net_if *iface,
+					   void *info __unused, size_t info_length __unused,
+					   void *user_data __unused)
 {
 
 	if (net_if_l2(iface) != &NET_L2_GET_NAME(ETHERNET)) {
@@ -291,9 +292,14 @@ static void ail_ipv6_address_event_handler(struct net_mgmt_event_callback *cb, u
 	mdns_plat_monitor_interface(iface);
 }
 
+NET_MGMT_REGISTER_EVENT_HANDLER(ot_ail_ipv6_address_events,
+				NET_EVENT_IPV6_ADDR_ADD | NET_EVENT_IPV6_ADDR_DEL,
+				ail_ipv6_address_event_handler, NULL);
+
 #if defined(CONFIG_OPENTHREAD_ZEPHYR_BORDER_ROUTER_IPV4)
-static void ail_ipv4_address_event_handler(struct net_mgmt_event_callback *cb, uint64_t mgmt_event,
-					   struct net_if *iface)
+static void ail_ipv4_address_event_handler(uint64_t mgmt_event, struct net_if *iface,
+					   void *info __unused, size_t info_length __unused,
+					   void *user_data __unused)
 {
 	if (net_if_l2(iface) != &NET_L2_GET_NAME(ETHERNET)) {
 		return;
@@ -323,6 +329,10 @@ static void ail_ipv4_address_event_handler(struct net_mgmt_event_callback *cb, u
 	}
 	mdns_plat_monitor_interface(iface);
 }
+
+NET_MGMT_REGISTER_EVENT_HANDLER(ot_ail_ipv4_address_events,
+				NET_EVENT_IPV4_ADDR_ADD | NET_EVENT_IPV4_ADDR_DEL,
+				ail_ipv4_address_event_handler, NULL);
 #endif /* CONFIG_OPENTHREAD_ZEPHYR_BORDER_ROUTER_IPV4 */
 
 static void ot_bbr_multicast_listener_handler(void *context,
@@ -373,20 +383,6 @@ static void ot_bbr_multicast_listener_handler(void *context,
 
 void openthread_border_router_init(struct openthread_context *ot_ctx)
 {
-	net_mgmt_init_event_callback(&ail_net_event_connection_cb, ail_connection_handler,
-				     NET_EVENT_IF_UP | NET_EVENT_IF_DOWN);
-	net_mgmt_add_event_callback(&ail_net_event_connection_cb);
-	net_mgmt_init_event_callback(&ail_net_event_ipv6_addr_cb, ail_ipv6_address_event_handler,
-				     NET_EVENT_IPV6_ADDR_ADD | NET_EVENT_IPV6_ADDR_DEL);
-	net_mgmt_add_event_callback(&ail_net_event_ipv6_addr_cb);
-
-#if defined(CONFIG_OPENTHREAD_ZEPHYR_BORDER_ROUTER_IPV4)
-		net_mgmt_init_event_callback(&ail_net_event_ipv4_addr_cb,
-					     ail_ipv4_address_event_handler,
-					     NET_EVENT_IPV4_ADDR_ADD | NET_EVENT_IPV4_ADDR_DEL);
-		net_mgmt_add_event_callback(&ail_net_event_ipv4_addr_cb);
-#endif /* CONFIG_OPENTHREAD_ZEPHYR_BORDER_ROUTER_IPV4 */
-
 	udp_plat_init_sockfd();
 	openthread_set_bbr_multicast_listener_cb(ot_bbr_multicast_listener_handler, (void *)ot_ctx);
 	(void)infra_if_start_icmp6_listener();
@@ -628,9 +624,11 @@ static bool openthread_border_router_check_unicast_packet_forwarding_policy(stru
 
 bool openthread_border_router_check_packet_forwarding_rules(struct net_pkt *pkt)
 {
-	if (!openthread_border_router_can_forward_multicast(pkt)) {
-		if (!openthread_border_router_check_unicast_packet_forwarding_policy(pkt)) {
-			return false;
+	if (is_border_router_started) {
+		if (!openthread_border_router_can_forward_multicast(pkt)) {
+			if (!openthread_border_router_check_unicast_packet_forwarding_policy(pkt)) {
+				return false;
+			}
 		}
 	}
 
@@ -678,82 +676,6 @@ static void openthread_border_router_add_or_rm_route_to_multicast_groups(bool ad
 			}
 		}
 	}
-}
-
-void openthread_border_router_remove_checksums_for_eth_offloading_ipv6(struct net_pkt *pkt)
-{
-	NET_PKT_DATA_ACCESS_DEFINE(ipv6_access, struct net_ipv6_hdr);
-	struct ethernet_config config;
-	struct net_ipv6_hdr *ipv6_hdr;
-
-	if ((net_eth_get_hw_capabilities(ail_iface_ptr) & ETHERNET_HW_TX_CHKSUM_OFFLOAD) == 0) {
-		return; /* No checksum offload capabilities*/
-	}
-
-	if (net_eth_get_hw_config(ail_iface_ptr, ETHERNET_CONFIG_TYPE_TX_CHECKSUM_SUPPORT,
-				  &config) != 0) {
-		return; /* No TX checksum capabilities*/
-	}
-
-	ipv6_hdr = (struct net_ipv6_hdr *)net_pkt_get_data(pkt, &ipv6_access);
-	if (ipv6_hdr == NULL) {
-		return;
-	}
-
-	net_pkt_set_overwrite(pkt, true);
-
-	if (net_pkt_skip(pkt, sizeof(struct net_ipv6_hdr)) != 0) {
-		goto exit;
-	}
-
-	switch (ipv6_hdr->nexthdr) {
-	case NET_IPPROTO_ICMPV6:
-		if ((config.chksum_support & NET_IF_CHECKSUM_IPV6_ICMP) != 0) {
-			NET_PKT_DATA_ACCESS_DEFINE(icmp_access, struct net_icmp_hdr);
-			struct net_icmp_hdr *icmp_hdr =
-				(struct net_icmp_hdr *)net_pkt_get_data(pkt, &icmp_access);
-
-			if (icmp_hdr != NULL) {
-				icmp_hdr->chksum = 0;
-				if (net_pkt_set_data(pkt, &icmp_access) != 0) {
-					goto exit;
-				}
-			}
-		}
-		break;
-	case NET_IPPROTO_UDP:
-		if ((config.chksum_support & NET_IF_CHECKSUM_IPV6_UDP) != 0) {
-			NET_PKT_DATA_ACCESS_DEFINE(udp_access, struct net_udp_hdr);
-			struct net_udp_hdr *udp_hdr = (struct net_udp_hdr *)
-				net_pkt_get_data(pkt, &udp_access);
-
-			if (udp_hdr != NULL) {
-				udp_hdr->chksum = 0;
-				if (net_pkt_set_data(pkt, &udp_access) != 0) {
-					goto exit;
-				}
-			}
-		}
-		break;
-	case NET_IPPROTO_TCP:
-		if ((config.chksum_support & NET_IF_CHECKSUM_IPV6_TCP) != 0) {
-			NET_PKT_DATA_ACCESS_DEFINE(tcp_access, struct net_tcp_hdr);
-			struct net_tcp_hdr *tcp_hdr =
-				(struct net_tcp_hdr *)net_pkt_get_data(pkt, &tcp_access);
-
-			if (tcp_hdr != NULL) {
-				tcp_hdr->chksum = 0;
-				if (net_pkt_set_data(pkt, &tcp_access) != 0) {
-					goto exit;
-				}
-			}
-		}
-		break;
-	default:
-		break;
-	}
-exit:
-	net_pkt_set_overwrite(pkt, false);
 }
 
 #if defined(CONFIG_OPENTHREAD_ZEPHYR_BORDER_ROUTER_NAT64_TRANSLATOR)

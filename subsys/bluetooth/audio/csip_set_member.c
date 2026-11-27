@@ -34,7 +34,7 @@
 #include <zephyr/sys/clock.h>
 #include <zephyr/sys/util.h>
 #include <zephyr/sys/util_macro.h>
-#include <zephyr/sys_clock.h>
+#include <zephyr/sys/clock.h>
 #include <zephyr/toolchain.h>
 #include <zephyr/types.h>
 #include <zephyr/sys/byteorder.h>
@@ -560,7 +560,7 @@ static void csip_security_changed(struct bt_conn *conn, bt_security_t level,
 
 	ARG_UNUSED(level);
 
-	if (err != 0 || conn->encrypt == 0) {
+	if (!bt_conn_is_type(conn, BT_CONN_TYPE_LE) || err != 0 || conn->encrypt == 0) {
 		return;
 	}
 
@@ -641,6 +641,10 @@ static void handle_csip_disconnect(struct bt_csip_set_member_svc_inst *svc_inst,
 
 static void csip_disconnected(struct bt_conn *conn, uint8_t reason)
 {
+	if (!bt_conn_is_type(conn, BT_CONN_TYPE_LE)) {
+		return;
+	}
+
 	LOG_DBG("Disconnected: %s (reason %u)", bt_conn_dst_str(conn), reason);
 
 	if (!bt_le_bond_exists(conn->id, &conn->le.dst)) {
@@ -686,6 +690,10 @@ static void handle_csip_auth_complete(struct bt_csip_set_member_svc_inst *svc_in
 
 static void auth_pairing_complete(struct bt_conn *conn, bool bonded)
 {
+	if (!bt_conn_is_type(conn, BT_CONN_TYPE_LE)) {
+		return;
+	}
+
 	/**
 	 * If a pairing is complete for a bonded device, then we
 	 * 1) Store the connection pointer to later validate SIRK encryption
@@ -1169,6 +1177,7 @@ int bt_csip_set_member_register(const struct bt_csip_set_member_register_param *
 		int mutex_err;
 
 		LOG_DBG("CSIS service register failed: %d", err);
+		(void)memset(inst, 0, offsetof(struct bt_csip_set_member_svc_inst, mutex));
 		mutex_err = k_mutex_unlock(&inst->mutex);
 		__ASSERT(mutex_err == 0, "Failed to unlock mutex: %d", mutex_err);
 		return err;

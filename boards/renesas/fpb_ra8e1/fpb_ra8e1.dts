@@ -16,13 +16,13 @@
 #include "fpb_ra8e1-pinctrl.dtsi"
 
 / {
-	model = "Renesas FPB-RA8E1";
 	compatible = "renesas,ra8e1", "renesas,ra8";
+	model = "Renesas FPB-RA8E1";
 
 	chosen {
 		zephyr,sram = &sram0;
-		zephyr,flash-controller = &flash0;
-		zephyr,flash = &flash0;
+		zephyr,flash-controller = &code_flash_ctrl;
+		zephyr,flash = &code_flash;
 		zephyr,console = &uart9;
 		zephyr,shell-uart = &uart9;
 		zephyr,entropy = &trng;
@@ -143,6 +143,7 @@
 		led0 = &led1;
 		sw0 = &button0;
 		watchdog0 = &wdt;
+		i2c-0 = &iic0;
 	};
 };
 
@@ -281,11 +282,22 @@
 	status = "okay";
 };
 
-&adc0 {
+&iic0 {
+	interrupts = <88 1>, <87 1>, <86 1>, <85 1>;
+	interrupt-names = "rxi", "txi", "tei", "eri";
+	#address-cells = <1>;
+	#size-cells = <0>;
+	clock-frequency = <DT_FREQ_M(1)>;
+	pinctrl-0 = <&iic0_default>;
+	pinctrl-names = "default";
 	status = "okay";
+};
+
+&adc0 {
 	pinctrl-0 = <&adc0_default>;
 	pinctrl-names = "default";
 	average-count = <4>;
+	status = "okay";
 };
 
 &dac0 {
@@ -318,15 +330,16 @@
 	status = "okay";
 };
 
-&flash1 {
+&data_flash {
 	partitions {
-		compatible = "fixed-partitions";
+		ranges;
 		#address-cells = <1>;
 		#size-cells = <1>;
 
 		storage_partition: partition@0 {
-			label = "storage";
+			compatible = "zephyr,mapped-partition";
 			reg = <0x0 DT_SIZE_K(12)>;
+			label = "storage";
 		};
 	};
 };

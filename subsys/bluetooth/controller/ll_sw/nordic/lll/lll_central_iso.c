@@ -339,7 +339,7 @@ static int prepare_cb(struct lll_prepare_param *p)
 				 HAL_RADIO_GPIO_PA_OFFSET);
 #else /* !CONFIG_BT_CTLR_PHY */
 	radio_gpio_pa_lna_enable(start_us +
-				 radio_tx_ready_delay_get(0U, 0U) -
+				 radio_tx_ready_delay_get(PHY_LEGACY, PHY_FLAGS_UNUSED) -
 				 HAL_RADIO_GPIO_PA_OFFSET);
 #endif /* !CONFIG_BT_CTLR_PHY */
 #else /* !HAL_RADIO_GPIO_HAVE_PA_PIN */
@@ -561,9 +561,9 @@ static void isr_tx(void *param)
 	hcto -= radio_tx_chain_delay_get(cis_lll->tx.phy,
 					 cis_lll->tx.phy_flags);
 #else /* !CONFIG_BT_CTLR_PHY */
-	hcto += radio_rx_chain_delay_get(0U, 0U);
+	hcto += radio_rx_chain_delay_get(PHY_LEGACY, PHY_FLAGS_UNUSED);
 	hcto += addr_us_get(0U);
-	hcto -= radio_tx_chain_delay_get(0U, 0U);
+	hcto -= radio_tx_chain_delay_get(PHY_LEGACY, PHY_FLAGS_UNUSED);
 #endif /* !CONFIG_BT_CTLR_PHY */
 
 	radio_tmr_hcto_configure(hcto);
@@ -587,7 +587,7 @@ static void isr_tx(void *param)
 #else /* !CONFIG_BT_CTLR_PHY */
 	radio_gpio_pa_lna_enable(radio_tmr_tifs_base_get() + cis_lll->tifs_us -
 				 (EVENT_CLOCK_JITTER_US << 1) -
-				 radio_tx_chain_delay_get(0U, 0U) -
+				 radio_tx_chain_delay_get(PHY_LEGACY, PHY_FLAGS_UNUSED) -
 				 HAL_RADIO_GPIO_LNA_OFFSET);
 #endif /* !CONFIG_BT_CTLR_PHY */
 #endif /* HAL_RADIO_GPIO_HAVE_LNA_PIN */
@@ -826,6 +826,15 @@ static void isr_rx(void *param)
 				mic_state = LLL_CONN_MIC_PASS;
 			}
 #endif /* CONFIG_BT_CTLR_LE_ENC */
+
+			/* Discard the received PDU, whether unencrypted or the
+			 * decrypted, with length that exceeds the configured
+			 * maximum receive data length used to setup the radio
+			 * packet reception.
+			 */
+			if (pdu_rx->len > cis_lll->rx.max_pdu) {
+				goto isr_rx_done;
+			}
 
 			/* Enqueue Rx ISO PDU */
 			node_rx->hdr.type = NODE_RX_TYPE_ISO_PDU;
@@ -1165,7 +1174,7 @@ static void isr_prepare_subevent(void *param)
 				 HAL_RADIO_GPIO_PA_OFFSET);
 #else /* !CONFIG_BT_CTLR_PHY */
 	radio_gpio_pa_lna_enable(start_us +
-				 radio_tx_ready_delay_get(0U, 0U) -
+				 radio_tx_ready_delay_get(PHY_LEGACY, PHY_FLAGS_UNUSED) -
 				 HAL_RADIO_GPIO_PA_OFFSET);
 #endif /* !CONFIG_BT_CTLR_PHY */
 #else /* !HAL_RADIO_GPIO_HAVE_PA_PIN */

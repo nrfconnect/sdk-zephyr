@@ -6,14 +6,14 @@
 
 /dts-v1/;
 
-#include <nxp/kinetis/nxp_kw41z.dtsi>
+#include <nxp/kinetis/kwx/nxp_kw41z.dtsi>
 #include "frdm_kw41z-pinctrl.dtsi"
 #include <zephyr/dt-bindings/gpio/arduino-header-r3.h>
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 
 / {
-	model = "NXP Freedom KW41Z board";
 	compatible = "nxp,kw41z", "nxp,mkw41z4";
+	model = "NXP Freedom KW41Z board";
 
 	aliases {
 		led0 = &green_led;
@@ -124,21 +124,25 @@
 	};
 };
 
+&{/cpus} {
+	timebase-frequency = <DT_FREQ_M(40)>;
+};
+
 &sim {
 	pllfll-select = <KINETIS_SIM_PLLFLLSEL_MCGPLLCLK>;
 	er32k-select = <KINETIS_SIM_ER32KSEL_OSC32KCLK>;
 };
 
 &adc0 {
-	status = "okay";
 	pinctrl-0 = <&adc0_default>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &i2c1 {
-	status = "okay";
 	pinctrl-0 = <&i2c1_default>;
 	pinctrl-names = "default";
+	status = "okay";
 
 	fxos8700: fxos8700@1f {
 		compatible = "nxp,fxos8700";
@@ -148,10 +152,10 @@
 };
 
 &lpuart0 {
-	status = "okay";
 	pinctrl-0 = <&lpuart0_default>;
 	pinctrl-names = "default";
 	current-speed = <115200>;
+	status = "okay";
 };
 
 &gpioa {
@@ -163,15 +167,15 @@
 };
 
 &spi0 {
-	status = "okay";
 	pinctrl-0 = <&spi0_default>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &tpm0 {
-	status = "okay";
 	pinctrl-0 = <&tpm0_default>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &tpm1 {
@@ -179,9 +183,9 @@
 };
 
 &tpm2 {
-	status = "okay";
 	pinctrl-0 = <&tmp2_default>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &ieee802154 {
@@ -190,18 +194,20 @@
 
 &flash0 {
 	partitions {
-		compatible = "fixed-partitions";
+		ranges;
 		#address-cells = <1>;
 		#size-cells = <1>;
 
 		slot0_partition: partition@0 {
-			label = "image-0";
+			compatible = "zephyr,mapped-partition";
 			reg = <0x00000000 0x00070000>;
+			label = "image-0";
 		};
 
 		storage_partition: partition@70000 {
-			label = "storage";
+			compatible = "zephyr,mapped-partition";
 			reg = <0x00070000 0x00010000>;
+			label = "storage";
 		};
 	};
 };

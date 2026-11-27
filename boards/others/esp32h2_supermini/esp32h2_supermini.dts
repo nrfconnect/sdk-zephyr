@@ -5,15 +5,15 @@
 
 /dts-v1/;
 
-#include <espressif/esp32h2/esp32h2_mini_h4.dtsi>
+#include <espressif/esp32h2/esp32h2.dtsi>
 #include "esp32h2_supermini-pinctrl.dtsi"
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 #include <zephyr/dt-bindings/led/led.h>
 #include <espressif/partitions_0x0_default.dtsi>
 
 / {
-	model = "ESP32H2-SUPERMINI";
 	compatible = "espressif,esp32h2_supermini";
+	model = "ESP32H2-SUPERMINI";
 
 	chosen {
 		zephyr,sram = &sramhp;
@@ -51,13 +51,18 @@
 	};
 };
 
+&flash0 {
+	reg = <0x0 DT_SIZE_M(4)>;
+	ranges = <0x0 0x0 DT_SIZE_M(4)>;
+};
+
 &i2s {
 	pinctrl-0 = <&i2s0_default>;
 	pinctrl-names = "default";
-	status = "okay";
 
 	dmas = <&dma 1>;
 	dma-names = "tx";
+	status = "okay";
 
 	ws2812: ws2812_strip@0 {
 		compatible = "worldsemi,ws2812-i2s";
@@ -74,10 +79,10 @@
 };
 
 &i2c0 {
-	status = "okay";
 	clock-frequency = <I2C_BITRATE_STANDARD>;
 	pinctrl-0 = <&i2c0_default>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &trng0 {

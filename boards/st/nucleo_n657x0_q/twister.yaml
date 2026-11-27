@@ -8,11 +8,14 @@ supported:
   - arduino_serial
   - arduino_spi
   - adc
+  - backup_sram
   - can
+  - crypto
   - dma
   - i2c
   - gpio
   - netif:eth
+  - ptp_clock
   - rtc
   - spi
   - uart

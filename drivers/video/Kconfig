@@ -1,20 +1,15 @@
-# VIDEO driver configuration options
-
 # Copyright (c) 2019 Linaro Limited
 # SPDX-License-Identifier: Apache-2.0
 
-#
-# VIDEO Drivers
-#
-menuconfig VIDEO
+menuconfig VIDEO_DRIVERS
 	bool "Video drivers"
 	help
-	  Enable support for the VIDEO.
+	  Enable support for video drivers, typically used from the video subsystem.
 
-if VIDEO
+if VIDEO_DRIVERS
 
-module = VIDEO
-module-str = video
+module = VIDEO_DRIVERS
+module-str = video_drivers
 source "subsys/logging/Kconfig.template.log_config"
 
 config VIDEO_INIT_PRIORITY
@@ -41,7 +36,7 @@ config VIDEO_BUFFER_POOL_ZEPHYR_REGION
 	help
 	  Place video buffer pool in a region, automatically
 	  created from a 'zephyr,memory-region' compatible node,
-	  whose name is specified in CONFIG_VIDEO_BUFFER_ZEPHYR_REGION_NAME.
+	  whose name is specified in CONFIG_VIDEO_BUFFER_POOL_ZEPHYR_REGION_NAME.
 
 config VIDEO_BUFFER_POOL_ZEPHYR_REGION_NAME
 	string "Name of the zephyr memory-region for video buffer pool"
@@ -50,6 +45,7 @@ config VIDEO_BUFFER_POOL_ZEPHYR_REGION_NAME
 
 config VIDEO_BUFFER_USE_SHARED_MULTI_HEAP
 	bool "Use shared multi heap for video buffer"
+	default y if SHARED_MULTI_HEAP
 
 config VIDEO_BUFFER_SMH_ATTRIBUTE
 	int "Shared multi heap attribute for video buffer"
@@ -87,9 +83,13 @@ source "drivers/video/Kconfig.hm0360"
 source "drivers/video/Kconfig.imx219"
 source "drivers/video/Kconfig.imx335"
 source "drivers/video/Kconfig.mcux_csi"
+source "drivers/video/Kconfig.mcux_flexio"
+source "drivers/video/Kconfig.mcux_jpegdec"
 source "drivers/video/Kconfig.mcux_mipi_csi2rx"
+source "drivers/video/Kconfig.mcux_pngdec"
 source "drivers/video/Kconfig.mcux_sdma"
 source "drivers/video/Kconfig.mt9m114"
+source "drivers/video/Kconfig.native_sim_fifo"
 source "drivers/video/Kconfig.ov2640"
 source "drivers/video/Kconfig.ov5640"
 source "drivers/video/Kconfig.ov5642"
@@ -97,7 +97,6 @@ source "drivers/video/Kconfig.ov767x"
 source "drivers/video/Kconfig.ov7725"
 source "drivers/video/Kconfig.ov9655"
 source "drivers/video/Kconfig.renesas_ra_ceu"
-source "drivers/video/Kconfig.shell"
 source "drivers/video/Kconfig.st_mipid02"
 source "drivers/video/Kconfig.stm32_dcmi"
 source "drivers/video/Kconfig.stm32_dcmipp"
@@ -106,4 +105,4 @@ source "drivers/video/Kconfig.stm32_venc"
 source "drivers/video/Kconfig.sw_generator"
 # zephyr-keep-sorted-stop
 
-endif # VIDEO
+endif # VIDEO_DRIVERS

@@ -10,6 +10,10 @@
 / {
 	soc {
 		compatible = "st,stm32h743", "st,stm32h7", "simple-bus";
+
+		ethernet@40028000 {
+			memory-regions = <&sram3>;
+		};
 	};
 
 	/* System data RAM accessible over AXI bus: AXI SRAM in D1 domain */
@@ -32,11 +36,7 @@
 	sram3: memory@30040000 {
 		compatible = "zephyr,memory-region", "mmio-sram";
 		reg = <0x30040000 DT_SIZE_K(32)>;
-		zephyr,memory-region = "SRAM3";
 		#memory-region-cells = <0>;
+		zephyr,memory-region = "SRAM3";
 	};
-};
-
-&mac {
-	memory-regions = <&sram3>;
 };

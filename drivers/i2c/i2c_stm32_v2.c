@@ -9,31 +9,30 @@
  *
  */
 
+#include <zephyr/cache.h>
 #include <zephyr/drivers/clock_control/stm32_clock_control.h>
 #include <zephyr/drivers/clock_control.h>
-#include <zephyr/sys/util.h>
+#include <zephyr/drivers/i2c.h>
+#include <zephyr/dt-bindings/memory-attr/memory-attr-arm.h>
 #include <zephyr/kernel.h>
+#include <zephyr/linker/linker-defs.h>
+#include <zephyr/logging/log.h>
+#include <zephyr/mem_mgmt/mem_attr.h>
+#include <zephyr/pm/device.h>
+#include <zephyr/pm/device_runtime.h>
+#include <zephyr/sys/util.h>
+
 #include <soc.h>
 #include <stm32_bitops.h>
 #include <stm32_cache.h>
 #include <stm32_ll_i2c.h>
-#include <errno.h>
-#include <zephyr/drivers/i2c.h>
-#include <zephyr/pm/device.h>
-#include <zephyr/pm/device_runtime.h>
-#include <zephyr/cache.h>
-#include <zephyr/linker/linker-defs.h>
-#include <zephyr/mem_mgmt/mem_attr.h>
-#include <zephyr/dt-bindings/memory-attr/memory-attr-arm.h>
 
-#define LOG_LEVEL CONFIG_I2C_LOG_LEVEL
-#include <zephyr/logging/log.h>
-LOG_MODULE_REGISTER(i2c_ll_stm32_v2);
+#include <errno.h>
 
 #include "i2c_stm32.h"
 #include "i2c-priv.h"
 
-BUILD_ASSERT_INVALID_I2C_TRANSFER_TIMEOUT();
+LOG_MODULE_REGISTER(i2c_ll_stm32_v2, CONFIG_I2C_LOG_LEVEL);
 
 #if CONFIG_STM32_HAL2
 #define STM32_I2C_CONVERT_TIMINGS(prescaler, setup_time, hold_time, sclh_period, scll_period) \
@@ -155,6 +154,15 @@ static inline int wait_bus_idle(const struct device *dev, uint32_t timeout_us)
 }
 #endif /* CONFIG_I2C_TARGET */
 
+__maybe_unused static bool using_dma(struct i2c_stm32_data *dev_data __maybe_unused)
+{
+#ifdef CONFIG_I2C_STM32_V2_DMA
+	return dev_data->use_dma;
+#else
+	return false;
+#endif /* CONFIG_I2C_STM32_V2_DMA */
+}
+
 #ifdef CONFIG_I2C_STM32_V2_DMA
 static int configure_dma(struct stream const *dma, struct dma_config *dma_cfg,
 			 struct dma_block_config *blk_cfg)
@@ -240,7 +248,6 @@ static void dma_finish(const struct device *dev, struct i2c_msg *msg)
 		LL_I2C_DisableDMAReq_TX(cfg->i2c);
 	}
 }
-
 #endif /* CONFIG_I2C_STM32_V2_DMA */
 
 #ifdef CONFIG_I2C_STM32_INTERRUPT
@@ -378,8 +385,10 @@ static void i2c_stm32_controller_abort_to_target(const struct device *dev, bool 
 
 	i2c_stm32_disable_transfer_interrupts(dev);
 #ifdef CONFIG_I2C_STM32_V2_DMA
-	LL_I2C_DisableDMAReq_RX(cfg->i2c);
-	LL_I2C_DisableDMAReq_TX(cfg->i2c);
+	if (using_dma(data)) {
+		LL_I2C_DisableDMAReq_RX(cfg->i2c);
+		LL_I2C_DisableDMAReq_TX(cfg->i2c);
+	}
 #endif
 	LL_I2C_ClearFlag_TXE(cfg->i2c);
 	data->controller_active = false;
@@ -500,7 +509,10 @@ int i2c_stm32_target_register(const struct device *dev,
 
 	bitrate_cfg = i2c_map_dt_bitrate(cfg->bitrate);
 
+	k_sem_take(&data->bus_mutex, K_FOREVER);
 	ret = i2c_stm32_runtime_configure(dev, bitrate_cfg);
+	k_sem_give(&data->bus_mutex);
+
 	if (ret < 0) {
 		LOG_ERR("i2c: failure initializing");
 		return ret;
@@ -509,17 +521,17 @@ int i2c_stm32_target_register(const struct device *dev,
 	/* Mark device as active */
 	ret = pm_device_runtime_get(dev);
 	if (ret < 0) {
-		LOG_ERR("i2c: PM runtime failure: %d", ret);
+		LOG_ERR_PM_DEVICE_RUNTIME_GET(dev, ret);
 		return ret;
 	}
 
-#if !defined(CONFIG_SOC_SERIES_STM32F7X)
+#if defined(I2C_CR1_WUPEN)
 	if (pm_device_wakeup_is_capable(dev)) {
 		/* Enable wake-up from stop */
 		LOG_DBG("i2c: enabling wakeup from stop");
 		LL_I2C_EnableWakeUpFromStop(cfg->i2c);
 	}
-#endif /* !CONFIG_SOC_SERIES_STM32F7X */
+#endif /* I2C_CR1_WUPEN */
 
 	LL_I2C_Enable(i2c);
 
@@ -605,13 +617,13 @@ int i2c_stm32_target_unregister(const struct device *dev,
 		LL_I2C_Disable(i2c);
 	}
 
-#if !defined(CONFIG_SOC_SERIES_STM32F7X)
+#if defined(I2C_CR1_WUPEN)
 	if (pm_device_wakeup_is_capable(dev)) {
 		/* Disable wake-up from STOP */
 		LOG_DBG("i2c: disabling wakeup from stop");
 		LL_I2C_DisableWakeUpFromStop(i2c);
 	}
-#endif /* !CONFIG_SOC_SERIES_STM32F7X */
+#endif /* I2C_CR1_WUPEN */
 
 	/* Release the device */
 	(void)pm_device_runtime_put(dev);
@@ -662,13 +674,14 @@ void i2c_stm32_event(const struct device *dev)
 		 * in same direction (No RESTART or STOP)
 		 */
 		uint32_t cr2 = stm32_reg_read(&regs->CR2);
-#ifdef CONFIG_I2C_STM32_V2_DMA
-		/* Get number of bytes bytes transferred by DMA */
-		uint32_t xfer_len = (cr2 & I2C_CR2_NBYTES_Msk) >> I2C_CR2_NBYTES_Pos;
 
-		data->current.len -= xfer_len;
-		data->current.buf += xfer_len;
-#endif
+		if (using_dma(data)) {
+			/* Get number of bytes bytes transferred by DMA */
+			uint32_t xfer_len = (cr2 & I2C_CR2_NBYTES_Msk) >> I2C_CR2_NBYTES_Pos;
+
+			data->current.len -= xfer_len;
+			data->current.buf += xfer_len;
+		}
 
 		if (data->current.len == 0U) {
 			/* In this state all data from current message is transferred
@@ -817,11 +830,13 @@ static int stm32_i2c_irq_msg_finish(const struct device *dev, struct i2c_msg *ms
 	int ret;
 
 	/* Wait for IRQ to complete or timeout */
-	ret = k_sem_take(&data->device_sync_sem, K_MSEC(CONFIG_I2C_TRANSFER_TIMEOUT_MS));
+	ret = k_sem_take(&data->device_sync_sem, cfg->transfer_timeout);
 
 #ifdef CONFIG_I2C_STM32_V2_DMA
-	/* Stop DMA and invalidate cache if needed */
-	dma_finish(dev, msg);
+	if (using_dma(data)) {
+		/* Stop DMA and invalidate cache if needed */
+		dma_finish(dev, msg);
+	}
 #endif
 
 	/* Check for transfer errors or timeout */
@@ -901,16 +916,15 @@ static int i2c_stm32_irq_prepare_start(const struct device *dev, struct i2c_msg 
 
 	if ((msg->flags & I2C_MSG_RW_MASK) == I2C_MSG_WRITE) {
 		*cr2 &= ~I2C_CR2_RD_WRN;
-#ifndef CONFIG_I2C_STM32_V2_DMA
-		/* Prepare first byte in TX buffer before transfer start as a
+
+		/* If using DMA, prepare first byte in TX buffer before transfer start as a
 		 * workaround for errata: "Transmission stalled after first byte transfer"
 		 */
-		if (data->current.len > 0U) {
+		if (using_dma(data) && data->current.len > 0U) {
 			LL_I2C_TransmitData8(regs, *data->current.buf);
 			data->current.len--;
 			data->current.buf++;
 		}
-#endif
 	} else {
 		*cr2 |= I2C_CR2_RD_WRN;
 	}
@@ -970,10 +984,10 @@ static int stm32_i2c_irq_xfer(const struct device *dev, struct i2c_msg *msg,
 	data->current.msg = msg;
 
 #if defined(CONFIG_I2C_STM32_V2_DMA)
-	if (!stm32_buf_in_nocache((uintptr_t)msg->buf, msg->len) &&
-	    ((msg->flags & I2C_MSG_RW_MASK) == I2C_MSG_WRITE)) {
-		sys_cache_data_flush_range(msg->buf, msg->len);
-	}
+	/* i2c_stm32_xfer_will_use_dma() flushes cache on write message if needed */
+	data->use_dma = i2c_stm32_xfer_will_use_dma(cfg, msg->buf, msg->len,
+						    (msg->flags & I2C_MSG_RW_MASK) ==
+						    I2C_MSG_WRITE);
 #endif /* CONFIG_I2C_STM32_V2_DMA */
 
 	/* Flush TX register */
@@ -1031,15 +1045,17 @@ static int stm32_i2c_irq_xfer(const struct device *dev, struct i2c_msg *msg,
 	/* Set common interrupt enable bits */
 	uint32_t cr1 = I2C_CR1_ERRIE | I2C_CR1_STOPIE | I2C_CR1_TCIE | I2C_CR1_NACKIE;
 
+	if (using_dma(data)) {
 #ifdef CONFIG_I2C_STM32_V2_DMA
-	ret = i2c_stm32_irq_start_dma(dev, msg, regs);
-	if (ret != 0) {
-		return ret;
-	}
-#else
-	/* If not using DMA, also enable RX and TX empty interrupts */
-	cr1 |= I2C_CR1_TXIE | I2C_CR1_RXIE;
+		ret = i2c_stm32_irq_start_dma(dev, msg, regs);
+		if (ret != 0) {
+			return ret;
+		}
 #endif /* CONFIG_I2C_STM32_V2_DMA */
+	} else {
+		/* If not using DMA, also enable RX and TX empty interrupts */
+		cr1 |= I2C_CR1_TXIE | I2C_CR1_RXIE;
+	}
 
 #if defined(CONFIG_I2C_TARGET)
 	if (starting_controller_session) {
@@ -1137,15 +1153,14 @@ static inline int msg_done(const struct device *dev,
 {
 	const struct i2c_stm32_config *cfg = dev->config;
 	I2C_TypeDef *i2c = cfg->i2c;
-	int64_t start_time = k_uptime_get();
+	k_timepoint_t end = sys_timepoint_calc(cfg->transfer_timeout);
 
 	/* Wait for transfer to complete */
 	while (!LL_I2C_IsActiveFlag_TC(i2c) && !LL_I2C_IsActiveFlag_TCR(i2c)) {
 		if (check_errors(dev, __func__)) {
 			return -EIO;
 		}
-		if ((k_uptime_get() - start_time) >
-		    CONFIG_I2C_TRANSFER_TIMEOUT_MS) {
+		if (sys_timepoint_expired(end)) {
 			return -ETIMEDOUT;
 		}
 	}
@@ -1153,8 +1168,7 @@ static inline int msg_done(const struct device *dev,
 	if (current_msg_flags & I2C_MSG_STOP) {
 		LL_I2C_GenerateStopCondition(i2c);
 		while (!LL_I2C_IsActiveFlag_STOP(i2c)) {
-			if ((k_uptime_get() - start_time) >
-			    CONFIG_I2C_TRANSFER_TIMEOUT_MS) {
+			if (sys_timepoint_expired(end)) {
 				return -ETIMEDOUT;
 			}
 		}
@@ -1173,7 +1187,7 @@ static int i2c_stm32_msg_write(const struct device *dev, struct i2c_msg *msg,
 	I2C_TypeDef *i2c = cfg->i2c;
 	unsigned int len = 0U;
 	uint8_t *buf = msg->buf;
-	int64_t start_time = k_uptime_get();
+	k_timepoint_t end = sys_timepoint_calc(cfg->transfer_timeout);
 
 	msg_init(dev, msg, next_msg_flags, target, LL_I2C_REQUEST_WRITE);
 
@@ -1188,8 +1202,7 @@ static int i2c_stm32_msg_write(const struct device *dev, struct i2c_msg *msg,
 				return -EIO;
 			}
 
-			if ((k_uptime_get() - start_time) >
-			    CONFIG_I2C_TRANSFER_TIMEOUT_MS) {
+			if (sys_timepoint_expired(end)) {
 				return -ETIMEDOUT;
 			}
 		}
@@ -1209,7 +1222,7 @@ static int i2c_stm32_msg_read(const struct device *dev, struct i2c_msg *msg,
 	I2C_TypeDef *i2c = cfg->i2c;
 	unsigned int len = 0U;
 	uint8_t *buf = msg->buf;
-	int64_t start_time = k_uptime_get();
+	k_timepoint_t end = sys_timepoint_calc(cfg->transfer_timeout);
 
 	msg_init(dev, msg, next_msg_flags, target, LL_I2C_REQUEST_READ);
 
@@ -1219,8 +1232,7 @@ static int i2c_stm32_msg_read(const struct device *dev, struct i2c_msg *msg,
 			if (check_errors(dev, __func__)) {
 				return -EIO;
 			}
-			if ((k_uptime_get() - start_time) >
-			    CONFIG_I2C_TRANSFER_TIMEOUT_MS) {
+			if (sys_timepoint_expired(end)) {
 				return -ETIMEDOUT;
 			}
 		}

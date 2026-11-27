@@ -155,7 +155,7 @@ static const struct json_obj_descr mcp_json_cancelled_notif_out_descr[] = {
 };
 
 /*******************************************************************************
- * Initialize resposne descriptor
+ * Initialize response descriptor
  ******************************************************************************/
 struct mcp_json_server_info {
 	const char *name;
@@ -195,7 +195,7 @@ static const struct json_obj_descr mcp_json_init_result_descr[] = {
 };
 
 /*******************************************************************************
- * Ping resposne descriptor
+ * Ping response descriptor
  ******************************************************************************/
 struct mcp_json_ping_result {
 	const char *jsonrpc;
@@ -217,7 +217,7 @@ static const struct json_obj_descr mcp_json_ping_result_descr[] = {
 };
 
 /*******************************************************************************
- * Tools/list resposne descriptor
+ * Tools/list response descriptor
  ******************************************************************************/
 struct mcp_json_tools_list_result {
 	const char *jsonrpc;
@@ -240,7 +240,7 @@ static const struct json_obj_descr mcp_json_tools_list_result_descr[] = {
 };
 
 /*******************************************************************************
- * Tools/call resposne descriptor
+ * Tools/call response descriptor
  ******************************************************************************/
 struct mcp_json_content_item {
 	const char *type;
@@ -279,7 +279,7 @@ static const struct json_obj_descr mcp_json_tools_call_result_descr[] = {
 };
 
 /*******************************************************************************
- * Error resposne descriptor
+ * Error response descriptor
  ******************************************************************************/
 struct mcp_json_error {
 	const char *jsonrpc;
@@ -441,63 +441,65 @@ static int parse_tools_list_request(char *buf, size_t len, struct mcp_message *m
 
 static bool extract_arguments_json(char *buf, size_t len, char *dst, size_t dst_sz)
 {
-	const char *args_key;
-	const char *args_start;
-	const char *args_end;
+	struct json_obj obj;
+	struct json_obj_key_value kv;
+	char *params = NULL;
+	size_t params_len = 0;
 	size_t args_len;
-	int brace_count = 0;
 
 	if ((buf == NULL) || (dst == NULL) || (dst_sz == 0)) {
 		return false;
 	}
 
-	args_key = strstr(buf, "\"arguments\"");
-	if (args_key == NULL) {
+	/* Find the top-level "params" object. */
+	if (json_obj_separate_parse_init(&obj, buf, len) < 0) {
 		return false;
 	}
 
-	args_start = strchr(args_key, ':');
-	if (args_start == NULL) {
-		return false;
-	}
-	args_start++;
-
-	while (*args_start == ' ' || *args_start == '\t' || *args_start == '\n' ||
-	       *args_start == '\r') {
-		args_start++;
-	}
-
-	if (*args_start != '{') {
-		return false;
-	}
-
-	args_end = args_start;
-	brace_count = 0;
-
-	do {
-		if (*args_end == '{') {
-			brace_count++;
-		} else if (*args_end == '}') {
-			brace_count--;
-		} else {
-			;
+	while ((json_obj_next_key_value(&obj, &kv) == 0) && (kv.key != NULL)) {
+		if (kv.key_len == strlen("params") &&
+		    memcmp(kv.key, "params", kv.key_len) == 0) {
+			params = kv.value.start;
+			params_len = (size_t)(kv.value.end - kv.value.start);
+			break;
 		}
-		args_end++;
+	}
 
-		if (args_end >= buf + len) {
+	if (params == NULL) {
+		return false;
+	}
+
+	/*
+	 * The "arguments" object is tool-specific and cannot be described
+	 * statically, so walk the members of "params" and hand the tool the raw
+	 * object rather than decode it. The walker is string- and depth-aware, so
+	 * braces inside argument string values do not throw off the extraction.
+	 */
+	if (json_obj_separate_parse_init(&obj, params, params_len) < 0) {
+		return false;
+	}
+
+	while ((json_obj_next_key_value(&obj, &kv) == 0) && (kv.key != NULL)) {
+		if (kv.key_len != strlen("arguments") ||
+		    memcmp(kv.key, "arguments", kv.key_len) != 0) {
+			continue;
+		}
+
+		if (kv.value.start == NULL || *kv.value.start != '{') {
 			return false;
 		}
-	} while (brace_count > 0);
 
-	args_len = args_end - args_start;
-	if (args_len >= dst_sz) {
-		return false;
+		args_len = (size_t)(kv.value.end - kv.value.start);
+		if (args_len >= dst_sz) {
+			return false;
+		}
+
+		memcpy(dst, kv.value.start, args_len);
+		dst[args_len] = '\0';
+		return true;
 	}
 
-	memcpy(dst, args_start, args_len);
-	dst[args_len] = '\0';
-
-	return true;
+	return false;
 }
 
 static int parse_tools_call_request(char *buf, size_t len, struct mcp_message *msg)

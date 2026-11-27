@@ -15,7 +15,18 @@ static int rand_get(uint8_t *dst, size_t outlen, bool csrand)
 	const struct device *const entropy_dev = entropy_get_default_device();
 
 	if (device_is_ready(entropy_dev)) {
-		ret = entropy_get_entropy(entropy_dev, dst, outlen);
+		size_t len = 0;
+
+		/* entropy_get_entropy() takes a uint16_t length, so split
+		 * larger requests instead of silently truncating them.
+		 */
+		ret = 0;
+		while ((len < outlen) && (ret == 0)) {
+			uint16_t chunk = (uint16_t)MIN(outlen - len, UINT16_MAX);
+
+			ret = entropy_get_entropy(entropy_dev, &dst[len], chunk);
+			len += chunk;
+		}
 	}
 
 	if (unlikely(ret < 0)) {
@@ -33,15 +44,10 @@ static int rand_get(uint8_t *dst, size_t outlen, bool csrand)
 		 * still be gathering entropy during early boot situations.
 		 */
 
-		uint32_t len = 0;
-		uint32_t blocksize = 4;
+		size_t len = 0;
 
 		while (len < outlen) {
-			size_t copylen = outlen - len;
-
-			if (copylen > blocksize) {
-				copylen = blocksize;
-			}
+			size_t copylen = MIN(outlen - len, sizeof(random_num));
 
 			random_num = k_cycle_get_32();
 			(void)memcpy(&(dst[len]), &random_num, copylen);

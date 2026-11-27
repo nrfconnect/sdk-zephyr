@@ -8,6 +8,7 @@
 
 #include "eth_dwc_xgmac_priv.h"
 #include <zephyr/cache.h>
+#include <zephyr/logging/log.h>
 
 #define LOG_MODULE_NAME eth_dwc_xgmac
 #define LOG_LEVEL       CONFIG_ETHERNET_LOG_LEVEL
@@ -117,8 +118,6 @@ struct eth_dwc_xgmac_config {
 	uint8_t num_dma_chnl;
 	/* Number of traffic classes configured */
 	uint8_t num_TCs;
-	/* Maximum transfer unit length configured */
-	uint16_t mtu;
 	/* Transmit FIFO size */
 	uint32_t tx_fifo_size;
 	/* Receive FIFO size */
@@ -1166,8 +1165,6 @@ static void eth_dwc_xgmac_iface_init(struct net_if *iface)
 				   NET_LINK_ETHERNET);
 	net_if_carrier_off(iface);
 	ethernet_init(iface);
-	net_if_set_mtu(iface, dev_conf->mtu);
-	LOG_DBG("%s: MTU size is set to %d", dev->name, dev_conf->mtu);
 	if (device_is_ready(dev_conf->phy_dev)) {
 		phy_link_callback_set(dev_conf->phy_dev, &phy_link_state_change_callback,
 				      (void *)dev);
@@ -1360,7 +1357,8 @@ static int eth_dwc_xgmac_send(const struct device *dev, struct net_pkt *pkt)
 	struct eth_dwc_xgmac_dev_data *dev_data = (struct eth_dwc_xgmac_dev_data *)dev->data;
 	struct xgmac_dma_chnl_config *dma_ch_cfg =
 		(struct xgmac_dma_chnl_config *)&dev_conf->dma_chnl_cfg;
-	uint32_t tdes2_flgs, tdes3_flgs, tdes3_fd_flg;
+	uint32_t tdes2_flgs, tdes3_flgs, tdes3_fd_flg, pkt_len;
+	uint32_t tdes3_cic = 0u;
 
 	if (!pkt || !pkt->frags) {
 		LOG_ERR("%s: cannot TX, invalid argument", dev->name);
@@ -1382,6 +1380,16 @@ static int eth_dwc_xgmac_send(const struct device *dev, struct net_pkt *pkt)
 		return -EIO;
 	}
 
+	/* The MAC computes the ICMPv4 checksum over the field as it is, so a
+	 * packet that carries its transport layer checksum already, a forwarded
+	 * one for example, gets the IPv4 header checksum only.
+	 */
+	if (IS_ENABLED(CONFIG_ETH_DWC_XGMAC_TX_CS_OFFLOAD)) {
+		tdes3_cic = net_pkt_is_chksum_done(pkt) ? XGMAC_TDES3_CS_IP_HDR
+							: XGMAC_TDES3_CS_EN_MSK;
+	}
+
+	pkt_len = net_pkt_get_len(pkt);
 	context.q_id = net_tx_priority2tc(net_pkt_priority(pkt));
 	context.descmeta = (struct xgmac_dma_tx_desc_meta *)&dev_data->tx_desc_meta[context.q_id];
 	context.pkt_desc_id = context.descmeta->next_to_use;
@@ -1400,15 +1408,11 @@ static int eth_dwc_xgmac_send(const struct device *dev, struct net_pkt *pkt)
 							       (context.q_id * dma_ch_cfg->tdrl) +
 							       context.pkt_desc_id);
 		arch_dcache_invd_range(context.tx_desc, sizeof(context.tx_desc));
-		arch_dcache_flush_range(frag->data, CONFIG_NET_BUF_DATA_SIZE);
+		arch_dcache_flush_range(frag->data, frag->len);
 		context.tx_desc->tdes0 = (uint32_t)POINTER_TO_UINT(frag->data);
 		context.tx_desc->tdes1 = (uint32_t)(POINTER_TO_UINT(frag->data) >> 32u);
 		tdes2_flgs = frag->len;
-		tdes3_flgs = XGMAC_TDES3_OWN | tdes3_fd_flg |
-#ifdef CONFIG_ETH_DWC_XGMAC_TX_CS_OFFLOAD
-			     XGMAC_TDES3_CS_EN_MSK |
-#endif
-			     net_pkt_get_len(pkt);
+		tdes3_flgs = XGMAC_TDES3_OWN | tdes3_fd_flg | tdes3_cic | pkt_len;
 		tdes3_fd_flg = 0;
 
 		if (!frag->frags) { /* check last fragment of the packet */
@@ -1447,7 +1451,7 @@ static int eth_dwc_xgmac_send(const struct device *dev, struct net_pkt *pkt)
 	/* unlock the TX desc ring */
 	(void)k_mutex_unlock(&(context.descmeta->ring_lock));
 
-	UPDATE_ETH_STATS_TX_BYTE_CNT(dev_data, net_pkt_get_len(pkt));
+	UPDATE_ETH_STATS_TX_BYTE_CNT(dev_data, pkt_len);
 	UPDATE_ETH_STATS_TX_PKT_CNT(dev_data, 1u);
 
 	return 0;
@@ -1531,7 +1535,7 @@ static int eth_dwc_xgmac_set_config(const struct device *dev,
 	case ETHERNET_CONFIG_TYPE_MAC_ADDRESS:
 		memcpy(dev_data->mac_addr, config->mac_address.addr, ETH_MAC_ADDRESS_SIZE);
 		dwxgmac_set_mac_addr_by_idx(dev, dev_data->mac_addr, 0u, false);
-		return 0;
+		break;
 #if (!CONFIG_ETH_DWC_XGMAC_PROMISCUOUS_EXCEPTION && CONFIG_NET_PROMISCUOUS_MODE)
 
 	case ETHERNET_CONFIG_TYPE_PROMISC_MODE:
@@ -1640,7 +1644,6 @@ static const struct ethernet_api eth_dwc_xgmac_apis = {
 	.stop = eth_dwc_xgmac_stop_device,
 	.get_capabilities = eth_dwc_xgmac_get_capabilities,
 	.set_config = eth_dwc_xgmac_set_config,
-	.get_config = eth_dwc_xgmac_get_config,
 #ifdef CONFIG_NET_STATISTICS_ETHERNET
 	.get_stats = eth_dwc_xgmac_stats,
 #endif /* CONFIG_NET_STATISTICS_ETHERNET */
@@ -1715,7 +1718,6 @@ static const struct ethernet_api eth_dwc_xgmac_apis = {
 		.num_rx_Qs = DT_INST_PROP(port, num_rx_queues),                                    \
 		.num_dma_chnl = DT_INST_PROP(port, num_dma_ch),                                    \
 		.num_TCs = DT_INST_PROP(port, num_tc),                                             \
-		.mtu = DT_INST_PROP(port, max_frame_size),                                         \
 		.tx_fifo_size = DT_INST_PROP(port, tx_fifo_size),                                  \
 		.rx_fifo_size = DT_INST_PROP(port, rx_fifo_size),                                  \
 		.dma_cfg.wr_osr_lmt = DT_INST_PROP(port, wr_osr_lmt),                              \
@@ -1759,7 +1761,7 @@ static const struct ethernet_api eth_dwc_xgmac_apis = {
 	ETH_NET_DEVICE_DT_INST_DEFINE(port, eth_dwc_xgmac_dev_init, NULL,                          \
 				      &eth_dwc_xgmac##port##_dev_data,                             \
 				      &eth_dwc_xgmac##port##_dev_cfg, CONFIG_ETH_INIT_PRIORITY,    \
-				      &eth_dwc_xgmac_apis, DT_INST_PROP(port, max_frame_size));
+				      &eth_dwc_xgmac_apis, NET_ETH_MTU);
 
 /* Top-level device initialization macro - bundles all of the above */
 #define ETH_DWC_XGMAC_INITIALIZE(port)                                                             \

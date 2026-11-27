@@ -247,6 +247,9 @@ class Json_report:
                 if not x:
                     continue
 
+                if not covered_file['lines']:
+                    continue
+
                 file_name = covered_file['file'][covered_file['file'].rfind('/') + 1 :]
                 file_path = covered_file['file']
                 file_coverage, file_lines, file_hit = self._calculate_coverage_of_file(covered_file)
@@ -260,13 +263,19 @@ class Json_report:
                     "Uncovered_Functions": [],
                 }
                 for i_fun in covered_file['functions']:
-                    if i_fun['execution_count'] != 0:
-                        json_covered_funciton = {"Name": i_fun['name']}
-                        json_file['Covered_Functions'].append(json_covered_funciton)
+                    if 'execution_count' in i_fun and i_fun['execution_count'] != 0:
+                        if 'name' in i_fun:
+                            json_covered_function = {"Name": i_fun['name']}
+                            json_file['Covered_Functions'].append(json_covered_function)
+                        else:
+                            print(f"Skipping covered function without name in {file_path}")
                 for i_fun in covered_file['functions']:
-                    if i_fun['execution_count'] == 0:
-                        json_uncovered_funciton = {"Name": i_fun['name']}
-                        json_file['Uncovered_Functions'].append(json_uncovered_funciton)
+                    if 'execution_count' not in i_fun or i_fun['execution_count'] == 0:
+                        if 'name' in i_fun:
+                            json_uncovered_function = {"Name": i_fun['name']}
+                            json_file['Uncovered_Functions'].append(json_uncovered_function)
+                        else:
+                            print(f"Skipping uncovered function without name in {file_path}")
                 comp_exists = [x for x in json_files if x['Path'] == json_file['Path']]
                 if not comp_exists:
                     json_files.append(json_file)

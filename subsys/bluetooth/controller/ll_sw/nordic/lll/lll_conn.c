@@ -45,6 +45,7 @@
 
 static int init_reset(void);
 static void isr_done(void *param);
+static uint16_t max_rx_octets_get(struct lll_conn *lll);
 static inline int isr_rx_pdu(struct lll_conn *lll, struct pdu_data *pdu_data_rx,
 			     uint8_t *is_rx_enqueue,
 			     struct node_tx **tx_release, uint8_t *is_done);
@@ -189,7 +190,9 @@ int lll_conn_central_is_abort_cb(void *next, void *curr,
 		return -EBUSY;
 	}
 
-	LL_ASSERT_DBG(trx_busy_iteration < CENTRAL_TRX_BUSY_ITERATION_MAX);
+	/* Without deferral support (EVENT_DEFER_MAX is 0) the event is always cancelled */
+	LL_ASSERT_DBG((CENTRAL_TRX_BUSY_ITERATION_MAX == 0U) ||
+		      (trx_busy_iteration < CENTRAL_TRX_BUSY_ITERATION_MAX));
 
 	return -ECANCELED;
 }
@@ -223,7 +226,9 @@ int lll_conn_peripheral_is_abort_cb(void *next, void *curr,
 		return -EBUSY;
 	}
 
-	LL_ASSERT_DBG(trx_busy_iteration < PERIPHERAL_TRX_BUSY_ITERATION_MAX);
+	/* Without deferral support (EVENT_DEFER_MAX is 0) the event is always cancelled */
+	LL_ASSERT_DBG((PERIPHERAL_TRX_BUSY_ITERATION_MAX == 0U) ||
+		      (trx_busy_iteration < PERIPHERAL_TRX_BUSY_ITERATION_MAX));
 
 	return -ECANCELED;
 }
@@ -374,8 +379,9 @@ void lll_conn_isr_rx(void *param)
 		err = isr_rx_pdu(lll, pdu_data_rx, &is_rx_enqueue, &tx_release,
 				 &is_done);
 		if (err) {
-			/* Disable radio trx switch on MIC failure for both
-			 * central and peripheral, and close the radio event.
+			/* Disable radio trx switch on MIC or length failure for
+			 * both central and peripheral, and close the radio
+			 * event.
 			 */
 			radio_isr_set(isr_done, param);
 			radio_disable();
@@ -708,10 +714,13 @@ void lll_conn_isr_tx(void *param)
 	/* Use special API for SOC that requires compensation for PHYEND event delay. */
 
 #if defined(CONFIG_BT_CTLR_PHY)
-	radio_switch_complete_with_delay_compensation_and_tx(lll->phy_rx, 0, lll->phy_tx,
+	radio_switch_complete_with_delay_compensation_and_tx(lll->phy_rx,
+							     PHY_FLAGS_UNUSED, lll->phy_tx,
 							     lll->phy_flags, end_evt_delay);
 #else /* !CONFIG_BT_CTLR_PHY */
-	radio_switch_complete_with_delay_compensation_and_tx(0, 0, 0, 0, end_evt_delay);
+	radio_switch_complete_with_delay_compensation_and_tx(PHY_LEGACY,
+							     PHY_FLAGS_UNUSED, PHY_LEGACY,
+							     PHY_FLAGS_UNUSED, end_evt_delay);
 #endif /* !CONFIG_BT_CTLR_PHY */
 
 #endif /* CONFIG_BT_CTLR_DF_PHYEND_OFFSET_COMPENSATION_ENABLE */
@@ -723,9 +732,10 @@ void lll_conn_isr_tx(void *param)
  */
 #if !defined(CONFIG_BT_CTLR_DF_PHYEND_OFFSET_COMPENSATION_ENABLE)
 #if defined(CONFIG_BT_CTLR_PHY)
-	radio_switch_complete_and_tx(lll->phy_rx, 0, lll->phy_tx, lll->phy_flags);
+	radio_switch_complete_and_tx(lll->phy_rx, PHY_FLAGS_UNUSED, lll->phy_tx,
+				     lll->phy_flags);
 #else /* !CONFIG_BT_CTLR_PHY */
-	radio_switch_complete_and_tx(0, 0, 0, 0);
+	radio_switch_complete_and_tx(PHY_LEGACY, PHY_FLAGS_UNUSED, PHY_LEGACY, PHY_FLAGS_UNUSED);
 #endif /* !CONFIG_BT_CTLR_PHY */
 #endif /* !CONFIG_BT_CTLR_DF_PHYEND_OFFSET_COMPENSATION_ENABLE */
 
@@ -774,13 +784,13 @@ void lll_conn_isr_tx(void *param)
 	hcto += cte_len;
 #endif /* CONFIG_BT_CTLR_DF_CONN_CTE_TX */
 #if defined(CONFIG_BT_CTLR_PHY)
-	hcto += radio_rx_chain_delay_get(lll->phy_rx, 1);
+	hcto += radio_rx_chain_delay_get(lll->phy_rx, PHY_FLAGS_S8);
 	hcto += addr_us_get(lll->phy_rx);
 	hcto -= radio_tx_chain_delay_get(lll->phy_tx, lll->phy_flags);
 #else /* !CONFIG_BT_CTLR_PHY */
-	hcto += radio_rx_chain_delay_get(0, 0);
+	hcto += radio_rx_chain_delay_get(PHY_LEGACY, PHY_FLAGS_UNUSED);
 	hcto += addr_us_get(0);
-	hcto -= radio_tx_chain_delay_get(0, 0);
+	hcto -= radio_tx_chain_delay_get(PHY_LEGACY, PHY_FLAGS_UNUSED);
 #endif /* !CONFIG_BT_CTLR_PHY */
 
 	radio_tmr_hcto_configure(hcto);
@@ -816,7 +826,7 @@ void lll_conn_isr_tx(void *param)
 #else /* !CONFIG_BT_CTLR_PHY */
 	radio_gpio_pa_lna_enable(radio_tmr_tifs_base_get() + lll->tifs_rx_us -
 				 (EVENT_CLOCK_JITTER_US << 1) -
-				 radio_tx_chain_delay_get(0U, 0U) -
+				 radio_tx_chain_delay_get(PHY_LEGACY, PHY_FLAGS_UNUSED) -
 				 HAL_RADIO_GPIO_LNA_OFFSET);
 #endif /* !CONFIG_BT_CTLR_PHY */
 #endif /* HAL_RADIO_GPIO_HAVE_LNA_PIN */
@@ -847,16 +857,7 @@ void lll_conn_rx_pkt_set(struct lll_conn *lll)
 	pdu_data_rx = (void *)node_rx->pdu;
 	pdu_data_rx->len = 0U;
 
-#if defined(CONFIG_BT_CTLR_DATA_LENGTH)
-	max_rx_octets = lll->dle.eff.max_rx_octets;
-#else /* !CONFIG_BT_CTLR_DATA_LENGTH */
-	max_rx_octets = PDU_DC_PAYLOAD_SIZE_MIN;
-#endif /* !CONFIG_BT_CTLR_DATA_LENGTH */
-
-	if ((PDU_DC_CTRL_RX_SIZE_MAX > PDU_DC_PAYLOAD_SIZE_MIN) &&
-	    (max_rx_octets < PDU_DC_CTRL_RX_SIZE_MAX)) {
-		max_rx_octets = PDU_DC_CTRL_RX_SIZE_MAX;
-	}
+	max_rx_octets = max_rx_octets_get(lll);
 
 #if defined(CONFIG_BT_CTLR_PHY)
 	phy = lll->phy_rx;
@@ -864,7 +865,7 @@ void lll_conn_rx_pkt_set(struct lll_conn *lll)
 	phy = 0U;
 #endif /* !CONFIG_BT_CTLR_PHY */
 
-	radio_phy_set(phy, 0);
+	radio_phy_set(phy, PHY_FLAGS_S8);
 
 	if (0) {
 #if defined(CONFIG_BT_CTLR_LE_ENC)
@@ -1090,6 +1091,25 @@ static inline bool ctrl_pdu_len_check(uint8_t len)
 
 }
 
+static uint16_t max_rx_octets_get(struct lll_conn *lll)
+{
+	uint16_t max_rx_octets;
+
+#if defined(CONFIG_BT_CTLR_DATA_LENGTH)
+	max_rx_octets = lll->dle.eff.max_rx_octets;
+#else /* !CONFIG_BT_CTLR_DATA_LENGTH */
+	ARG_UNUSED(lll);
+	max_rx_octets = PDU_DC_PAYLOAD_SIZE_MIN;
+#endif /* !CONFIG_BT_CTLR_DATA_LENGTH */
+
+	if ((PDU_DC_CTRL_RX_SIZE_MAX > PDU_DC_PAYLOAD_SIZE_MIN) &&
+	    (max_rx_octets < PDU_DC_CTRL_RX_SIZE_MAX)) {
+		max_rx_octets = PDU_DC_CTRL_RX_SIZE_MAX;
+	}
+
+	return max_rx_octets;
+}
+
 static inline int isr_rx_pdu(struct lll_conn *lll, struct pdu_data *pdu_data_rx,
 			     uint8_t *is_rx_enqueue,
 			     struct node_tx **tx_release, uint8_t *is_done)
@@ -1251,6 +1271,17 @@ static inline int isr_rx_pdu(struct lll_conn *lll, struct pdu_data *pdu_data_rx,
 				mic_state = LLL_CONN_MIC_PASS;
 			}
 #endif /* CONFIG_BT_CTLR_LE_ENC */
+
+			/* Discard the received PDU, whether unencrypted or the
+			 * decrypted, with length that exceeds the configured
+			 * maximum receive data length used to setup the radio
+			 * packet reception. Encrypted PDUs include the MIC in
+			 * their on-air length, hence the check is performed here
+			 * after decryption.
+			 */
+			if (pdu_data_rx->len > max_rx_octets_get(lll)) {
+				return -EINVAL;
+			}
 
 			/* Enqueue non-empty PDU */
 			*is_rx_enqueue = 1U;

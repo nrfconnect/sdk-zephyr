@@ -10,13 +10,14 @@ jobs:
   stale:
     name: Find Stale issues and PRs
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     if: github.repository == 'nrfconnect/sdk-zephyr'
     permissions:
       pull-requests: write # to comment on stale pull requests
       issues: write        # to comment on stale issues
 
     steps:
-    - uses: actions/stale@eb5cf3af3ac0a1aa4c9c45633dd1ae542a27a899 # v10.3.0
+    - uses: actions/stale@3467b6485bf80d2be20f30ec1a3d2d2aea0330e9 # main
       with:
         stale-pr-message: 'This pull request has been marked as stale because it has been open (more
           than) 30 days with no activity. Remove the stale label or add a comment saying that you
@@ -32,5 +33,6 @@ jobs:
         stale-issue-label: 'Stale'
         stale-pr-label: 'Stale'
         exempt-pr-labels: 'Blocked,In progress'
-        exempt-issue-labels: 'In progress,Enhancement,Feature,Feature Request,RFC,Meta,Process,Coverity'
+        exempt-issue-labels: 'In progress,Meta,Process,Coverity'
+        exempt-issue-types: 'Enhancement,RFC,Feature Request,Task'
         operations-per-run: 400

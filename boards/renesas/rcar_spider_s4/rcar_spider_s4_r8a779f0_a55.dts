@@ -13,6 +13,10 @@
 / {
 	model = "Renesas Spider CA55";
 
+	cpus {
+		timebase-frequency = <16666666>;
+	};
+
 	chosen {
 		zephyr,sram = &ram;
 		zephyr,console = &hscif0;
@@ -20,8 +24,8 @@
 	};
 
 	ram: memory@48000000 {
-		device_type = "memory";
 		reg = <0x0 0x48000000 0x0 DT_SIZE_M(512)>;
+		device_type = "memory";
 	};
 };
 

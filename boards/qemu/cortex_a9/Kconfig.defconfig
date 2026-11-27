@@ -10,10 +10,6 @@ if BOARD_QEMU_CORTEX_A9
 config BUILD_OUTPUT_BIN
 	default n
 
-config SYS_CLOCK_HW_CYCLES_PER_SEC
-	int
-	default 111111111
-
 config SYS_CLOCK_TICKS_PER_SEC
 	default 1000
 
@@ -24,7 +20,7 @@ config LOG_PROCESS_THREAD_STACK_SIZE
 
 endif # LOG_PROCESS_THREAD
 
-configdefault NET_L2_ETHERNET
+configdefault ETH_DRIVER
 	default y
 
 configdefault NET_TX_STACK_SIZE
@@ -42,9 +38,6 @@ configdefault NET_MGMT_EVENT_STACK_SIZE
 configdefault TEST_RANDOM_GENERATOR
 	default y if NETWORKING
 
-configdefault ETH_PHY_DRIVER
-	default n if !NET_QEMU_ETHERNET
-
 if QEMU_ICOUNT
 
 config QEMU_ICOUNT_SHIFT
@@ -57,5 +50,29 @@ endif # QEMU_ICOUNT
 
 config SHELL_STACK_SIZE
 	default 8192 if SHELL
+
+configdefault ARMV7_EXCEPTION_STACK_SIZE
+	default 8192
+
+configdefault ARMV7_FIQ_STACK_SIZE
+	default 8192
+
+configdefault ARMV7_SVC_STACK_SIZE
+	default 8192
+
+configdefault ARMV7_SYS_STACK_SIZE
+	default 8192
+
+configdefault IDLE_STACK_SIZE
+	default 8192
+
+configdefault ISR_STACK_SIZE
+	default 8192
+
+configdefault MAIN_STACK_SIZE
+	default 8192
+
+configdefault SYSTEM_WORKQUEUE_STACK_SIZE
+	default 8192
 
 endif # BOARD_QEMU_CORTEX_A9

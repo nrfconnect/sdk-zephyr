@@ -9,8 +9,8 @@
 #include <arm/xilinx/zynqmp_rpu.dtsi>
 
 / {
-	model = "KV260 Cortex-R5";
 	compatible = "xlnx,zynqmp-r5";
+	model = "KV260 Cortex-R5";
 
 	sram0: memory@0 {
 		compatible = "mmio-sram";
@@ -38,24 +38,28 @@
 };
 
 &uart1 {
-	status = "okay";
 	current-speed = <115200>;
 	clock-frequency = <99999901>;
+	status = "okay";
 };
 
 &ttc0 {
-	status = "okay";
 	clock-frequency = <100000000>;
+	status = "okay";
 };
 
 &psgpio {
 	status = "okay";
 };
 
-&i2c1 {
+&rtc {
 	status = "okay";
+};
+
+&i2c1 {
 	clocks = <&i2c_ref_clk>;
 	clock-frequency = <400000>;
+	status = "okay";
 
 	eeprom0: eeprom@50 {
 		compatible = "st,24c64", "atmel,at24";

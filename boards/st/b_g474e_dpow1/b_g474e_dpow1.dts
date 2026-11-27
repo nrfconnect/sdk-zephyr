@@ -10,14 +10,15 @@
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 
 / {
-	model = "B-G474E-DPOW1 Discovery board";
 	compatible = "st,b-g474e-dpow1";
+	model = "B-G474E-DPOW1 Discovery board";
 
 	chosen {
 		zephyr,console = &usart3;
 		zephyr,shell-uart = &usart3;
 		zephyr,sram = &sram0;
 		zephyr,flash = &flash0;
+		zephyr,system-timer = &lptim1;
 	};
 
 	leds {
@@ -104,7 +105,7 @@
 	status = "okay";
 };
 
-stm32_lp_tick_source: &lptim1 {
+&lptim1 {
 	clocks = <&rcc STM32_CLOCK(APB1, 31)>,
 		 <&rcc STM32_SRC_LSI LPTIM1_SEL(1)>;
 	status = "okay";
@@ -140,15 +141,18 @@ stm32_lp_tick_source: &lptim1 {
 	status = "okay";
 };
 
+&adc12_common {
+	st,adc-prescaler = <4>;
+	st,adc-clock-source = "SYNC";
+	status = "okay";
+};
+
 &adc2 {
 	pinctrl-0 = <&adc2_in8_pc2>;
 	pinctrl-names = "default";
-	st,adc-clock-source = "SYNC";
-	st,adc-prescaler = <4>;
-	status = "okay";
-
 	#address-cells = <1>;
 	#size-cells = <0>;
+	status = "okay";
 
 	channel@8 {
 		reg = <8>;
@@ -161,7 +165,6 @@ stm32_lp_tick_source: &lptim1 {
 };
 
 &ucpd1 {
-	status = "okay";
 
 	/*
 	 * UCPD is fed directly from HSI which is @ 16MHz. The ucpd_clk goes to
@@ -189,6 +192,7 @@ stm32_lp_tick_source: &lptim1 {
 	hbitclkdiv = <27>;
 	pinctrl-0 = <&ucpd1_cc1_pb6 &ucpd1_cc2_pb4>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 zephyr_udc0: &usb {

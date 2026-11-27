@@ -9,6 +9,10 @@ tests:
     depends_on:
       - arduino_i2c
       - arduino_gpio
+    platform_allow:
+      - nucleo_f401re
+    integration_platforms:
+      - nucleo_f401re
     platform_exclude:
       - disco_l475_iot1
       - frdm_rw612
@@ -16,3 +20,4 @@ tests:
       - pan1781_evb
       - pan1782_evb
       - mimxrt1010_evk
+      - stm32mp157x_dk2/stm32mp157fxx

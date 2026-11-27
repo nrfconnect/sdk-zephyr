@@ -74,7 +74,7 @@ struct map {
 			.config =                                                                  \
 				{                                                                  \
 					.frequency = 1000000,                                      \
-					.operation = SPI_OP_MODE_MASTER | SPI_WORD_SET(8),         \
+					.operation = SPI_OP_MODE_CONTROLLER | SPI_WORD_SET(8),     \
 				},                                                                 \
 		},                                                                                 \
 	}
@@ -320,7 +320,7 @@ static int cmd_spi_transceive(const struct shell *ctx, size_t argc, char **argv)
 
 static int cmd_spi_conf(const struct shell *ctx, size_t argc, char **argv)
 {
-	spi_operation_t operation = SPI_WORD_SET(8) | SPI_OP_MODE_MASTER;
+	spi_operation_t operation = SPI_WORD_SET(8) | SPI_OP_MODE_CONTROLLER;
 
 	struct spi_dt_spec *spec = find_spec_by_label(argv[CONF_ARGV_SPI_DEV]);
 
@@ -402,6 +402,7 @@ static int cmd_spi_conf_cs(const struct shell *ctx, size_t argc, char **argv)
 
 	spec->config.cs.gpio.port = dev;
 	spec->config.cs.gpio.pin = pin;
+	spec->config.cs.cs_is_gpio = true;
 
 	/* Include flags if provided */
 	if (argc == (CS_ARGV_GPIO_FLAGS + 1)) {

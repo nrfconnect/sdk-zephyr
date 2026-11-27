@@ -137,7 +137,7 @@ static int gpio_max14906_diag_chan_get(const struct device *dev)
 	int ret;
 
 	if (config->fault_gpio.port && !gpio_pin_get_dt(&config->fault_gpio)) {
-		LOG_ERR("[DIAG] FAULT flag is rised");
+		LOG_ERR("[DIAG] FAULT flag is raised");
 	}
 
 	ret = max149x6_reg_transceive(dev, MAX14906_INT_REG, 0, NULL, MAX149x6_READ);
@@ -576,7 +576,7 @@ static DEVICE_API(gpio, gpio_max14906_api) = {
 #define GPIO_MAX14906_DEVICE(id)                                                                   \
 	static const struct max14906_config max14906_##id##_cfg = {                                \
 		.common = GPIO_COMMON_CONFIG_FROM_DT_INST(id),                                     \
-		.spi = SPI_DT_SPEC_INST_GET(id, SPI_OP_MODE_MASTER | SPI_WORD_SET(8U)),            \
+		.spi = SPI_DT_SPEC_INST_GET(id, SPI_OP_MODE_CONTROLLER | SPI_WORD_SET(8U)),        \
 		.ready_gpio = GPIO_DT_SPEC_INST_GET_OR(id, drdy_gpios, {0}),                       \
 		.fault_gpio = GPIO_DT_SPEC_INST_GET_OR(id, fault_gpios, {0}),                      \
 		.sync_gpio = GPIO_DT_SPEC_INST_GET_OR(id, sync_gpios, {0}),                        \

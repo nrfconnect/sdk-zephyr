@@ -17,15 +17,15 @@
 #include <zephyr/usb/usb_ch9.h>
 #include <zephyr/drivers/usb/udc.h>
 #include <zephyr/drivers/video.h>
-#include <zephyr/drivers/video-controls.h>
+#include <zephyr/video/video.h>
 #include <zephyr/logging/log.h>
 
 #include <zephyr/sys/util.h>
 #include <zephyr/usb/class/usbd_uvc.h>
 
-#include "uvc.h"
-#include "../../../drivers/video/video_ctrls.h"
-#include "../../../drivers/video/video_device.h"
+#include <uvc.h>
+
+#include "../../../../drivers/video/video_common.h"
 
 LOG_MODULE_REGISTER(usbd_uvc, CONFIG_USBD_VIDEO_LOG_LEVEL);
 
@@ -124,7 +124,7 @@ struct uvc_data {
 	size_t vbuf_offset;
 	/* Let the different parts of the code know of the current state */
 	atomic_t state;
-	/* Index where newly generated descriptors are appened */
+	/* Index where newly generated descriptors are appended */
 	unsigned int fs_desc_idx;
 	unsigned int hs_desc_idx;
 	unsigned int fmt_desc_idx;
@@ -1124,7 +1124,8 @@ end:
 
 /* UVC descriptor handling */
 
-static void *uvc_get_desc(struct usbd_class_data *const c_data, const enum usbd_speed speed)
+static const void *uvc_get_desc(struct usbd_class_data *const c_data,
+				const enum usbd_speed speed)
 {
 	const struct device *dev = usbd_class_get_private(c_data);
 	const struct uvc_config *const cfg = dev->config;
@@ -1490,7 +1491,7 @@ static int uvc_add_vs_frame_desc(const struct device *dev,
 
 	/* UVC requires the frame intervals to be sorted, but not Zephyr */
 	qsort(dwFrameInterval, *bFrameIntervalType,
-	      sizeof(*dwFrameInterval), uvc_compare_frmival_desc);
+	      sizeof(uint32_t), uvc_compare_frmival_desc);
 
 	sys_put_le32(sys_get_le32(dwFrameInterval), dwDefaultFrameInterval);
 	format_desc->bNumFrameDescriptors += 1;

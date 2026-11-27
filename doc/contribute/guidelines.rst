@@ -659,6 +659,14 @@ before opening a new Pull Request:
 
    ./scripts/ci/check_compliance.py -c <commit range>
 
+The checks run in parallel, using one worker process per CPU. Pass ``-p N`` to
+limit the number of worker processes to ``N``, or ``-p 1`` to run the checks
+sequentially.
+
+.. code-block:: bash
+
+   ./scripts/ci/check_compliance.py -p 1 -c <commit range>
+
 .. note::
    On Windows if the .pl extension has not yet been associated with an
    application, then the first time a .pl file is run without specifying an
@@ -870,13 +878,13 @@ workflow here:
 #. Create a topic branch (off of ``main``) for your work (if you're addressing
    an issue, we suggest including the issue number in the branch name)::
 
-     git checkout main
-     git checkout -b fix_comment_typo
+     git switch main
+     git switch -c fix_comment_typo
 
    Some Zephyr subsystems do development work on a separate branch from
    ``main`` so you may need to indicate this in your checkout::
 
-     git checkout -b fix_out_of_date_patch origin/net
+     git switch -c fix_out_of_date_patch origin/net
 
 #. Make changes, test locally, change, test, test again, ...  (Check out the
    prior chapter on `twister`_ as well).
@@ -928,8 +936,8 @@ workflow here:
    can create another branch to work on another issue. (Be sure to make your
    new branch off of ``main`` and not the previous branch.)::
 
-     git checkout main
-     git checkout -b fix_another_issue
+     git switch main
+     git switch -c fix_another_issue
 
    and use the same process described above to work on this new topic branch.
 

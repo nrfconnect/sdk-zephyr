@@ -106,8 +106,8 @@ static void prepare_client(void)
 	memset(&fixture, 0xAA, sizeof(fixture));
 	fixture.poison[sizeof(fixture.poison) - 1] = '\0';
 
-	memset(&fixture.client.server, 0, sizeof(fixture.client.server));
-	addr = (struct net_sockaddr_in *)&fixture.client.server;
+	memset(&fixture.client.server_addr, 0, sizeof(fixture.client.server_addr));
+	addr = (struct net_sockaddr_in *)&fixture.client.server_addr;
 	addr->sin_family = NET_AF_INET;
 	addr->sin_port = net_htons(SERVER_PORT);
 	addr->sin_addr.s4_addr[0] = 127;

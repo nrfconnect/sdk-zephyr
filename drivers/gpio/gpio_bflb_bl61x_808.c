@@ -348,11 +348,15 @@ void gpio_bflb_common_config_internal(const struct device *dev,
 				      const uint8_t mode)
 {
 	const struct gpio_bflb_config * const conf = dev->config;
+#ifdef CONFIG_GPIO_BFLB_BL61X_808_CACHE_WRITE
+	struct gpio_bflb_data *data = dev->data;
+#endif
 	uintptr_t base = conf->base;
 	uint8_t sect = conf->section;
 	uint32_t cfg;
 	uint32_t tmp;
 
+#if defined(CONFIG_SOC_SERIES_BL61X)
 	/* disable RC32K muxing */
 	if (pin == 16) {
 		*(volatile uint32_t *)(HBN_BASE + HBN_PAD_CTRL_0_OFFSET)
@@ -361,14 +365,16 @@ void gpio_bflb_common_config_internal(const struct device *dev,
 		*(volatile uint32_t *)(HBN_BASE + HBN_PAD_CTRL_0_OFFSET)
 			&= ~(1 << (HBN_REG_EN_AON_CTRL_GPIO_POS + 1));
 	}
+#endif
 
 	cfg = sys_read32(GPIO_BFLB_PIN_REG(base, pin, sect));
 
+	cfg &= ~(GLB_REG_GPIO_0_OE_MSK | GLB_REG_GPIO_0_IE_MSK);
+
 	if ((flags & GPIO_INPUT) != 0) {
 		cfg |= GLB_REG_GPIO_0_IE_MSK;
-		cfg &= GLB_REG_GPIO_0_OE_UMSK;
-	} else if ((flags & GPIO_OUTPUT) != 0) {
-		cfg &= GLB_REG_GPIO_0_IE_UMSK;
+	}
+	if ((flags & GPIO_OUTPUT) != 0) {
 		cfg |= GLB_REG_GPIO_0_OE_MSK;
 		tmp = sys_read32(GPIO_BFLB_PIN_SET_REG(base, GLB_GPIO_CFG136_OFFSET, sect));
 		if (flags & GPIO_OUTPUT_INIT_HIGH) {
@@ -379,8 +385,12 @@ void gpio_bflb_common_config_internal(const struct device *dev,
 			tmp &= ~(1U << pin);
 			sys_write32(tmp, GPIO_BFLB_PIN_SET_REG(base, GLB_GPIO_CFG136_OFFSET, sect));
 		}
-	} else {
-		/* Hi-Z */
+#ifdef CONFIG_GPIO_BFLB_BL61X_808_CACHE_WRITE
+		data->cache = tmp;
+#endif
+	}
+	/* Hi-Z */
+	if ((flags & (GPIO_INPUT | GPIO_OUTPUT)) == 0) {
 		cfg &= ~(GLB_REG_GPIO_0_OE_MSK | GLB_REG_GPIO_0_IE_MSK);
 		cfg &= GLB_REG_GPIO_0_PD_UMSK;
 		cfg |= GLB_REG_GPIO_0_PU_MSK;

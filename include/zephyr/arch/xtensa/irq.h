@@ -13,6 +13,10 @@
 
 #define CONFIG_GEN_IRQ_START_VECTOR 0
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /**
  * @cond INTERNAL_HIDDEN
  */
@@ -188,7 +192,7 @@ int z_soc_irq_is_enabled(unsigned int irq);
  *
  * @param irq Interrupt to be enabled.
  */
-static ALWAYS_INLINE void xtensa_irq_enable(uint32_t irq)
+static ALWAYS_INLINE void xtensa_irq_enable(unsigned int irq)
 {
 #if XCHAL_NUM_INTERRUPTS > 32
 	switch (irq >> 5) {
@@ -221,7 +225,7 @@ static ALWAYS_INLINE void xtensa_irq_enable(uint32_t irq)
  *
  * @param irq Interrupt to be disabled.
  */
-static ALWAYS_INLINE void xtensa_irq_disable(uint32_t irq)
+static ALWAYS_INLINE void xtensa_irq_disable(unsigned int irq)
 {
 #if XCHAL_NUM_INTERRUPTS > 32
 	switch (irq >> 5) {
@@ -294,6 +298,10 @@ static ALWAYS_INLINE bool arch_cpu_irqs_are_enabled(void)
  * @return True if interrupt is enabled, false otherwise.
  */
 int xtensa_irq_is_enabled(unsigned int irq);
+
+#ifdef __cplusplus
+}
+#endif
 
 #include <zephyr/irq.h>
 

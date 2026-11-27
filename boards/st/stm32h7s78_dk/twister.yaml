@@ -7,14 +7,17 @@ supported:
   - adc
   - arduino_gpio
   - crc
+  - crypto
   - dma
   - entropy
   - gpio
   - memc
+  - netif:eth
   - octospi
+  - ptp_clock
   - rtc
+  - sdhc
   - uart
-  - usb_device
   - usbd
   - watchdog
 vendor: st
@@ -36,3 +39,5 @@ variants:
         - kernel
         - posix
         - cmsis-dsp
+        - filesystem
+        - disk

@@ -1,5 +1,17 @@
+# SPDX-FileCopyrightText: Copyright The Zephyr Project Contributors
+# SPDX-License-Identifier: Apache-2.0
+#
 # Many of these are symbols used as examples. Note that the list is sorted
 # alphabetically, and skips the CONFIG_ prefix.
+#
+# This list must only contain false positive Kconfig symbols. False positive
+# symbols are symbols which is
+# a) Used for documentation purposes, for example: `CONFIG_FOO`
+# b) Defined symbols in the Zephyr repo, but where compliance fails to load them,
+#    for example toolchain or sysbuild specific Kconfigs.
+#
+# This list is not for symbols defined in Zephyr modules or other external repos.
+#
 # zephyr-keep-sorted-start re(^\s+")
 ALSO_MISSING
 APP_LINK_WITH_
@@ -13,6 +25,13 @@ APP_LOG_LEVEL_DBG
 # Zephyr toolchain variant and therefore not
 # visible to compliance.
 ARMCLANG_STD_LIBC
+# ZASSERT module levels used for samples, tests, and documentation.
+ASSERT_MODULE_
+ASSERT_MODULE_MYMODULE_LEVEL
+ASSERT_MODULE_MYMODULE_LEVEL_OFF
+ASSERT_MODULE_MYMODULE_LEVEL_TERSE
+ASSERT_MODULE_MYMODULE_LEVEL_NORMAL
+ASSERT_MODULE_MYMODULE_LEVEL_VERBOSE
 BINDESC_  # Used in documentation as a prefix
 BOARD_  # Used as regex in scripts/utils/board_v1_to_v2.py
 BOARD_MPS2_AN521_CPUTEST  # Used for board and SoC extension feature tests
@@ -55,8 +74,6 @@ BOOT_VALIDATE_SLOT0  # Used in (sysbuild-based) test
 BOOT_WATCHDOG_FEED  # Used in (sysbuild-based) test
 BT_6LOWPAN  # Defined in Linux, mentioned in docs
 CDC_ACM_PORT_NAME_
-CHRE  # Optional module
-CHRE_LOG_LEVEL_DBG  # Optional module
 CLOCK_STM32_SYSCLK_SRC_
 CMD_CACHE  # Defined in U-Boot, mentioned in docs
 CMU
@@ -65,6 +82,11 @@ CPU_V7  # U-Boot boards/luckfox/pico_ultra
 CRC  # Used in TI CC13x2 / CC26x2 SDK comment
 DEEP_SLEEP  # #defined by RV32M1 in ext/
 DESCRIPTION
+DTD_PLATFORM_IMPLY  # DT Doctor test fixture symbol
+DTD_PLATFORM_SELECT  # DT Doctor test fixture symbol
+DTD_SERIAL  # DT Doctor test fixture symbol
+DTD_SPECIAL_CORE  # DT Doctor test fixture symbol
+DTD_UART  # DT Doctor test fixture symbol
 DT_HAS_  # example from doc/build/dts/dt-vs-kconfig.rst
 EFI_LOADER  # U-Boot boards/luckfox/pico_ultra
 ERR
@@ -80,6 +102,7 @@ FOO_SETTING_1
 FOO_SETTING_2
 HEAP_MEM_POOL_ADD_SIZE_  # Used as an option matching prefix
 HUGETLBFS  # Linux, in boards/xtensa/intel_adsp_cavs25/doc
+I2C_TINY_USB  # Linux, in samples/subsys/usb/i2c_tiny_usb/README.rst
 IAR_BUFFERED_WRITE
 IAR_DATA_INIT
 IAR_LIBCPP
@@ -91,11 +114,12 @@ IPC_SERVICE_ICMSG_BOND_NOTIFY_REPEAT_TO_MS
 LIBGCC_RTLIB
 LLEXT_EXPORT_SYMBOL_GROUP_  # Used in regexp by
 # scripts/build/llext_inspect_discarded_groups.py
-LLVM_USE_LD  # Both LLVM_USE_* are in cmake/toolchain/llvm/Kconfig
+LLVM_USE_LD  # All LLVM_USE_* are in cmake/toolchain/host/llvm/Kconfig
 # which are only included if LLVM is selected but
 # not other toolchains. Compliance check would complain,
 # for example, if you are using GCC.
 LLVM_USE_LLD
+LLVM_USE_ELD
 LOG_BACKEND_MOCK_OUTPUT_DEFAULT  # Referenced in tests/subsys/logging/log_syst
 LOG_BACKEND_MOCK_OUTPUT_SYST  # Referenced in testcase.yaml of log_syst test
 LSM6DSO_INT_PIN
@@ -121,6 +145,7 @@ MODULES
 MODVERSIONS  # Linux, in boards/xtensa/intel_adsp_cavs25/doc
 MYFEATURE
 MY_DRIVER_0
+NET_L2_ETHERNET_MCAST_FILTER_ADD_COUNT_  # Used as an option matching prefix
 NORMAL_SLEEP  # #defined by RV32M1 in ext/
 NRF_WIFI_FW_BIN  # Directly passed from CMakeLists.txt
 OPT
@@ -151,6 +176,7 @@ STACK_SIZE  # Used as an example in the Kconfig docs
 STD_CPP  # Referenced in CMake comment
 SYMBOL # used as an example in ci scripts
 TEST1
+TEST_EXTRA_DEFINE  # Bogus define used by twister blackbox tests to exercise -x
 TFM_SPM_BACKEND_IPC  # Used in TFM sample dummy partition - belongs to TFM
 TFM_SPM_BACKEND_SFN  # Used in TFM sample dummy partition - belongs to TFM
 # Defined in modules/hal_nxp/mcux/mcux-sdk-ng/basic.cmake.

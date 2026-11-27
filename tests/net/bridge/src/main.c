@@ -20,11 +20,15 @@ LOG_MODULE_REGISTER(net_test, NET_LOG_LEVEL);
 #include <zephyr/ztest.h>
 
 #include <zephyr/net/net_if.h>
+#include <zephyr/net/net_ip.h>
+#include <zephyr/net/net_pkt.h>
 #include <zephyr/net/ethernet.h>
 #include <zephyr/net/ethernet_bridge.h>
 #include <zephyr/net/ethernet_bridge_fdb.h>
 #include <zephyr/net/virtual.h>
 #include <zephyr/net/promiscuous.h>
+
+#include "arp.h"
 
 #if NET_LOG_LEVEL >= LOG_LEVEL_DBG
 #define DBG(fmt, ...) printk(fmt, ##__VA_ARGS__)
@@ -39,6 +43,15 @@ struct eth_fake_context {
 	struct net_pkt *sent_pkt;
 	uint8_t mac_address[6];
 	bool promisc_mode;
+	/* Destination MAC of the last locally originated IPv4 frame seen on
+	 * this interface, used by the local-TX regression test.
+	 */
+	struct net_eth_addr last_ipv4_dst;
+	bool last_ipv4_seen;
+	/* Set when an ARP frame egressed this interface (used by the
+	 * cache-miss variant of the local-TX regression test).
+	 */
+	bool arp_seen;
 };
 
 static void eth_fake_iface_init(struct net_if *iface)
@@ -67,6 +80,23 @@ static int eth_fake_send(const struct device *dev,
 {
 	struct eth_fake_context *ctx = dev->data;
 	struct net_eth_hdr *eth_hdr = NET_ETH_HDR(pkt);
+
+	/*
+	 * Record the destination MAC of locally originated IPv4 frames so the
+	 * local-TX regression test can check it was resolved to a unicast
+	 * address instead of defaulting to broadcast.
+	 */
+	if (eth_hdr->type == net_htons(NET_ETH_PTYPE_IP)) {
+		memcpy(&ctx->last_ipv4_dst, &eth_hdr->dst,
+		       sizeof(ctx->last_ipv4_dst));
+		ctx->last_ipv4_seen = true;
+		return 0;
+	}
+
+	if (eth_hdr->type == net_htons(NET_ETH_PTYPE_ARP)) {
+		ctx->arp_seen = true;
+		return 0;
+	}
 
 	/*
 	 * Ignore packets we don't care about for this test, like
@@ -116,7 +146,7 @@ static int eth_fake_set_config(const struct device *dev,
 		break;
 
 	default:
-		return -EINVAL;
+		return -ENOTSUP;
 	}
 
 	return 0;
@@ -322,6 +352,275 @@ static void test_setup_bridge(void)
 	zassert_equal(ret, 0, "");
 }
 
+/* The bridge can terminate/originate IP traffic, so it must present a proper
+ * 6-byte Ethernet link address. If the link address max length is larger (e.g.
+ * 8 when another L2 such as IEEE 802.15.4/PPP or a custom length is enabled),
+ * setting the bridge address to that full length makes the Ethernet "for me"
+ * check (net_linkaddr_cmp, which requires equal lengths) reject locally
+ * destined unicast frames like ARP replies, breaking address resolution.
+ */
+static void test_bridge_link_addr(void)
+{
+	struct net_linkaddr *lladdr = net_if_get_link_addr(bridge);
+
+	zassert_not_null(lladdr, "");
+	zassert_equal(lladdr->len, NET_ETH_ADDR_LEN,
+		      "bridge link address length is %u, expected %u",
+		      lladdr->len, NET_ETH_ADDR_LEN);
+	zassert_equal(lladdr->type, NET_LINK_ETHERNET,
+		      "bridge link address type is %u, expected NET_LINK_ETHERNET",
+		      lladdr->type);
+
+#if defined(CONFIG_NET_ETHERNET_BRIDGE_PREFIX_MAC)
+	{
+		static const uint8_t expected_addr[NET_ETH_ADDR_LEN] = {
+			0x02, 0x34, 0x56, 0x78, 0x9a, 0x00
+		};
+
+		zassert_mem_equal(lladdr->addr, expected_addr, sizeof(expected_addr),
+				  "bridge link address does not use configured prefix");
+	}
+#else
+	/* Random and device-id-derived addresses must be locally administered.
+	 * A configured prefix may use a globally assigned OUI, so it is checked
+	 * separately above.
+	 */
+	zassert_equal(lladdr->addr[0] & 0x01, 0x00,
+		      "bridge link address is not unicast");
+	zassert_equal(lladdr->addr[0] & 0x02, 0x02,
+		      "bridge link address is not locally administered");
+#endif
+}
+
+/*
+ * When the bridge interface owns an IPv4 address it can originate traffic of
+ * its own (e.g. a TCP server bound to the bridge). Such locally originated
+ * IPv4 packets used to be flooded to the member ports with an unresolved
+ * destination link address, which the Ethernet layer then defaulted to
+ * broadcast (ff:ff:ff:ff:ff:ff). Verify the destination is resolved to the
+ * neighbor's unicast MAC instead.
+ */
+#if defined(CONFIG_NET_IPV4)
+static const struct net_in_addr bridge_ip = { { { 192, 0, 2, 1 } } };
+
+/* Give the bridge an IPv4 address so a same-subnet peer is considered on-link.
+ * Idempotent: safe to call from more than one test.
+ */
+static void ensure_bridge_ipv4(void)
+{
+	struct net_in_addr netmask = { { { 255, 255, 255, 0 } } };
+
+	zassert_not_null(net_if_ipv4_addr_add(bridge, (struct net_in_addr *)&bridge_ip,
+					      NET_ADDR_MANUAL, 0), "");
+	zassert_true(net_if_ipv4_set_netmask_by_addr(bridge,
+						     (struct net_in_addr *)&bridge_ip,
+						     &netmask), "");
+}
+
+/* Craft a locally originated IPv4 unicast packet for the peer and hand it to
+ * the bridge TX path, mimicking the bridge's own IP stack.
+ */
+static void send_local_ipv4(const struct net_in_addr *peer_ip)
+{
+	struct net_ipv4_hdr ip_hdr = { 0 };
+	static uint8_t payload[] = { 'p', 'i', 'n', 'g' };
+	struct net_pkt *pkt;
+	int i, ret;
+
+	for (i = 0; i < 3; i++) {
+		eth_fake_data[i].last_ipv4_seen = false;
+		eth_fake_data[i].arp_seen = false;
+	}
+
+	pkt = net_pkt_alloc_with_buffer(bridge, sizeof(ip_hdr) + sizeof(payload),
+					NET_AF_INET, NET_IPPROTO_UDP, K_FOREVER);
+	zassert_not_null(pkt, "");
+
+	ip_hdr.vhl = 0x45;
+	ip_hdr.ttl = 64;
+	ip_hdr.proto = NET_IPPROTO_UDP;
+	ip_hdr.len = net_htons(sizeof(ip_hdr) + sizeof(payload));
+	net_ipv4_addr_copy_raw(ip_hdr.src, (uint8_t *)&bridge_ip);
+	net_ipv4_addr_copy_raw(ip_hdr.dst, (uint8_t *)peer_ip);
+
+	ret = net_pkt_write(pkt, &ip_hdr, sizeof(ip_hdr));
+	zassert_equal(ret, 0, "");
+	ret = net_pkt_write(pkt, payload, sizeof(payload));
+	zassert_equal(ret, 0, "");
+
+	net_pkt_cursor_init(pkt);
+	net_pkt_set_family(pkt, NET_AF_INET);
+	net_pkt_set_ll_proto_type(pkt, NET_ETH_PTYPE_IP);
+
+	net_if_queue_tx(bridge, pkt);
+
+	/* give time to the processing threads to run */
+	k_sleep(K_MSEC(100));
+}
+
+/* Every IPv4 frame that egressed a member port must carry the peer's unicast
+ * MAC, never broadcast. At least one copy must have egressed.
+ */
+static void check_ipv4_unicast(const struct net_eth_addr *peer_mac)
+{
+	bool checked = false;
+	int i;
+
+	for (i = 0; i < 3; i++) {
+		if (!eth_fake_data[i].last_ipv4_seen) {
+			continue;
+		}
+
+		checked = true;
+
+		zassert_false(net_eth_is_addr_broadcast(&eth_fake_data[i].last_ipv4_dst),
+			      "iface %d: IPv4 frame sent to broadcast MAC",
+			      net_if_get_by_iface(eth_fake_data[i].iface));
+		zassert_mem_equal(&eth_fake_data[i].last_ipv4_dst, peer_mac,
+				  sizeof(*peer_mac),
+				  "iface %d: IPv4 frame dst MAC not resolved to peer",
+				  net_if_get_by_iface(eth_fake_data[i].iface));
+	}
+
+	zassert_true(checked, "no IPv4 frame egressed any member port");
+}
+
+/* Cache hit: the neighbor is already in the bridge ARP cache, so the packet is
+ * resolved and flooded to the members straight away.
+ */
+static void test_local_ipv4_tx_unicast(void)
+{
+	struct net_in_addr peer_ip = { { { 192, 0, 2, 2 } } };
+	struct net_eth_addr peer_mac = {
+		.addr = { 0x02, 0x11, 0x22, 0x33, 0x44, 0x55 }
+	};
+
+	ensure_bridge_ipv4();
+
+	/* Seed the bridge ARP cache as if the peer had already been resolved
+	 * (this is what an incoming SYN/ARP from the peer would have done).
+	 */
+	net_arp_update(bridge, &peer_ip, &peer_mac, true);
+
+	send_local_ipv4(&peer_ip);
+
+	check_ipv4_unicast(&peer_mac);
+
+	check_free_packet_count();
+}
+
+/* Cache miss: the neighbor is unknown, so the bridge must flood an ARP request
+ * (not the data frame) and hold the packet until the reply resolves it. Once
+ * resolved, the held packet is flushed to the members with the unicast MAC.
+ */
+static void test_local_ipv4_tx_unicast_arp_miss(void)
+{
+	struct net_in_addr peer_ip = { { { 192, 0, 2, 3 } } };
+	struct net_eth_addr peer_mac = {
+		.addr = { 0x02, 0x66, 0x77, 0x88, 0x99, 0xaa }
+	};
+	bool arp_requested = false;
+	int i;
+
+	ensure_bridge_ipv4();
+
+	/* Make sure the peer is not resolved yet. */
+	send_local_ipv4(&peer_ip);
+
+	/* The data frame must not have been sent yet: it is queued pending ARP.
+	 * Instead an ARP request must have been flooded to the member ports.
+	 */
+	for (i = 0; i < 3; i++) {
+		zassert_false(eth_fake_data[i].last_ipv4_seen,
+			      "iface %d: IPv4 frame sent before ARP resolved",
+			      net_if_get_by_iface(eth_fake_data[i].iface));
+		arp_requested |= eth_fake_data[i].arp_seen;
+	}
+
+	zassert_true(arp_requested, "no ARP request flooded on cache miss");
+
+	/* Simulate the peer's ARP reply arriving: this resolves the entry and
+	 * flushes the queued packet back through the bridge TX path.
+	 */
+	net_arp_update(bridge, &peer_ip, &peer_mac, false);
+
+	/* give time to the processing threads to run */
+	k_sleep(K_MSEC(100));
+
+	check_ipv4_unicast(&peer_mac);
+
+	check_free_packet_count();
+}
+
+/* A locally destined unicast frame arriving on a member port must be delivered
+ * to the bridge, not dropped by the Ethernet "for me" check. Inject a unicast
+ * ARP request for the bridge's own IP and verify the bridge answers: the reply
+ * is flooded out the other member ports. If the request were dropped (e.g. due
+ * to a mismatched bridge link address length), no reply would be produced.
+ */
+static void test_local_unicast_delivered_to_bridge(void)
+{
+	struct net_in_addr peer_ip = { { { 192, 0, 2, 9 } } };
+	struct net_eth_addr peer_mac = {
+		.addr = { 0x02, 0xaa, 0xbb, 0xcc, 0xdd, 0xee }
+	};
+	struct net_eth_hdr eth_hdr = { 0 };
+	struct net_arp_hdr arp_hdr = { 0 };
+	struct net_linkaddr *bridge_ll;
+	bool reply_seen = false;
+	struct net_pkt *pkt;
+	int i, ret;
+
+	ensure_bridge_ipv4();
+	bridge_ll = net_if_get_link_addr(bridge);
+
+	for (i = 0; i < 3; i++) {
+		eth_fake_data[i].arp_seen = false;
+	}
+
+	pkt = net_pkt_rx_alloc_with_buffer(fake_iface[1],
+					   sizeof(eth_hdr) + sizeof(arp_hdr),
+					   NET_AF_UNSPEC, 0, K_FOREVER);
+	zassert_not_null(pkt, "");
+
+	/* Unicast Ethernet frame addressed to the bridge's own MAC. */
+	memcpy(&eth_hdr.dst, bridge_ll->addr, sizeof(eth_hdr.dst));
+	memcpy(&eth_hdr.src, peer_mac.addr, sizeof(eth_hdr.src));
+	eth_hdr.type = net_htons(NET_ETH_PTYPE_ARP);
+
+	/* ARP request: who-has <bridge_ip> tell <peer>. */
+	arp_hdr.hwtype = net_htons(NET_ARP_HTYPE_ETH);
+	arp_hdr.protocol = net_htons(NET_ETH_PTYPE_IP);
+	arp_hdr.hwlen = NET_ETH_ADDR_LEN;
+	arp_hdr.protolen = NET_ARP_IPV4_PTYPE_SIZE;
+	arp_hdr.opcode = net_htons(NET_ARP_REQUEST);
+	memcpy(&arp_hdr.src_hwaddr, peer_mac.addr, sizeof(arp_hdr.src_hwaddr));
+	memcpy(arp_hdr.src_ipaddr, &peer_ip, sizeof(arp_hdr.src_ipaddr));
+	memcpy(&arp_hdr.dst_hwaddr, bridge_ll->addr, sizeof(arp_hdr.dst_hwaddr));
+	memcpy(arp_hdr.dst_ipaddr, &bridge_ip, sizeof(arp_hdr.dst_ipaddr));
+
+	ret = net_pkt_write(pkt, &eth_hdr, sizeof(eth_hdr));
+	zassert_equal(ret, 0, "");
+	ret = net_pkt_write(pkt, &arp_hdr, sizeof(arp_hdr));
+	zassert_equal(ret, 0, "");
+
+	ret = net_recv_data(fake_iface[1], pkt);
+	zassert_equal(ret, 0, "");
+
+	/* give time to the processing threads to run */
+	k_sleep(K_MSEC(100));
+
+	for (i = 0; i < 3; i++) {
+		reply_seen |= eth_fake_data[i].arp_seen;
+	}
+
+	zassert_true(reply_seen,
+		     "unicast ARP request to bridge was dropped, no reply sent");
+
+	check_free_packet_count();
+}
+#endif /* CONFIG_NET_IPV4 */
+
 static void test_recv_with_bridge(void)
 {
 	int i, j;
@@ -359,6 +658,9 @@ static void test_recv_with_bridge(void)
 			zassert_equal(hdr->src.addr[0], 0xa2, "");
 			zassert_equal(hdr->dst.addr[4], src_if_idx, "");
 			zassert_equal(hdr->src.addr[3], src_if_idx, "");
+
+			/* The bridge sends it on with the checksums of its sender */
+			zexpect_true(net_pkt_is_chksum_done(pkt), "Forwarded frame not marked");
 
 			net_pkt_unref(pkt);
 		}
@@ -403,6 +705,72 @@ static void test_recv_no_forwarding_port(void)
 
 	net_if_up(fake_iface[1]);
 	net_if_up(fake_iface[2]);
+}
+
+/* Receive a frame from src to dst on fake_iface[idx] and tell which ports
+ * sent it on.
+ */
+static uint32_t recv_frame_and_collect(int idx, const struct net_eth_addr *src,
+				       const struct net_eth_addr *dst)
+{
+	static const uint8_t data[] = {'r', 's', 'v', 'd'};
+	struct net_eth_hdr eth_hdr;
+	uint32_t sent = 0U;
+	struct net_pkt *pkt;
+
+	pkt = net_pkt_rx_alloc_with_buffer(fake_iface[idx], sizeof(eth_hdr) + sizeof(data),
+					   NET_AF_UNSPEC, 0, K_FOREVER);
+	zassert_not_null(pkt, "");
+
+	memcpy(&eth_hdr.dst, dst, sizeof(eth_hdr.dst));
+	memcpy(&eth_hdr.src, src, sizeof(eth_hdr.src));
+	eth_hdr.type = net_htons(NET_ETH_PTYPE_ALL);
+
+	zassert_equal(net_pkt_write(pkt, &eth_hdr, sizeof(eth_hdr)), 0, "");
+	zassert_equal(net_pkt_write(pkt, data, sizeof(data)), 0, "");
+	zassert_equal(net_recv_data(fake_iface[idx], pkt), 0, "");
+
+	/* give time to the processing threads to run */
+	k_sleep(K_MSEC(20));
+
+	for (int i = 0; i < 3; i++) {
+		if (eth_fake_data[i].sent_pkt != NULL) {
+			net_pkt_unref(eth_fake_data[i].sent_pkt);
+			eth_fake_data[i].sent_pkt = NULL;
+			sent |= BIT(i);
+		}
+	}
+
+	return sent;
+}
+
+/* The reserved addresses 01-80-C2-00-00-00 to 01-80-C2-00-00-0F are never
+ * forwarded, the address after them is.
+ */
+static void test_recv_reserved_addresses(void)
+{
+	static const struct net_eth_addr src = {{0x02, 0x00, 0x5e, 0x30, 0x00, 0x01}};
+	struct net_eth_addr dst = {{0x01, 0x80, 0xc2, 0x00, 0x00, 0x00}};
+
+	/* Release what an earlier test left in the fake driver */
+	for (int i = 0; i < 3; i++) {
+		if (eth_fake_data[i].sent_pkt != NULL) {
+			net_pkt_unref(eth_fake_data[i].sent_pkt);
+			eth_fake_data[i].sent_pkt = NULL;
+		}
+	}
+
+	for (uint8_t last = 0x00; last <= 0x0f; last++) {
+		dst.addr[5] = last;
+		zexpect_equal(recv_frame_and_collect(0, &src, &dst), 0U,
+			      "Frame to 01:80:c2:00:00:%02x forwarded", last);
+	}
+
+	dst.addr[5] = 0x10;
+	zexpect_equal(recv_frame_and_collect(0, &src, &dst), BIT(1) | BIT(2),
+		      "Frame to 01:80:c2:00:00:10 not forwarded");
+
+	check_free_packet_count();
 }
 
 static void test_recv_with_bridge_fdb(void)
@@ -457,6 +825,138 @@ static void test_recv_with_bridge_fdb(void)
 	check_free_packet_count();
 }
 
+/* Destination of the frames _recv_data() builds on fake_iface[idx] */
+static void recv_data_dst(int idx, struct net_eth_addr *mac)
+{
+	mac->addr[0] = 0xb2;
+	mac->addr[1] = 0x11;
+	mac->addr[2] = 0x22;
+	mac->addr[3] = 0x33;
+	mac->addr[4] = net_if_get_by_iface(fake_iface[idx]);
+	mac->addr[5] = 0x55;
+}
+
+struct fdb_count_data {
+	struct net_if *iface;
+	int count;
+};
+
+static void fdb_count_cb(struct eth_bridge_fdb_entry *entry, void *user_data)
+{
+	struct fdb_count_data *data = user_data;
+
+	if (entry->iface == data->iface) {
+		data->count++;
+	}
+}
+
+static int fdb_count(struct net_if *iface)
+{
+	struct fdb_count_data data = {.iface = iface};
+
+	eth_bridge_fdb_foreach(fdb_count_cb, &data);
+
+	return data.count;
+}
+
+/* A frame whose destination has an FDB entry on its ingress port is
+ * filtered: it is not sent back out of that port, nor flooded.
+ */
+static void test_recv_with_bridge_fdb_ingress(void)
+{
+	struct net_eth_addr mac;
+	int ret;
+
+	recv_data_dst(0, &mac);
+
+	/* Moves the entry test_recv_with_bridge_fdb() put on fake_iface[1] */
+	ret = eth_bridge_fdb_add(&mac, fake_iface[0]);
+	zassert_equal(ret, 0, "Cannot add FDB entry (%d)", ret);
+
+	_recv_data(fake_iface[0]);
+
+	/* give time to the processing threads to run */
+	k_sleep(K_MSEC(100));
+
+	for (int i = 0; i < 3; i++) {
+		zexpect_is_null(eth_fake_data[i].sent_pkt, "Frame sent on fake_iface[%d]", i);
+
+		if (eth_fake_data[i].sent_pkt != NULL) {
+			net_pkt_unref(eth_fake_data[i].sent_pkt);
+			eth_fake_data[i].sent_pkt = NULL;
+		}
+	}
+
+	ret = eth_bridge_fdb_del(&mac, fake_iface[0]);
+	zexpect_equal(ret, 0, "Cannot delete FDB entry (%d)", ret);
+
+	check_free_packet_count();
+}
+
+/* Deleting the FDB entries of a port deletes all of them and only those */
+static void test_fdb_del_iface(void)
+{
+	struct net_eth_addr mac = {.addr = {0x02, 0x00, 0x5e, 0x10, 0x00, 0x00}};
+	int ret;
+
+	for (int i = 0; i < 3; i++) {
+		mac.addr[5] = i;
+		ret = eth_bridge_fdb_add(&mac, fake_iface[1]);
+		zassert_equal(ret, 0, "Cannot add FDB entry %d (%d)", i, ret);
+	}
+
+	mac.addr[5] = 0x10;
+	ret = eth_bridge_fdb_add(&mac, fake_iface[2]);
+	zassert_equal(ret, 0, "Cannot add FDB entry (%d)", ret);
+
+	zexpect_equal(fdb_count(fake_iface[1]), 3, "Unexpected entries on fake_iface[1]");
+
+	ret = eth_bridge_fdb_del_iface(fake_iface[1]);
+	zexpect_equal(ret, 0, "Cannot delete entries of fake_iface[1] (%d)", ret);
+
+	zexpect_equal(fdb_count(fake_iface[1]), 0, "Entries left on fake_iface[1]");
+	zexpect_equal(fdb_count(fake_iface[2]), 1, "Entry of fake_iface[2] deleted");
+
+	ret = eth_bridge_fdb_del_iface(fake_iface[2]);
+	zexpect_equal(ret, 0, "Cannot delete entries of fake_iface[2] (%d)", ret);
+	zexpect_equal(fdb_count(fake_iface[2]), 0, "Entries left on fake_iface[2]");
+}
+
+/* A NULL interface deletes from every interface, as the API documents */
+static void test_fdb_del_any_iface(void)
+{
+	/* A multicast address can have an entry on several ports */
+	struct net_eth_addr mcast = {.addr = {0x01, 0x00, 0x5e, 0x10, 0x00, 0x01}};
+	struct net_eth_addr ucast = {.addr = {0x02, 0x00, 0x5e, 0x10, 0x00, 0x20}};
+	int ret;
+
+	ret = eth_bridge_fdb_add(&mcast, fake_iface[0]);
+	zassert_equal(ret, 0, "Cannot add FDB entry (%d)", ret);
+	ret = eth_bridge_fdb_add(&mcast, fake_iface[1]);
+	zassert_equal(ret, 0, "Cannot add FDB entry (%d)", ret);
+	ret = eth_bridge_fdb_add(&ucast, fake_iface[2]);
+	zassert_equal(ret, 0, "Cannot add FDB entry (%d)", ret);
+
+	ret = eth_bridge_fdb_del(&mcast, NULL);
+	zexpect_equal(ret, 0, "Cannot delete address from any interface (%d)", ret);
+	zexpect_equal(fdb_count(fake_iface[0]), 0, "Entry left on fake_iface[0]");
+	zexpect_equal(fdb_count(fake_iface[1]), 0, "Entry left on fake_iface[1]");
+	zexpect_equal(fdb_count(fake_iface[2]), 1, "Other address deleted");
+
+	ret = eth_bridge_fdb_del(&mcast, NULL);
+	zexpect_equal(ret, -ENOENT, "Deleted a missing address (%d)", ret);
+
+	ret = eth_bridge_fdb_add(&mcast, fake_iface[0]);
+	zassert_equal(ret, 0, "Cannot add FDB entry (%d)", ret);
+
+	ret = eth_bridge_fdb_del_iface(NULL);
+	zexpect_equal(ret, 0, "Cannot delete entries of every interface (%d)", ret);
+
+	for (int i = 0; i < 3; i++) {
+		zexpect_equal(fdb_count(fake_iface[i]), 0, "Entries left on fake_iface[%d]", i);
+	}
+}
+
 static void test_recv_after_bridging(void)
 {
 	int ret;
@@ -499,9 +999,19 @@ ZTEST(net_eth_bridge, test_net_eth_bridge)
 	test_recv_before_bridging();
 	DBG("With bridging\n");
 	test_setup_bridge();
+	test_bridge_link_addr();
+#if defined(CONFIG_NET_IPV4)
+	test_local_ipv4_tx_unicast();
+	test_local_ipv4_tx_unicast_arp_miss();
+	test_local_unicast_delivered_to_bridge();
+#endif
 	test_recv_with_bridge();
 	test_recv_no_forwarding_port();
+	test_recv_reserved_addresses();
 	test_recv_with_bridge_fdb();
+	test_recv_with_bridge_fdb_ingress();
+	test_fdb_del_iface();
+	test_fdb_del_any_iface();
 	DBG("After bridging\n");
 	test_recv_after_bridging();
 }

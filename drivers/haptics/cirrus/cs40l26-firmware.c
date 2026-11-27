@@ -1,12 +1,12 @@
 /*
- * Copyright (c) 2026, Cirrus Logic, Inc.
+ * Copyright (c) 2026 Cirrus Logic, Inc.
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
 /**
  * @file
- * @brief Firmware for Cirrus Logic CS40L26/27 Haptic Devices
+ * @brief Firmware functions for Cirrus Logic CS40L26/27 haptic drivers
  */
 
 #include "cs40l26.h"
@@ -29,8 +29,8 @@ static const uint16_t *const cs40l26_firmware[CS40L26_NUM_DEVICES] = {
 #if CONFIG_HAPTICS_CS40L26_A1
 	(uint16_t[]){
 		[CS40L26_REG_PM_TIMER_TIMEOUT_TICKS] = 0x0350U,
-		[CS40L26_REG_PM_ACTIVE_TIMEOUT] = 0x0360U,
-		[CS40L26_REG_PM_STDBY_TIMEOUT] = 0x0378U,
+		[CS40L26_REG_PM_STDBY_TIMEOUT] = 0x0360U,
+		[CS40L26_REG_PM_ACTIVE_TIMEOUT] = 0x0368U,
 		[CS40L26_REG_PM_POWER_ON_SEQUENCE] = 0x03E8U,
 		[CS40L26_REG_DYNAMIC_F0_ENABLED] = 0x0F48U,
 		[CS40L26_REG_HALO_STATE] = 0x0FA8U,
@@ -55,8 +55,8 @@ static const uint16_t *const cs40l26_firmware[CS40L26_NUM_DEVICES] = {
 #if CONFIG_HAPTICS_CS40L27_B2
 	(uint16_t[]){
 		[CS40L26_REG_PM_TIMER_TIMEOUT_TICKS] = 0x1F78U,
-		[CS40L26_REG_PM_ACTIVE_TIMEOUT] = 0x1F88U,
-		[CS40L26_REG_PM_STDBY_TIMEOUT] = 0x1FA0U,
+		[CS40L26_REG_PM_STDBY_TIMEOUT] = 0x1F88U,
+		[CS40L26_REG_PM_ACTIVE_TIMEOUT] = 0x1F90U,
 		[CS40L26_REG_PM_POWER_ON_SEQUENCE] = 0x2018U,
 		[CS40L26_REG_VIBEGEN_F0_OTP_STORED] = 0x2F30U,
 		[CS40L26_REG_VIBEGEN_REDC_OTP_STORED] = 0x2F34U,
@@ -123,6 +123,26 @@ int cs40l26_firmware_read(const struct device *const dev, const uint32_t firmwar
 	return cs40lxx_read(&config->io_bus, firmware_address, rx);
 }
 
+int cs40l26_firmware_read_offset(const struct device *const dev, const uint32_t firmware_control,
+				 uint32_t *const rx, const off_t offset)
+{
+	const struct cs40l26_config *const config = dev->config;
+	uint32_t firmware_address;
+	int ret;
+
+	ret = cs40l26_get_firmware_address(dev, firmware_control, &firmware_address);
+	if (ret < 0) {
+		return ret;
+	}
+
+	if (!IN_RANGE((int64_t)offset, -(int64_t)firmware_address,
+		      (int64_t)(UINT32_MAX - firmware_address))) {
+		return -EINVAL;
+	}
+
+	return cs40lxx_read(&config->io_bus, firmware_address + offset, rx);
+}
+
 int cs40l26_firmware_burst_write(const struct device *const dev, const uint32_t firmware_control,
 				 uint32_t *const tx, const uint32_t len)
 {
@@ -181,4 +201,33 @@ int cs40l26_firmware_multi_write(const struct device *const dev,
 	}
 
 	return 0;
+}
+
+int cs40l26_firmware_poll(const struct device *const dev, const uint32_t firmware_control,
+			  const uint32_t val, const k_timeout_t timeout)
+{
+	const struct cs40l26_config *const config = dev->config;
+	const k_timepoint_t end = sys_timepoint_calc(timeout);
+	uint32_t firmware_address, reg_val;
+	int ret;
+
+	ret = cs40l26_get_firmware_address(dev, firmware_control, &firmware_address);
+	if (ret < 0) {
+		return ret;
+	}
+
+	do {
+		ret = cs40lxx_read(&config->io_bus, firmware_address, &reg_val);
+		if (ret < 0) {
+			return ret;
+		}
+
+		if (reg_val == val) {
+			return 0;
+		}
+
+		(void)k_msleep(1);
+	} while (!sys_timepoint_expired(end));
+
+	return -ETIMEDOUT;
 }

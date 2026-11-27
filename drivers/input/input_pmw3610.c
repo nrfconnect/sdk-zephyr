@@ -218,8 +218,8 @@ static void pmw3610_motion_work_handler(struct k_work *work)
 	x = sign_extend(x, PMW3610_DATA_SIZE_BITS - 1);
 	y = sign_extend(y, PMW3610_DATA_SIZE_BITS - 1);
 
-	input_report_rel(data->dev, cfg->axis_x, x, false, K_FOREVER);
-	input_report_rel(data->dev, cfg->axis_y, y, true, K_FOREVER);
+	input_report_rel(dev, cfg->axis_x, x, false, K_FOREVER);
+	input_report_rel(dev, cfg->axis_y, y, true, K_FOREVER);
 
 	if (cfg->smart_mode) {
 		uint16_t shutter_val = sys_get_be16(&burst_data[BURST_SHUTTER_HI]);
@@ -561,7 +561,7 @@ static int pmw3610_pm_action(const struct device *dev,
 }
 #endif
 
-#define PMW3610_SPI_MODE (SPI_OP_MODE_MASTER | SPI_WORD_SET(8) | \
+#define PMW3610_SPI_MODE (SPI_OP_MODE_CONTROLLER | SPI_WORD_SET(8) | \
 			  SPI_MODE_CPOL | SPI_MODE_CPHA | SPI_TRANSFER_MSB)
 
 #define PMW3610_INIT(n)								\

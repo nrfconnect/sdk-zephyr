@@ -24,8 +24,9 @@ There is a limited set of such conditions:
 
 - a semaphore becomes available
 - a kernel FIFO contains data ready to be retrieved
+- a kernel LIFO contains data ready to be retrieved
 - a kernel message queue contains data ready to be retrieved
-- a kernel pipe contains data ready to be retrieved
+- a kernel pipe contains data ready to be retrieved, or has been closed
 - a poll signal is raised
 
 A thread that wants to wait on multiple conditions must define an array of
@@ -37,13 +38,13 @@ Each event must specify which **type** of condition must be satisfied so that
 its state is changed to signal the requested condition has been met.
 
 Each event must specify what **kernel object** it wants the condition to be
-satisfied.
+satisfied for.
 
 Each event must specify which **mode** of operation is used when the condition
 is satisfied.
 
 Each event can optionally specify a **tag** to group multiple events together,
-to the user's discretion.
+at the user's discretion.
 
 Apart from the kernel objects, there is also a **poll signal** pseudo-object
 type that be directly signaled.
@@ -71,7 +72,7 @@ Using k_poll()
 
 The main API is :c:func:`k_poll`, which operates on an array of poll events
 of type :c:struct:`k_poll_event`. Each entry in the array represents one
-event a call to :c:func:`k_poll` will wait for its condition to be
+event with a condition, which a call to :c:func:`k_poll` will wait for to be
 fulfilled.
 
 Poll events can be initialized using either the runtime initializers
@@ -169,7 +170,11 @@ In case of success, :c:func:`k_poll` returns 0. If it times out, it returns
                 // handle data
             } else if (events[3].state == K_POLL_STATE_PIPE_DATA_AVAILABLE) {
                 bytes_read = k_pipe_read(events[3].pipe, buf, bytes_to_read, K_NO_WAIT);
-                // handle data
+                if (bytes_read == -EPIPE) {
+                    // pipe is closed
+                } else {
+                    // handle data
+                }
             }
         } else {
             // handle timeout
@@ -198,7 +203,12 @@ to :c:macro:`K_POLL_STATE_NOT_READY` by the user.
             }
             if (events[3].state == K_POLL_STATE_PIPE_DATA_AVAILABLE) {
                 bytes_read = k_pipe_read(events[3].pipe, buf, bytes_to_read, K_NO_WAIT);
-                // handle data
+                if (bytes_read == -EPIPE) {
+                    // closed pipe stays ready; stop polling it
+                    events[3].type = K_POLL_TYPE_IGNORE;
+                } else {
+                    // handle data
+                }
             }
             events[0].state = K_POLL_STATE_NOT_READY;
             events[1].state = K_POLL_STATE_NOT_READY;

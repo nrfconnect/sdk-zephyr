@@ -167,6 +167,20 @@ const struct xtensa_mmu_range xtensa_soc_mmu_ranges[] = {
 
 	/* Map IMR */
 	MEM_MAP_CONST_REGION(
+		IMR_ROM_EXT_CODE_BASE,
+		IMR_ROM_EXT_CODE_BASE + IMR_ROM_EXT_CODE_SIZE,
+		XTENSA_MMU_PERM_X,
+		"IMR_rom_ext_code"
+	)
+
+	MEM_MAP_CONST_REGION(
+		IMR_ROM_EXT_DATABSS_BASE,
+		IMR_ROM_EXT_DATABSS_BASE + IMR_ROM_EXT_DATABSS_SIZE,
+		XTENSA_MMU_PERM_W,
+		"IMR_rom_ext_data_bss"
+	)
+
+	MEM_MAP_CONST_REGION(
 		IMR_BOOT_LDR_MANIFEST_BASE - IMR_BOOT_LDR_MANIFEST_SIZE,
 		IMR_BOOT_LDR_MANIFEST_BASE,
 		XTENSA_MMU_PERM_W | XTENSA_MMU_CACHED_WB,
@@ -212,7 +226,7 @@ const struct xtensa_mmu_range xtensa_soc_mmu_ranges[] = {
 	MEM_MAP_SYM_REGION(
 		__cold_start,
 		__cold_end,
-		XTENSA_MMU_PERM_X,
+		XTENSA_MMU_PERM_X | XTENSA_MMU_MAP_SHARED,
 		"imr cold"
 	)
 

@@ -133,11 +133,11 @@ int net_ipv4_finalize(struct net_pkt *pkt, uint8_t next_header_proto)
 
 	ipv4_hdr->len   = net_htons(net_pkt_get_len(pkt));
 	ipv4_hdr->proto = next_header_proto;
+	ipv4_hdr->chksum = 0U;
 
 	if (net_if_need_calc_tx_checksum(net_pkt_iface(pkt), NET_IF_CHECKSUM_IPV4_HEADER)) {
 		uint16_t chksum = 0;
 
-		ipv4_hdr->chksum = 0;
 		ret = net_calc_chksum_ipv4(pkt, &chksum);
 		if (ret < 0) {
 			return ret;
@@ -231,6 +231,7 @@ int net_ipv4_parse_hdr_options(struct net_pkt *pkt,
 			break;
 		case NET_IPV4_OPTS_RR:
 		case NET_IPV4_OPTS_TS:
+		case NET_IPV4_OPTS_RA:
 			if (net_pkt_read(pkt, opt_data, opt_len)) {
 				return -EINVAL;
 			}
@@ -284,9 +285,11 @@ static enum net_verdict ipv4_route_packet(struct net_pkt *pkt,
 
 		/* Re-sending a packet received for another host is forwarding
 		 * even when it leaves through the interface it arrived on. The
-		 * flag makes the send path decrement the TTL.
+		 * flag makes the send path decrement the TTL. The transport
+		 * layer checksum is the sender's.
 		 */
 		net_pkt_set_forwarding(pkt, true);
+		net_pkt_set_chksum_done(pkt, true);
 
 		ret = net_route_ipv4_packet(pkt, nexthop);
 		if (ret < 0) {
@@ -580,7 +583,13 @@ drop:
 
 enum net_verdict net_ipv4_prepare_for_send(struct net_pkt *pkt)
 {
-	if (IS_ENABLED(CONFIG_NET_IPV4_PMTU)) {
+	/* ARP packets share the AF_INET family but are not IPv4 datagrams, so
+	 * their L2 protocol type is used to skip them here. Otherwise the code
+	 * below would read the ARP body as an IPv4 header and create bogus PMTU
+	 * cache entries.
+	 */
+	if (IS_ENABLED(CONFIG_NET_IPV4_PMTU) &&
+	    net_pkt_ll_proto_type(pkt) == NET_ETH_PTYPE_IP) {
 		struct net_pmtu_entry *entry;
 		struct net_sockaddr_in dst = {
 			.sin_family = NET_AF_INET,
@@ -612,10 +621,6 @@ void net_ipv4_init(void)
 {
 	if (IS_ENABLED(CONFIG_NET_IPV4_FRAGMENT)) {
 		net_ipv4_setup_fragment_buffers();
-	}
-
-	if (IS_ENABLED(CONFIG_NET_IPV4_ACD)) {
-		net_ipv4_acd_init();
 	}
 
 	if (IS_ENABLED(CONFIG_NET_IPV4_NAT)) {

@@ -31,8 +31,6 @@
 #include <zephyr/toolchain.h>
 #include <stddef.h>
 #include <zephyr/types.h>
-#include <zephyr/arch/cpu.h>
-#include <zephyr/irq_offload.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -46,6 +44,23 @@ struct k_mem_domain;
 typedef struct z_thread_stack_element k_thread_stack_t;
 
 typedef void (*k_thread_entry_t)(void *p1, void *p2, void *p3);
+
+#ifdef __cplusplus
+}
+#endif
+
+/*
+ * <zephyr/arch/cpu.h> pulls in the architecture headers, which in turn include
+ * <zephyr/kernel/thread.h>. That header uses the declarations above, so these
+ * includes have to come after them: otherwise a translation unit that includes
+ * this header before any kernel header fails to compile.
+ */
+#include <zephyr/arch/cpu.h>
+#include <zephyr/irq_offload.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /**
  * @defgroup arch-timing Architecture timing APIs
@@ -412,6 +427,38 @@ void arch_irq_enable(unsigned int irq);
  */
 int arch_irq_is_enabled(unsigned int irq);
 
+#if defined(CONFIG_ARCH_HAS_IRQ_PENDING_OPS) || defined(__DOXYGEN__)
+/**
+ * Clear the pending state of the specified interrupt line
+ *
+ * @see k_irq_clear_pending()
+ */
+void arch_irq_clear_pending(unsigned int irq);
+
+/**
+ * Set the pending state of the specified interrupt line
+ *
+ * @see k_irq_set_pending()
+ */
+void arch_irq_set_pending(unsigned int irq);
+
+/**
+ * Test if the specified interrupt line is pending
+ *
+ * @see k_irq_is_pending()
+ */
+bool arch_irq_is_pending(unsigned int irq);
+#endif
+
+#if defined(CONFIG_ARCH_HAS_IRQ_GET_ACTIVE) || defined(__DOXYGEN__)
+/**
+ * Report the interrupt line being serviced on the current CPU
+ *
+ * @see k_irq_get_active()
+ */
+unsigned int arch_irq_get_active(void);
+#endif
+
 /**
  * Arch-specific hook to install a dynamic interrupt.
  *
@@ -719,6 +766,38 @@ static inline unsigned int arch_num_cpus(void);
 
 
 /**
+ * @addtogroup arch-mmu
+ * @{
+ */
+
+/**
+ * Get the physical address mapped at a virtual address.
+ *
+ * The query is answered from the caller's currently active page tables.
+ * Only mappings that are active in the caller's context are reliably
+ * reported: a virtual address whose mapping is not part of that context
+ * (for example memory belonging to a memory domain that is not currently
+ * active, or per-context data pages such as the scratch page) may be
+ * reported as unmapped or resolve differently. Calling this function on
+ * such addresses is undefined behavior.
+ *
+ * From an implementation standpoint, only the currently installed page
+ * tables need to be consulted, without iterating over other page tables
+ * in the system: anything legitimately queried through this API maps
+ * identically in all of them.
+ *
+ * @param virt Page-aligned virtual address
+ * @param[out] phys Mapped physical address (can be NULL if only checking
+ *                  if virtual address is mapped)
+ *
+ * @retval 0 if mapping is found and valid
+ * @retval -EFAULT if virtual address is not mapped
+ */
+int arch_page_phys_get(void *virt, uintptr_t *phys);
+
+/** @} */
+
+/**
  * @defgroup arch-userspace Architecture-specific userspace APIs
  * @ingroup arch-interface
  * @{
@@ -917,6 +996,9 @@ int arch_mem_domain_deinit(struct k_mem_domain *domain);
  * The thread->mem_domain_info.mem_domain pointer will be set to the domain to
  * be added to before this is called. Implementations may assume that the
  * thread is not already a member of this domain.
+ *
+ * On failure, the thread must keep the memory configuration of the domain it
+ * was in, which the kernel then restores it to.
  *
  * @param thread Thread which needs to be configured.
  *

@@ -4,7 +4,7 @@
  */
 /dts-v1/;
 
-#include <espressif/esp32s3/esp32s3_wroom_n16r8.dtsi>
+#include <espressif/esp32s3/esp32s3.dtsi>
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 #include <zephyr/dt-bindings/display/panel.h>
 #include <zephyr/dt-bindings/led/led.h>
@@ -13,8 +13,8 @@
 #include "uedx24320028e_wb_a-pinctrl.dtsi"
 
 / {
-	model = "VIEWE UEDX24320028E-WB-A PROCPU";
 	compatible = "viewe,uedx24320028e-wb-a";
+	model = "VIEWE UEDX24320028E-WB-A PROCPU";
 
 	aliases {
 		i2c-0 = &i2c0;
@@ -35,7 +35,6 @@
 		zephyr,bt-hci = &esp32_bt_hci;
 		zephyr,display = &gc9307n;
 		zephyr,touch = &chsc6x;
-		zephyr,sdhc = &sdhc0;
 	};
 
 	buzzer: buzzer {
@@ -62,17 +61,16 @@
 
 	mipi_dbi {
 		compatible = "zephyr,mipi-dbi-spi";
-		status = "okay";
 		spi-dev = <&spi2>;
 		dc-gpios = <&gpio1 9 GPIO_ACTIVE_HIGH>;   /* IO41 */
 		write-only;
 		#address-cells = <1>;
 		#size-cells = <0>;
+		status = "okay";
 
 		gc9307n: gc9307n@0 {
 			compatible = "galaxycore,gc9x01x";
 			reg = <0>;
-			status = "okay";
 			mipi-max-frequency = <80000000>;
 			pixel-format = <PANEL_PIXEL_FORMAT_RGB_565>;
 			width = <240>;
@@ -85,8 +83,22 @@
 			gamma2 = [45 92 93 2b 31 6f];
 			gamma3 = [49 0b 09 08 06 2e];
 			gamma4 = [45 92 93 2b 31 6f];
+			status = "okay";
 		};
 	};
+};
+
+&flash0 {
+	reg = <0x0 DT_SIZE_M(16)>;
+	ranges = <0x0 0x0 DT_SIZE_M(16)>;
+};
+
+&psram0 {
+	size = <DT_SIZE_M(8)>;
+};
+
+&dma {
+	status = "okay";
 };
 
 &usb_serial {
@@ -94,10 +106,10 @@
 };
 
 &uart0 {
-	status = "okay";
 	current-speed = <115200>;
 	pinctrl-0 = <&uart0_default>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &gpio0 {
@@ -125,10 +137,10 @@
 };
 
 &i2c0 {
-	status = "okay";
 	clock-frequency = <I2C_BITRATE_FAST>;
 	pinctrl-0 = <&i2c0_default>;
 	pinctrl-names = "default";
+	status = "okay";
 
 	chsc6x: chsc6x@2e {
 		compatible = "chipsemi,chsc6540";
@@ -142,19 +154,24 @@
 &spi2 {
 	#address-cells = <1>;
 	#size-cells = <0>;
-	status = "okay";
 	pinctrl-0 = <&spim2_default>;
 	pinctrl-names = "default";
 	cs-gpios = <&gpio1 10 GPIO_ACTIVE_LOW>; /* IO42 */
+
+	dma-enabled;
+	dma-host = <0>;
+	dmas = <&dma 0>, <&dma 1>;
+	dma-names = "rx", "tx";
+	status = "okay";
 };
 
 &spi3 {
 	#address-cells = <1>;
 	#size-cells = <0>;
-	status = "okay";
 	line-idle-low;
 	pinctrl-0 = <&spim3_ws2812_led>;
 	pinctrl-names = "default";
+	status = "okay";
 
 	rgb_led: ws2812@0 {
 		compatible = "worldsemi,ws2812-spi";
@@ -171,11 +188,11 @@
 
 &sdhc {
 	sdhc0: sdhc@0 {
-		status = "okay";
 		pinctrl-0 = <&sdhc0_default>;
 		pinctrl-names = "default";
 		max-bus-freq = <52000000>;
 		bus-width = <4>;
+		status = "okay";
 
 		mmc {
 			compatible = "zephyr,sdmmc-disk";

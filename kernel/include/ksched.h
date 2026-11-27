@@ -60,11 +60,64 @@ int z_pend_curr(struct k_spinlock *lock, k_spinlock_key_t key,
 void z_pend_thread(struct k_thread *thread, _wait_q_t *wait_q,
 		   k_timeout_t timeout);
 void z_reschedule(struct k_spinlock *lock, k_spinlock_key_t key);
+void z_reschedule_locked(k_spinlock_key_t key);
 void z_reschedule_irqlock(uint32_t key);
 int z_unpend_all(_wait_q_t *wait_q);
 bool z_thread_prio_set(struct k_thread *thread, int prio);
-void *z_get_next_switch_handle(void *interrupted);
 void z_thread_suspend_current(struct k_thread *thread);
+
+/**
+ * @brief Determine next thread to execute upon completion of an interrupt
+ *
+ * Thread preemption is performed by context switching after the completion
+ * of a non-recursed interrupt. This function determines which thread to
+ * switch to if any. This function accepts as @p interrupted either:
+ *
+ * - The handle for the interrupted thread in which case the thread's context
+ *   must already be fully saved and ready to be picked up by a different CPU.
+ *
+ * - NULL if more work is required to fully save the thread's state after
+ *   it is known that a new thread is to be scheduled. It is up to the caller
+ *   to store the handle resulting from the thread that is being switched out
+ *   in that thread's "switch_handle" field after its
+ *   context has fully been saved, following the same requirements as with
+ *   the @ref arch_switch() function.
+ *
+ * If a new thread needs to be scheduled then its handle is returned.
+ * Otherwise the same value provided as @p interrupted is returned back.
+ * Those handles are the same opaque types used by the @ref arch_switch()
+ * function.
+ *
+ * The uniprocessor implementation is in kernel/sched.c, the SMP one in
+ * kernel/smp/sched_smp.c.
+ *
+ * @warning
+ * The _current value may have changed after this call and not refer
+ * to the interrupted thread anymore. It might be necessary to make a local
+ * copy before calling this function.
+ *
+ * @param interrupted Handle for the thread that was interrupted or NULL.
+ * @return Handle for the next thread to execute, or @p interrupted when
+ *         no new thread is to be scheduled.
+ */
+void *z_get_next_switch_handle(void *interrupted);
+
+/* Just a wrapper around z_current_thread_set(xxx) with tracing.
+ *
+ * _current is not guaranteed to report @a new_thread until the switch to it
+ * has happened: see z_current_thread_set(). Code between this call and the
+ * switch must use @a new_thread directly.
+ */
+static inline void z_sched_set_current(struct k_thread *new_thread)
+{
+	/* If the new thread is the same as the current thread, we
+	 * don't need to do anything.
+	 */
+	if (IS_ENABLED(CONFIG_INSTRUMENT_THREAD_SWITCHING) && new_thread != _current) {
+		z_thread_mark_switched_out();
+	}
+	z_current_thread_set(new_thread);
+}
 
 /* Wrapper around z_get_next_switch_handle() for the benefit of
  * non-SMP platforms that always pass a NULL interrupted handle.
@@ -88,20 +141,19 @@ static ALWAYS_INLINE void *z_sched_next_handle(struct k_thread *curr)
 
 void z_sched_start(struct k_thread *thread);
 void z_ready_thread(struct k_thread *thread);
-struct k_thread *z_swap_next_thread(void);
 void move_current_to_end_of_prio_q(void);
 
 /*
  * Internal scheduler functions exposed for use by thread lifecycle code
- * (thread.c). These operate under _sched_spinlock and must not be called
- * without holding it.
+ * (thread.c). These operate under the scheduler's spinlock and must not be
+ * called without holding it.
  */
 
 /**
  * @brief Halt a thread, suspending or terminating it.
  *
  * Shared implementation for k_thread_suspend() and k_thread_abort(). The
- * caller must hold _sched_spinlock; this function releases it before
+ * caller must hold the scheduler's spinlock; this function releases it before
  * returning (possibly after a context switch).
  *
  * @param thread  Thread to halt.
@@ -113,8 +165,8 @@ void z_thread_halt(struct k_thread *thread, k_spinlock_key_t key, bool terminate
 /**
  * @brief Ready a thread while the scheduler spinlock is already held.
  *
- * Equivalent to the internal ready_thread() helper. Callers must hold
- * _sched_spinlock.
+ * Equivalent to the internal ready_thread() helper. Callers must hold the
+ * scheduler's spinlock.
  *
  * @param thread Thread to make ready.
  */
@@ -124,7 +176,7 @@ void z_sched_ready_locked(struct k_thread *thread);
  * @brief Add a thread to a wait queue while the scheduler spinlock is held.
  *
  * Moves the thread out of the run queue and onto the specified wait queue.
- * Callers must hold _sched_spinlock.
+ * Callers must hold the scheduler's spinlock.
  *
  * @param thread  Thread to pend.
  * @param wait_q  Wait queue to add the thread to (may be NULL).
@@ -132,10 +184,34 @@ void z_sched_ready_locked(struct k_thread *thread);
 void z_sched_add_to_waitq_locked(struct k_thread *thread, _wait_q_t *wait_q);
 
 /**
+ * @brief Dequeue a thread and move it into a halted state.
+ *
+ * The thread is known not to be running anywhere. Callers must hold the
+ * scheduler's spinlock; a terminating halt may release and reacquire it
+ * through @p key while waiting for an in-flight timeout handler.
+ *
+ * @param thread    Thread to halt.
+ * @param new_state New thread state (_THREAD_DEAD or _THREAD_SUSPENDED).
+ * @param key       Pointer to the held spinlock key, or NULL when called
+ *                  from the scheduler on a running thread that has no
+ *                  timeout.
+ */
+void z_sched_halt_thread_locked(struct k_thread *thread, uint8_t new_state, k_spinlock_key_t *key);
+
+/**
+ * @brief Ready every thread on a wait queue with a zero return value.
+ *
+ * Callers must hold the scheduler's spinlock.
+ *
+ * @param wait_q Wait queue to empty.
+ */
+void z_sched_unpend_all_locked(_wait_q_t *wait_q);
+
+/**
  * @brief Remove a thread from the run queue (scheduler spinlock must be held).
  *
  * Called by sleep.c to unready the current thread before arming its wakeup
- * timeout.  Callers must already hold _sched_spinlock.
+ * timeout.  Callers must already hold the scheduler's spinlock.
  *
  * @param thread Thread to remove from the run queue.
  */
@@ -223,7 +299,7 @@ static ALWAYS_INLINE _wait_q_t *pended_on_thread(struct k_thread *thread)
 }
 
 
-static inline void unpend_thread_no_timeout(struct k_thread *thread)
+static ALWAYS_INLINE void unpend_thread_no_timeout(struct k_thread *thread)
 {
 	_priq_wait_remove(&pended_on_thread(thread)->waitq, thread);
 	z_mark_thread_as_not_pending(thread);
@@ -235,10 +311,10 @@ static inline void unpend_thread_no_timeout(struct k_thread *thread)
  * timeout it had pending. Returns the thread, or NULL if the wait_q was
  * empty.
  *
- * Caller MUST hold _sched_spinlock and MUST complete the wake (set return
- * value, ready the thread) under the same lock acquisition before releasing
- * it. Otherwise a racing in-flight timeout handler can ready the thread
- * before the caller's wake state is in place, exposing the woken thread
+ * Caller MUST hold the scheduler's spinlock and MUST complete the wake (set
+ * return value, ready the thread) under the same lock acquisition before
+ * releasing it. Otherwise a racing in-flight timeout handler can ready the
+ * thread before the caller's wake state is in place, exposing the woken thread
  * to a stale swap_retval. The pre-1b8c7a3 dticks-cancel check used to
  * close this window; doing all the wake work atomically under the sched
  * lock is now the way.
@@ -269,8 +345,8 @@ static ALWAYS_INLINE struct k_thread *z_unpend_first_thread_locked(_wait_q_t *wa
  * Given a wait_q, wake up the highest priority thread on the queue. If the
  * queue was empty just return false.
  *
- * Otherwise, do the following, in order,  holding _sched_spinlock the entire
- * time so that the thread state is guaranteed not to change:
+ * Otherwise, do the following, in order,  holding the scheduler's spinlock the
+ *  entire time so that the thread state is guaranteed not to change:
  * - Set the thread's swap return values to swap_retval and swap_data
  * - un-pend and ready the thread, but do not invoke the scheduler.
  *

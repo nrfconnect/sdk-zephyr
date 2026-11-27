@@ -25,6 +25,10 @@ The functions listed below are used to get devicetree information into Kconfig.
 The ``*_int`` version of each function returns the value as a decimal integer,
 while the ``*_hex`` version returns a hexadecimal value starting with ``0x``.
 
+``$(dt_node_int_prop_int)`` and ``$(dt_node_int_prop_hex)`` accept any devicetree
+property type whose value is a single integer, i.e. ``int`` and
+``var-uint64``.
+
 .. code-block:: none
 
    $(dt_alias_enabled,<node alias>)
@@ -39,6 +43,7 @@ while the ``*_hex`` version returns a hexadecimal value starting with ``0x``.
    $(dt_chosen_reg_addr_int,<property in /chosen>[,<index>,<unit>])
    $(dt_chosen_reg_size_hex,<property in /chosen>[,<index>,<unit>])
    $(dt_chosen_reg_size_int,<property in /chosen>[,<index>,<unit>])
+   $(dt_class_enabled,<class name>)
    $(dt_compat_all_has_prop,<compatible string>,<prop>[,<value>])
    $(dt_compat_any_has_prop,<compatible string>,<prop>[,<value>])
    $(dt_compat_any_on_bus,<compatible string>,<prop>)
@@ -131,6 +136,10 @@ name is specified.
 .. code-block:: none
 
    $(shields_list_contains,<shield name>)
+
+Shield names cannot contain whitespace. A space after the comma, as in
+``$(shields_list_contains, foo)``, is stripped and a warning is printed
+so the lookup still matches ``foo``.
 
 
 Example Usage

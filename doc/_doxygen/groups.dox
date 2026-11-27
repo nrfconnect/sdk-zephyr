@@ -1,3 +1,7 @@
+/*
+ * SPDX-FileCopyrightText: Copyright The Zephyr Project Contributors
+ * SPDX-License-Identifier: Apache-2.0
+ */
 /**
 
 @defgroup internal_api Internal and System API
@@ -15,6 +19,12 @@
 
 @defgroup os_services Operating System Services
 @brief Operating System Services
+@{
+@}
+
+@defgroup multimedia Multimedia
+@brief Hardware and software multimedia streaming support.
+@ingroup os_services
 @{
 @}
 
@@ -67,6 +77,12 @@
 @{
 @}
 
+@defgroup sensor_interface_ext_espressif Espressif Systems
+@ingroup sensor_interface_ext
+@brief Device-specific extensions for sensors from Espressif Systems.
+@{
+@}
+
 @defgroup sensor_interface_ext_fintek Fintek
 @ingroup sensor_interface_ext
 @brief Device-specific extensions for sensors from Fintek.
@@ -82,6 +98,12 @@
 @defgroup sensor_interface_ext_gss Gas Sensing Solutions
 @ingroup sensor_interface_ext
 @brief Device-specific extensions for sensors from Gas Sensing Solutions.
+@{
+@}
+
+@defgroup sensor_interface_ext_hamamatsu Hamamatsu Photonics
+@ingroup sensor_interface_ext
+@brief Device-specific extensions for sensors from Hamamatsu Photonics.
 @{
 @}
 
@@ -154,6 +176,12 @@
 @defgroup sensor_interface_ext_nxp NXP
 @ingroup sensor_interface_ext
 @brief Device-specific extensions for sensors from NXP.
+@{
+@}
+
+@defgroup sensor_interface_ext_peacefair Peacefair
+@ingroup sensor_interface_ext
+@brief Device-specific extensions for sensors from Peacefair.
 @{
 @}
 
@@ -235,6 +263,12 @@
 @{
 @}
 
+@defgroup sensor_interface_ext_zephyr Zephyr
+@ingroup sensor_interface_ext
+@brief Device-specific extensions for sensors from Zephyr.
+@{
+@}
+
 @defgroup misc_interfaces Miscellaneous Devices
 @ingroup io_interfaces
 @brief Interfaces for hardware peripherals that do not have a dedicated driver class.
@@ -286,6 +320,13 @@
 @brief Transport layers for MCUmgr: SMP, UART, etc.
 @defgroup mcumgr_transport Transport layers
 @ingroup mcumgr
+@{
+@}
+
+@brief Management Component Transport Protocol (MCTP)
+@defgroup mctp MCTP
+@ingroup device_mgmt
+@details Bus bindings connecting Zephyr transports to the libmctp protocol stack.
 @{
 @}
 

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
-cmake_minimum_required(VERSION 3.20.0)
+cmake_minimum_required(VERSION 3.28.0)
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(interrupt)
 
@@ -18,10 +18,6 @@ target_sources(app PRIVATE
 
 if(CONFIG_ARM64)
   add_compile_options(-mgeneral-regs-only)
-endif()
-
-if(CONFIG_RISCV_CORE_NORDIC_VPR)
-  zephyr_compile_options(-msmall-data-limit=0)
 endif()
 
 target_sources_ifdef(CONFIG_DYNAMIC_INTERRUPTS app PRIVATE src/dynamic_isr.c)

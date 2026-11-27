@@ -6,7 +6,7 @@
 #include <zephyr/net/ethernet.h>
 #include <zephyr/net/phy.h>
 #include <zephyr/arch/cpu.h>
-#include <zephyr/sys_clock.h>
+#include <zephyr/sys/clock.h>
 #include <zephyr/drivers/mdio.h>
 #include <zephyr/logging/log.h>
 #include "eth_smsc91x_priv.h"
@@ -707,7 +707,7 @@ static int eth_tx(const struct device *dev, struct net_pkt *pkt)
 }
 
 static int eth_smsc_set_config(const struct device *dev,
-			       struct net_if *iface __unused
+			       struct net_if *iface __unused,
 			       enum ethernet_config_type type,
 			       const struct ethernet_config *config)
 {

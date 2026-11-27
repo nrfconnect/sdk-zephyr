@@ -1,5 +1,5 @@
 /*
- * Copyright 2024-2025 NXP
+ * Copyright 2024-2026 NXP
  * SPDX-License-Identifier: Apache-2.0
  */
 #include <zephyr/init.h>
@@ -9,8 +9,8 @@
 #include <fsl_spc.h>
 #include <soc.h>
 #if CONFIG_USB_DC_NXP_EHCI
-#include "usb_phy.h"
-#include "usb.h"
+#include <usb_phy.h>
+#include <usb.h>
 
 /* USB PHY configuration */
 #define BOARD_USB_PHY_D_CAL     (0x04U)
@@ -251,7 +251,7 @@ void board_early_init_hook(void)
 
 #if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(enet))
 	CLOCK_AttachClk(kNONE_to_ENETRMII);
-#if defined(CONFIG_PTP_CLOCK_NXP_ENET_QOS)
+#if defined(CONFIG_PTP_CLOCK_NXP_ENET_QOS) || defined(CONFIG_PTP_CLOCK_DWC_MAC)
 	/* Attach PLL0 (150 MHz) to the ENET QoS PTP reference clock. */
 	CLOCK_AttachClk(kPLL0_to_ENETPTPREF);
 	CLOCK_SetClkDiv(kCLOCK_DivEnetptprefClk, 1u);
@@ -462,6 +462,12 @@ void board_early_init_hook(void)
 	CLOCK_SetClkDiv(kCLOCK_DivMicfilFClk, 1U);
 	CLOCK_AttachClk(kPLL1_CLK0_to_MICFILF);
 	CLOCK_EnableClock(kCLOCK_Micfil);
+#endif
+
+#if DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(ewm0))
+	CLOCK_SetupClk16KClocking(kCLOCK_Clk16KToWake);
+	CLOCK_AttachClk(kCLK_16K2_to_EWM0);
+	CLOCK_EnableClock(kCLOCK_Ewm0);
 #endif
 
 	/* Set SystemCoreClock variable. */

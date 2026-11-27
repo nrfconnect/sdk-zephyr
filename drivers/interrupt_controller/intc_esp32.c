@@ -225,11 +225,12 @@ int esp_intr_reserve(int intno, int cpu)
 /* Returns true if handler for interrupt is not the default unhandled interrupt handler */
 static bool intr_has_handler(int intr, int cpu)
 {
-	bool r;
+	/* Map the CPU line to the ISR table index. */
+#ifdef CONFIG_RISCV_RESERVED_IRQ_ISR_TABLES_OFFSET
+	intr += CONFIG_RISCV_RESERVED_IRQ_ISR_TABLES_OFFSET;
+#endif
 
-	r = _sw_isr_table[intr * CONFIG_MP_MAX_NUM_CPUS + cpu].isr != z_irq_spurious;
-
-	return r;
+	return _sw_isr_table[intr * CONFIG_MP_MAX_NUM_CPUS + cpu].isr != z_irq_spurious;
 }
 
 static bool is_vect_desc_usable(struct vector_desc_t *vd, int flags, int cpu, int force)
@@ -955,6 +956,15 @@ void arch_irq_disable(unsigned int irq)
 
 int arch_irq_is_enabled(unsigned int irq)
 {
-	return !!(esp_cpu_intr_get_enabled_mask() & (1 << irq));
+	/* The z_isr_install() assert queries this with the isr table index,
+	 * which on a SoC that reserves entries sits above the line the enable
+	 * mask uses, so a raw shift runs past the end of the mask. Enable and
+	 * disable are called with the line itself and need no adjustment.
+	 */
+#ifdef CONFIG_RISCV_RESERVED_IRQ_ISR_TABLES_OFFSET
+	irq -= CONFIG_RISCV_RESERVED_IRQ_ISR_TABLES_OFFSET;
+#endif
+
+	return !!(esp_cpu_intr_get_enabled_mask() & BIT(irq));
 }
 #endif
