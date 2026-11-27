@@ -18,7 +18,6 @@ tests:
       - apollo3p_evb
       - apollo510_evb
       - nrf7120dk/nrf7120/cpuapp
-      - nrf7120dk/nrf7120e/cpuapp
       - frdm_mcxe247@w25q64
     integration_platforms:
       - native_sim
