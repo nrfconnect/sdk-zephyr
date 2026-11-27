@@ -2470,23 +2470,13 @@ static inline void handle_prefix_autonomous(struct net_pkt *pkt,
 
 		net_if_addr_set_lf(ifaddr, false);
 	} else {
-		struct net_if_addr *new_ifaddr;
-
 		if (prefix_info->valid_lifetime ==
 		    NET_IPV6_ND_INFINITE_LIFETIME) {
-			new_ifaddr = net_if_ipv6_addr_add(iface, &addr,
-							  NET_ADDR_AUTOCONF, 0);
+			net_if_ipv6_addr_add(iface, &addr,
+					     NET_ADDR_AUTOCONF, 0);
 		} else {
-			new_ifaddr = net_if_ipv6_addr_add(
-				iface, &addr, NET_ADDR_AUTOCONF,
-				prefix_info->valid_lifetime);
-		}
-
-		if (new_ifaddr == NULL) {
-			NET_ERR("Failed to add SLAAC address %s",
-				net_sprint_ipv6_addr(&addr));
-		} else {
-			NET_INFO("Received: %s", net_sprint_ipv6_addr(&addr));
+			net_if_ipv6_addr_add(iface, &addr, NET_ADDR_AUTOCONF,
+					     prefix_info->valid_lifetime);
 		}
 	}
 
