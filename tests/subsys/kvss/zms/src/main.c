@@ -23,6 +23,12 @@
 #define TEST_ZMS_AREA_DEV    DEVICE_DT_GET(DT_MTD_FROM_PARTITION(DT_NODELABEL(TEST_ZMS_AREA)))
 #define TEST_DATA_ID         1
 #define TEST_SECTOR_COUNT    5U
+
+/* Free space tests walk a whole sector entry by entry, too slow on large
+ * sectors.
+ */
+#define ZMS_MAX_SECTOR_SIZE_FOR_FREE_SPACE_TEST 8192U
+
 #if defined(CONFIG_ZMS_LOOKUP_CACHE_MANUAL)
 #define TEST_ZMS_LOOKUP_CACHE_SIZE 64
 #elif defined(CONFIG_ZMS_LOOKUP_CACHE)
@@ -230,6 +236,113 @@ ZTEST_F(zms, test_zms_mount_fake_ate)
 	zassert_equal(fixture->fs.data_wra, sizeof(data),
 		      "data payload was mistaken for an ATE: data_wra=%llx",
 		      fixture->fs.data_wra);
+}
+
+ZTEST_F(zms, test_zms_mount_invalid_external_data_ranges)
+{
+	struct zms_ate fake_ate;
+	uint8_t data[64] = {0};
+	uint64_t fake_addr;
+	off_t fake_offset;
+	ssize_t len;
+	int err;
+
+	err = zms_mount(&fixture->fs);
+	zassert_ok(err, "zms_mount failed: %d", err);
+
+	len = zms_write(&fixture->fs, TEST_DATA_ID, data, sizeof(data));
+	zassert_equal(len, sizeof(data), "zms_write failed: %zd", len);
+
+	/* Inject valid-looking ATEs into successive unwritten slots. Their data
+	 * ranges respectively move backwards, extend outside the sector, and
+	 * overlap the descending ATE area.
+	 */
+	fake_addr = fixture->fs.ate_wra;
+	for (size_t i = 0; i < 3; i++) {
+		memset(&fake_ate, 0, sizeof(fake_ate));
+		fake_ate.id = TEST_DATA_ID + 1 + i;
+		fake_ate.len = ZMS_DATA_IN_ATE_SIZE + 1;
+		fake_ate.cycle_cnt = fixture->fs.sector_cycle;
+
+		if (i == 0) {
+			fake_ate.offset = 0;
+		} else if (i == 1) {
+			fake_ate.offset = fixture->fs.sector_size;
+		} else {
+			fake_ate.offset = SECTOR_OFFSET(fake_addr);
+		}
+
+		fake_ate.crc8 =
+			crc8_ccitt(0xff, (uint8_t *)&fake_ate + SIZEOF_FIELD(struct zms_ate, crc8),
+				   sizeof(fake_ate) - SIZEOF_FIELD(struct zms_ate, crc8));
+		fake_offset = fixture->fs.offset +
+			      (fixture->fs.sector_size * SECTOR_NUM(fake_addr)) +
+			      SECTOR_OFFSET(fake_addr);
+		err = flash_write(fixture->fs.flash_device, fake_offset, &fake_ate,
+				  sizeof(fake_ate));
+		zassert_ok(err, "flash_write of fake ATE %zu failed: %d", i, err);
+
+		fake_addr -= fixture->fs.ate_size;
+	}
+
+	memset(&fixture->fs, 0, sizeof(fixture->fs));
+	(void)setup();
+	err = zms_mount(&fixture->fs);
+	zassert_ok(err, "zms_mount after reboot failed: %d", err);
+	zassert_equal(fixture->fs.data_wra, sizeof(data), "invalid ATE changed data_wra: %llx",
+		      fixture->fs.data_wra);
+}
+
+/*
+ * Garbage collection writes the first entry that it copies to the first ATE
+ * of the new write sector. When no other entry with data follows it, this ATE
+ * alone gives the data write address of the sector after a reboot. Verify
+ * that recovery reads it, otherwise the next write lands on the data of the
+ * entry.
+ */
+ZTEST_F(zms, test_zms_mount_first_ate_with_data)
+{
+	uint8_t data[32];
+	uint8_t rd_buf[32];
+	uint64_t data_wra;
+	uint64_t ate_wra;
+	ssize_t len;
+	int err;
+
+	err = zms_mount(&fixture->fs);
+	zassert_ok(err, "zms_mount failed: %d", err);
+
+	memset(data, 0xaa, sizeof(data));
+	len = zms_write(&fixture->fs, TEST_DATA_ID, data, sizeof(data));
+	zassert_equal(len, sizeof(data), "zms_write failed: %zd", len);
+
+	/* The last sector change garbage collects the sector of the entry. It is
+	 * the only entry to copy.
+	 */
+	for (uint32_t i = 0; i < fixture->fs.sector_count - 1; i++) {
+		err = zms_sector_use_next(&fixture->fs);
+		zassert_ok(err, "zms_sector_use_next failed: %d", err);
+	}
+	data_wra = fixture->fs.data_wra;
+	ate_wra = fixture->fs.ate_wra;
+
+	/* Simulate a reboot so recovery, rather than the live cursors, is used. */
+	memset(&fixture->fs, 0, sizeof(fixture->fs));
+	(void)setup();
+	err = zms_mount(&fixture->fs);
+	zassert_ok(err, "zms_mount after reboot failed: %d", err);
+	zassert_equal(fixture->fs.data_wra, data_wra, "wrong data_wra after reboot: %llx",
+		      fixture->fs.data_wra);
+	zassert_equal(fixture->fs.ate_wra, ate_wra, "wrong ate_wra after reboot: %llx",
+		      fixture->fs.ate_wra);
+
+	memset(rd_buf, 0x55, sizeof(rd_buf));
+	len = zms_write(&fixture->fs, TEST_DATA_ID + 1, rd_buf, sizeof(rd_buf));
+	zassert_equal(len, sizeof(rd_buf), "zms_write after reboot failed: %zd", len);
+
+	len = zms_read(&fixture->fs, TEST_DATA_ID, rd_buf, sizeof(rd_buf));
+	zassert_equal(len, sizeof(rd_buf), "zms_read failed: %zd", len);
+	zassert_mem_equal(rd_buf, data, sizeof(data), "data of the first ATE was overwritten");
 }
 
 #ifdef CONFIG_TEST_ZMS_SIMULATOR
@@ -907,6 +1020,7 @@ ZTEST_F(zms, test_zms_gc_corrupt_ate)
 	struct zms_ate close_ate;
 	int err;
 
+	(void)memset(&close_ate, 0xff, sizeof(struct zms_ate));
 	close_ate.id = ZMS_HEAD_ID;
 	close_ate.offset = fixture->fs.sector_size / 2;
 	close_ate.len = 0;
@@ -914,6 +1028,7 @@ ZTEST_F(zms, test_zms_gc_corrupt_ate)
 		crc8_ccitt(0xff, (uint8_t *)&close_ate + SIZEOF_FIELD(struct zms_ate, crc8),
 			   sizeof(struct zms_ate) - SIZEOF_FIELD(struct zms_ate, crc8));
 
+	(void)memset(&corrupt_ate, 0xff, sizeof(struct zms_ate));
 	corrupt_ate.id = 0xdeadbeef;
 	corrupt_ate.offset = 0;
 	corrupt_ate.len = 20;
@@ -1441,6 +1556,11 @@ ZTEST_F(zms, test_zms_free_space)
 
 	fixture->fs.sector_count = 2;
 
+	/* Too slow on large sectors. */
+	if (fixture->fs.sector_size > ZMS_MAX_SECTOR_SIZE_FOR_FREE_SPACE_TEST) {
+		ztest_test_skip();
+	}
+
 	err = zms_mount(&fixture->fs);
 	zassert_true(err == 0, "zms_mount call failure: %d", err);
 
@@ -1680,6 +1800,11 @@ ZTEST_F(zms, test_zms_free_space_5sectors)
 	char *write_buf;
 
 	fixture->fs.sector_count = 5;
+
+	/* Same reason as in test_zms_free_space. */
+	if (fixture->fs.sector_size > ZMS_MAX_SECTOR_SIZE_FOR_FREE_SPACE_TEST) {
+		ztest_test_skip();
+	}
 
 	err = zms_mount(&fixture->fs);
 	zassert_true(err == 0, "zms_mount call failure: %d", err);
