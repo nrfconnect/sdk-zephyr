@@ -55,12 +55,12 @@ struct k_spinlock z_mm_lock;
 /* Database of all RAM page frames */
 struct k_mem_page_frame k_mem_page_frames[K_MEM_NUM_PAGE_FRAMES];
 
-#ifdef CONFIG_ASSERT
+#if __ASSERT_ON
 /* Indicator that k_mem_page_frames has been initialized, many of these APIs do
  * not work before POST_KERNEL
  */
 static bool page_frames_initialized;
-#endif /* CONFIG_ASSERT */
+#endif
 
 /* Add colors to page table dumps to indicate mapping type */
 #define COLOR_PAGE_FRAMES	1
@@ -1150,10 +1150,9 @@ void z_mem_manage_init(void)
 	z_paging_ondemand_section_map();
 #endif
 
-#ifdef CONFIG_ASSERT
+#if __ASSERT_ON
 	page_frames_initialized = true;
-#endif /* CONFIG_ASSERT */
-
+#endif
 	k_spin_unlock(&z_mm_lock, key);
 }
 
