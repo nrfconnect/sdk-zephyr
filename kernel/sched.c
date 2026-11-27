@@ -427,6 +427,13 @@ void z_sched_add_to_waitq_locked(struct k_thread *thread, _wait_q_t *wait_q)
 	add_to_waitq_locked(thread, wait_q);
 }
 
+static void add_thread_timeout(struct k_thread *thread, k_timeout_t timeout)
+{
+	if (!K_TIMEOUT_EQ(timeout, K_FOREVER)) {
+		z_add_thread_timeout(thread, timeout);
+	}
+}
+
 static void pend_locked(struct k_thread *thread, _wait_q_t *wait_q,
 			k_timeout_t timeout)
 {
@@ -434,7 +441,7 @@ static void pend_locked(struct k_thread *thread, _wait_q_t *wait_q,
 	__ASSERT_NO_MSG(wait_q == NULL || sys_cache_is_mem_coherent(wait_q));
 #endif /* CONFIG_KERNEL_COHERENCE */
 	add_to_waitq_locked(thread, wait_q);
-	z_add_thread_timeout(thread, timeout);
+	add_thread_timeout(thread, timeout);
 }
 
 void z_pend_thread(struct k_thread *thread, _wait_q_t *wait_q,
