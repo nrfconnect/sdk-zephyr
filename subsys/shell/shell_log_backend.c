@@ -257,10 +257,10 @@ static void process(const struct log_backend *const backend,
 			process_log_msg(sh, log_output, msg, true, colors);
 		} else {
 			if (copy_to_pbuffer(mpsc_buffer, msg, log_backend->timeout)) {
-#if CONFIG_MULTITHREADING
-				k_event_post(&sh->ctx->signal_event,
-					     SHELL_SIGNAL_LOG_MSG);
-#endif
+				if (IS_ENABLED(CONFIG_MULTITHREADING)) {
+					k_event_post(&sh->ctx->signal_event,
+						     SHELL_SIGNAL_LOG_MSG);
+				}
 			} else {
 				dropped(backend, 1);
 			}
