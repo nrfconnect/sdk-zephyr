@@ -55,10 +55,6 @@ static sys_slist_t dhcpv6_ifaces = SYS_SLIST_STATIC_INIT(&dhcpv6_ifaces);
 static struct k_work_delayable dhcpv6_timeout_work;
 static struct net_mgmt_event_callback dhcpv6_mgmt_cb;
 
-static void dhcpv6_start(struct net_if *iface, struct net_dhcpv6_params *params,
-			 bool auto_started);
-static void dhcpv6_stop(struct net_if *iface);
-
 const char *net_dhcpv6_state_name(enum net_dhcpv6_state state)
 {
 	static const char * const name[] = {
@@ -2147,9 +2143,7 @@ static int dhcpv6_handle_reply(struct net_if *iface, struct net_pkt *pkt,
 		} else if (net_if_ipv6_addr_add(iface, &ia_na.iaaddr.addr, NET_ADDR_DHCP,
 						ia_na.iaaddr.valid_lifetime) == NULL) {
 			NET_ERR("Failed to configure DHCPv6 address");
-			(void)k_mutex_lock(&lock, K_FOREVER);
-			dhcpv6_stop(iface);
-			(void)k_mutex_unlock(&lock);
+			net_dhcpv6_stop(iface);
 			return -EFAULT;
 		}
 
@@ -2200,9 +2194,7 @@ prefix:
 						  ia_pd.iaprefix.prefix_len,
 						  ia_pd.iaprefix.valid_lifetime) == NULL) {
 			NET_ERR("Failed to configure DHCPv6 prefix");
-			(void)k_mutex_lock(&lock, K_FOREVER);
-			dhcpv6_stop(iface);
-			(void)k_mutex_unlock(&lock);
+			net_dhcpv6_stop(iface);
 			return -EFAULT;
 		}
 	}
@@ -2329,59 +2321,6 @@ static uint64_t dhcpv6_timeleft(struct net_if *iface, int64_t now)
 	}
 
 	return 0;
-}
-
-static bool dhcpv6_has_lease(struct net_if *iface)
-{
-	return (iface->config.dhcpv6.params.request_addr &&
-		!net_ipv6_is_addr_unspecified(&iface->config.dhcpv6.addr)) ||
-	       (iface->config.dhcpv6.params.request_prefix &&
-		iface->config.dhcpv6.prefix_len != 0);
-}
-
-static void dhcpv6_remove_lease(struct net_if *iface)
-{
-	if (!net_ipv6_is_addr_unspecified(&iface->config.dhcpv6.addr)) {
-		net_if_ipv6_addr_rm(iface, &iface->config.dhcpv6.addr);
-		memset(&iface->config.dhcpv6.addr, 0, sizeof(iface->config.dhcpv6.addr));
-	}
-
-	if (iface->config.dhcpv6.prefix_len != 0) {
-		net_if_ipv6_prefix_rm(iface, &iface->config.dhcpv6.prefix,
-				      iface->config.dhcpv6.prefix_len);
-#if defined(CONFIG_NET_IPV6_ND_RA_TX)
-		dhcpv6_teardown_delegation(iface, &iface->config.dhcpv6.prefix,
-					   iface->config.dhcpv6.prefix_len);
-#endif
-		memset(&iface->config.dhcpv6.prefix, 0, sizeof(iface->config.dhcpv6.prefix));
-		iface->config.dhcpv6.prefix_len = 0;
-	}
-}
-
-/* Lease expired: Apply latest RA flags if client was auto-started */
-static uint64_t dhcpv6_lease_expired_apply_ra(struct net_if *iface)
-{
-	struct net_dhcpv6_params params = {
-		.request_addr = false,
-		.request_prefix = false,
-	};
-	bool other = iface->config.dhcpv6.ra_other;
-
-	if (!iface->config.dhcpv6.auto_started || iface->config.dhcpv6.ra_managed) {
-		dhcpv6_enter_state(iface, NET_DHCPV6_SOLICITING);
-		return iface->config.dhcpv6.timeout;
-	}
-
-	dhcpv6_remove_lease(iface);
-	dhcpv6_stop(iface);
-
-	if (!other) {
-		return UINT64_MAX;
-	}
-
-	dhcpv6_start(iface, &params, true);
-
-	return iface->config.dhcpv6.timeout;
 }
 
 static uint64_t dhcpv6_manage_timers(struct net_if *iface, int64_t now)
@@ -2520,7 +2459,8 @@ static uint64_t dhcpv6_manage_timers(struct net_if *iface, int64_t now)
 		return iface->config.dhcpv6.timeout;
 	case NET_DHCPV6_REBINDING:
 		if (now >= iface->config.dhcpv6.expire) {
-			return dhcpv6_lease_expired_apply_ra(iface);
+			dhcpv6_enter_state(iface, NET_DHCPV6_SOLICITING);
+			return iface->config.dhcpv6.timeout;
 		}
 
 		iface->config.dhcpv6.retransmissions++;
@@ -2645,14 +2585,7 @@ static void dhcpv6_iface_event_handler(struct net_mgmt_event_callback *cb,
 		goto out;
 	}
 
-	if (mgmt_event == NET_EVENT_IF_DOWN && iface->config.dhcpv6.auto_started) {
-		/* The next network decides again with its own Router
-		 * Advertisement whether DHCPv6 is needed.
-		 */
-		NET_DBG("Interface %p going down, stopping DHCPv6", iface);
-		dhcpv6_remove_lease(iface);
-		dhcpv6_stop(iface);
-	} else if (mgmt_event == NET_EVENT_IF_DOWN) {
+	if (mgmt_event == NET_EVENT_IF_DOWN) {
 		NET_DBG("Interface %p going down", iface);
 		dhcpv6_set_timeout(iface, UINT64_MAX);
 
@@ -2720,13 +2653,16 @@ static int dhcpv6_generate_client_duid(struct net_if *iface)
 	return 0;
 }
 
-static void dhcpv6_start(struct net_if *iface, struct net_dhcpv6_params *params,
-			 bool auto_started)
+/* DHCPv6 public API */
+
+void net_dhcpv6_start(struct net_if *iface, struct net_dhcpv6_params *params)
 {
+	k_mutex_lock(&lock, K_FOREVER);
+
 	if (iface->config.dhcpv6.state != NET_DHCPV6_DISABLED) {
 		NET_ERR("DHCPv6 already running on iface %p, state %s", iface,
 			net_dhcpv6_state_name(iface->config.dhcpv6.state));
-		return;
+		goto out;
 	}
 
 	/* Generate the client DUID before any observable side effects so that a
@@ -2734,18 +2670,20 @@ static void dhcpv6_start(struct net_if *iface, struct net_dhcpv6_params *params,
 	 * event emitted).
 	 */
 	if (dhcpv6_generate_client_duid(iface) < 0) {
-		return;
+		goto out;
 	}
 
 	net_mgmt_event_notify(NET_EVENT_IPV6_DHCP_START, iface);
 
-	NET_DBG("Starting DHCPv6 on iface %p%s", iface,
-		auto_started ? " (started by RA)" : "");
+	NET_DBG("Starting DHCPv6 on iface %p", iface);
 
 	iface->config.dhcpv6.params = *params;
 	iface->config.dhcpv6.sol_max_rt = DHCPV6_SOL_MAX_RT;
 	iface->config.dhcpv6.inf_max_rt = DHCPV6_INF_MAX_RT;
-	iface->config.dhcpv6.auto_started = auto_started;
+
+	if (sys_slist_is_empty(&dhcpv6_ifaces)) {
+		net_mgmt_add_event_callback(&dhcpv6_mgmt_cb);
+	}
 
 	sys_slist_append(&dhcpv6_ifaces, &iface->config.dhcpv6.node);
 
@@ -2759,10 +2697,15 @@ static void dhcpv6_start(struct net_if *iface, struct net_dhcpv6_params *params,
 
 	dhcpv6_enter_state(iface, NET_DHCPV6_INIT);
 	dhcpv6_reschedule();
+
+out:
+	k_mutex_unlock(&lock);
 }
 
-static void dhcpv6_stop(struct net_if *iface)
+void net_dhcpv6_stop(struct net_if *iface)
 {
+	k_mutex_lock(&lock, K_FOREVER);
+
 	switch (iface->config.dhcpv6.state) {
 	case NET_DHCPV6_DISABLED:
 		NET_INFO("DHCPv6 already disabled on iface %p", iface);
@@ -2780,12 +2723,10 @@ static void dhcpv6_stop(struct net_if *iface)
 			net_dhcpv6_state_name(iface->config.dhcpv6.state));
 
 		/* Politely return the lease to the server before tearing the
-		 * configuration down, RFC 8415 ch. 18.2.7. A stateless client,
-		 * or one whose lease was already removed, has nothing to release.
+		 * configuration down, RFC 8415 ch. 18.2.7.
 		 */
 		if (IS_ENABLED(CONFIG_NET_DHCPV6_SEND_RELEASE_ON_STOP) &&
-		    iface->config.dhcpv6.state == NET_DHCPV6_BOUND &&
-		    dhcpv6_has_lease(iface)) {
+		    iface->config.dhcpv6.state == NET_DHCPV6_BOUND) {
 			(void)dhcpv6_send_release(iface);
 		}
 
@@ -2802,96 +2743,23 @@ static void dhcpv6_stop(struct net_if *iface)
 
 		if (sys_slist_is_empty(&dhcpv6_ifaces)) {
 			(void)k_work_cancel_delayable(&dhcpv6_timeout_work);
+			net_mgmt_del_event_callback(&dhcpv6_mgmt_cb);
 		}
 
 		break;
 	}
 
-	iface->config.dhcpv6.auto_started = false;
-
 	net_mgmt_event_notify(NET_EVENT_IPV6_DHCP_STOP, iface);
-}
 
-/* DHCPv6 public API */
-
-void net_dhcpv6_start(struct net_if *iface, struct net_dhcpv6_params *params)
-{
-	(void)k_mutex_lock(&lock, K_FOREVER);
-
-	/* Explicit configuration takes precedence over the automatic one. */
-	if (iface->config.dhcpv6.auto_started) {
-		dhcpv6_stop(iface);
-	}
-
-	iface->config.dhcpv6.auto_start_disabled = false;
-	dhcpv6_start(iface, params, false);
-
-	(void)k_mutex_unlock(&lock);
-}
-
-void net_dhcpv6_stop(struct net_if *iface)
-{
-	(void)k_mutex_lock(&lock, K_FOREVER);
-
-	dhcpv6_stop(iface);
-	iface->config.dhcpv6.auto_start_disabled = true;
-
-	(void)k_mutex_unlock(&lock);
+	k_mutex_unlock(&lock);
 }
 
 void net_dhcpv6_restart(struct net_if *iface)
 {
-	struct net_dhcpv6_params params;
-	bool auto_started;
+	struct net_dhcpv6_params params = iface->config.dhcpv6.params;
 
-	(void)k_mutex_lock(&lock, K_FOREVER);
-
-	params = iface->config.dhcpv6.params;
-	auto_started = iface->config.dhcpv6.auto_started;
-
-	dhcpv6_stop(iface);
-	iface->config.dhcpv6.auto_start_disabled = false;
-	dhcpv6_start(iface, &params, auto_started);
-
-	(void)k_mutex_unlock(&lock);
-}
-
-void net_dhcpv6_handle_ra(struct net_if *iface, bool managed, bool other)
-{
-	if (!IS_ENABLED(CONFIG_NET_DHCPV6_START_ON_RA)) {
-		return;
-	}
-
-	/* RFC 4861 ch. 4.2, M flag set makes the O flag redundant.
-	 * M set: Run stateful DHCPv6.
-	 * Else if O set: Run stateless DHCPv6.
-	 * Else: Do not run DHCPv6.
-	 */
-	struct net_dhcpv6_params params = {
-		.request_addr = managed,
-	};
-
-	(void)k_mutex_lock(&lock, K_FOREVER);
-
-	iface->config.dhcpv6.ra_managed = managed;
-	iface->config.dhcpv6.ra_other = other;
-
-	if (iface->config.dhcpv6.state == NET_DHCPV6_DISABLED) {
-		if ((managed || other) && !iface->config.dhcpv6.auto_start_disabled) {
-			dhcpv6_start(iface, &params, true);
-		}
-	} else if (managed && iface->config.dhcpv6.auto_started &&
-		   !iface->config.dhcpv6.params.request_addr) {
-		/* The router switched to managed configuration, upgrade the
-		 * stateless client. A stateful client is not downgraded while
-		 * its leases are valid, it follows the latest RA flags once
-		 * they expire.
-		 */
-		dhcpv6_stop(iface);
-		dhcpv6_start(iface, &params, true);
-	}
-
-	(void)k_mutex_unlock(&lock);
+	net_dhcpv6_stop(iface);
+	net_dhcpv6_start(iface, &params);
 }
 
 int net_dhcpv6_init(void)
@@ -2916,11 +2784,6 @@ int net_dhcpv6_init(void)
 				     NET_EVENT_IF_DOWN | NET_EVENT_IF_UP |
 				     (IS_ENABLED(CONFIG_NET_DHCPV6_DECLINE_ON_DAD_FAILURE) ?
 				      NET_EVENT_IPV6_DAD_FAILED : 0));
-
-	/* Registered once, as the handler may stop DHCPv6 while net_mgmt is
-	 * iterating over the callback list.
-	 */
-	net_mgmt_add_event_callback(&dhcpv6_mgmt_cb);
 
 	return 0;
 }
