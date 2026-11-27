@@ -15,8 +15,13 @@
       - "!**/*.md"
 
 "CI-iot-zephyr-lwm2m-test":
+  - "drivers/console/**/*"
+  - "drivers/flash/**/*"
+  - "subsys/dfu/boot/**/*"
   - "subsys/net/ip/**/*"
+  - "subsys/net/lib/http/**/*"
   - "subsys/net/lib/lwm2m//**/*"
+  - "subsys/net/**/*"
 
 "CI-iot-samples-test":
   - "boards/nordic/nrf9160dk/**/*"
