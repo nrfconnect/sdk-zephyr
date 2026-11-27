@@ -339,34 +339,29 @@ out:
 
 int dns_dispatcher_unregister(struct dns_socket_dispatcher *ctx)
 {
-	struct dns_socket_dispatcher *entry;
-	const struct net_socket_service_desc *svc;
-	int sock;
 	int ret = 0;
 
 	k_mutex_lock(&lock, K_FOREVER);
 
-	sock = ctx->sock;
-	svc = ctx->svc;
-
 	(void)sys_slist_find_and_remove(&sockets, &ctx->node);
+
+	(void)net_socket_service_unregister(ctx->svc);
+
+	/* Mark the context as unregistered */
 	ctx->sock = -1;
 
-	if (sock >= 0 && sock < (int)ARRAY_SIZE(dispatch_table) &&
-	    dispatch_table[sock].ctx == ctx) {
-		dispatch_table[sock].ctx = NULL;
-	}
-
-	SYS_SLIST_FOR_EACH_CONTAINER(&sockets, entry, node) {
-		if (entry->svc == svc) {
-			ret = net_socket_service_register(entry->svc, entry->fds,
-							  entry->fds_len,
-							  &dispatch_table);
+	for (int i = 0; i < ctx->fds_len; i++) {
+		CHECKIF((int)ctx->fds[i].fd >= (int)ARRAY_SIZE(dispatch_table)) {
+			ret = -ERANGE;
 			goto out;
 		}
-	}
 
-	(void)net_socket_service_unregister(svc);
+		if (ctx->fds[i].fd < 0) {
+			continue;
+		}
+
+		dispatch_table[ctx->fds[i].fd].ctx = NULL;
+	}
 
 out:
 	k_mutex_unlock(&lock);
