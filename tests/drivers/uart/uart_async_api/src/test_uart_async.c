@@ -247,12 +247,7 @@ static void single_read(enum uart_config_data_bits data_bits)
 	zassert_equal(k_sem_take(&rx_rdy, K_MSEC(100)), -EAGAIN,
 		      "RX_RDY not expected at this point");
 
-	rv = uart_tx(uart_dev, tx_buf, 5, 100 * USEC_PER_MSEC);
-	if (rv == -ENOTSUP) {
-		uart_rx_disable(uart_dev);
-		ztest_test_skip();
-	}
-	zassert_ok(rv, "uart_tx failed");
+	uart_tx(uart_dev, tx_buf, 5, 100 * USEC_PER_MSEC);
 	sent_bytes += 5;
 
 	zassert_equal(k_sem_take(&tx_done, K_MSEC(100)), 0, "TX_DONE timeout");
@@ -353,10 +348,6 @@ ZTEST_USER(uart_async_multi_rx, test_multiple_rx_enable)
 
 	/* Send enough data to completely fill RX buffer, so that RX ends. */
 	ret = uart_tx(uart_dev, tx_buf, sizeof(tx_buf), 100 * USEC_PER_MSEC);
-	if (ret == -ENOTSUP) {
-		uart_rx_disable(uart_dev);
-		ztest_test_skip();
-	}
 	zassert_equal(ret, 0, "uart_tx failed");
 	zassert_equal(k_sem_take(&tx_done, K_MSEC(100)), 0, "TX_DONE timeout");
 	zassert_equal(k_sem_take(&rx_rdy, K_MSEC(100)), 0, "RX_RDY timeout");
@@ -967,13 +958,7 @@ ZTEST_USER(uart_async_chain_write, test_chained_write)
 
 	uart_rx_enable(uart_dev, rx_buf, sizeof(rx_buf), 50 * USEC_PER_MSEC);
 
-	int ret = uart_tx(uart_dev, chained_write_tx_bufs[0], 10, 100 * USEC_PER_MSEC);
-
-	if (ret == -ENOTSUP) {
-		uart_rx_disable(uart_dev);
-		ztest_test_skip();
-	}
-	zassert_ok(ret, "uart_tx failed");
+	uart_tx(uart_dev, chained_write_tx_bufs[0], 10, 100 * USEC_PER_MSEC);
 	zassert_equal(k_sem_take(&tx_done, K_MSEC(100)), 0, "TX_DONE timeout");
 	zassert_equal(k_sem_take(&tx_done, K_MSEC(100)), 0, "TX_DONE timeout");
 	zassert_equal(chained_write_next_buf, false, "Sent no message");
