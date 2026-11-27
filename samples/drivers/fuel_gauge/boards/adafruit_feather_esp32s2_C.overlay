@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Philipp Steiner <philipp.steiner1987@gmail.com>
+ * Copyright (c) 2025 Philipp Steiner
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -13,8 +13,8 @@
 &i2c0 {
 	max17048: max17048@36 {
 		compatible = "maxim,max17048";
-		status = "okay";
 		reg = <0x36>;
 		power-domains = <&i2c_reg>;
+		status = "okay";
 	};
 };

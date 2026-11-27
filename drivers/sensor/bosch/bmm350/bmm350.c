@@ -14,6 +14,7 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/util.h>
 #include <zephyr/sys/check.h>
+#include <zephyr/drivers/sensor/bmm350.h>
 
 #include "bmm350.h"
 #include "bmm350_decoder.h"
@@ -275,6 +276,9 @@ static int set_powermode(const struct device *dev, enum bmm350_power_modes power
 
 		/* Set PMU command configuration to desired power mode */
 		ret = bmm350_reg_write(dev, BMM350_REG_PMU_CMD, reg_data);
+		if (ret != 0) {
+			return ret;
+		}
 		k_usleep(delay_us);
 	}
 
@@ -440,6 +444,11 @@ static int bmm350_channel_get(const struct device *dev, enum sensor_channel chan
 		bmm350_convert(val + 1, drv_data->mag_temp_data.mag[1]);
 		bmm350_convert(val + 2, drv_data->mag_temp_data.mag[2]);
 		break;
+	case SENSOR_CHAN_DIE_TEMP:
+		/* Stored in centi-degC (0.01 degC). */
+		val->val1 = drv_data->mag_temp_data.temperature / 100;
+		val->val2 = (drv_data->mag_temp_data.temperature % 100) * 10000;
+		break;
 	default:
 		return -ENOTSUP;
 	}
@@ -558,13 +567,6 @@ static int set_mag_odr_osr(const struct device *dev, const struct sensor_value *
 	osr_bits = ((rx_buf[2] & BMM350_AVG_MSK) >> BMM350_AVG_POS);
 	odr_bits = ((rx_buf[2] & BMM350_ODR_MSK) >> BMM350_ODR_POS);
 
-	/* to change sampling rate, device needs to suspend first */
-	ret = bmm350_set_powermode(dev, BMM350_SUSPEND_MODE);
-	if (ret < 0) {
-		LOG_ERR("failed to set suspend mode");
-		return -EIO;
-	}
-
 	if (odr) {
 		odr_bits = mag_odr_to_reg(odr);
 	}
@@ -575,8 +577,17 @@ static int set_mag_odr_osr(const struct device *dev, const struct sensor_value *
 			return -EINVAL;
 		}
 	}
+
+	/* to change sampling rate, device needs to suspend first */
+	ret = bmm350_set_powermode(dev, BMM350_SUSPEND_MODE);
+	if (ret < 0) {
+		LOG_ERR("failed to set suspend mode");
+		return -EIO;
+	}
+
 	if (bmm350_set_odr_performance((enum bmm350_data_rates)odr_bits, osr_bits, dev) < 0) {
 		LOG_ERR("bmm350_set_odr_performance failed");
+		(void)bmm350_set_powermode(dev, BMM350_NORMAL_MODE);
 		return -EIO;
 	}
 
@@ -586,6 +597,217 @@ static int set_mag_odr_osr(const struct device *dev, const struct sensor_value *
 		LOG_ERR("failed to set suspend mode");
 		return -EIO;
 	}
+
+	return 0;
+}
+
+/*
+ * Delays (microseconds) used by the self-test sequence, matching the Bosch
+ * BMM350 SensorAPI (self_test_entry_config / self_test_config).
+ */
+#define BMM350_ST_SUSPEND_DELAY UINT32_C(30000)
+#define BMM350_ST_FGR_DELAY     UINT32_C(30000)
+#define BMM350_ST_BR_FAST_DELAY UINT32_C(4000)
+#define BMM350_ST_FM_FAST_DELAY UINT32_C(16000)
+#define BMM350_ST_USER_DELAY    UINT32_C(1000)
+#define BMM350_ST_SAMPLE_DELAY  UINT32_C(6000)
+
+/*
+ * Read the uncompensated X/Y magnetometer data and convert the LSB values to
+ * micro-Tesla using the default sensitivity coefficients. The self-test checks
+ * the differential response, so the (sample-independent) OTP compensation is
+ * intentionally not applied, matching the Bosch SensorAPI read_out_raw_data().
+ */
+static int bmm350_self_test_read_xy(const struct device *dev, int32_t out_ut[2])
+{
+	struct bmm350_raw_mag_data raw;
+	int32_t raw_xy[2];
+	int ret;
+
+	ret = bmm350_reg_read(dev, BMM350_REG_MAG_X_XLSB, raw.buf, sizeof(raw.buf));
+	if (ret != 0) {
+		return ret;
+	}
+
+	/* Sign-extend the 24-bit X and Y samples (buf[0..1] are dummy bytes). */
+	for (int i = 0; i < 2; i++) {
+		int off = (i * 3) + 2;
+
+		raw_xy[i] = ((int32_t)raw.buf[off + 2] << 24) | ((int32_t)raw.buf[off + 1] << 16) |
+			    ((int32_t)raw.buf[off] << 8);
+		raw_xy[i] >>= 8;
+
+		out_ut[i] = (int32_t)(((int64_t)raw_xy[i] * BMM350_LSB_TO_UT_XY_COEFF) /
+				      BMM350_LSB_TO_UT_COEFF_DIV);
+	}
+
+	return 0;
+}
+
+/* Self-test entry configuration: re-initialise the TMR sensor (Bosch sequence). */
+static int bmm350_self_test_entry(const struct device *dev)
+{
+	struct bmm350_pmu_cmd_status_0 status;
+	int ret;
+
+	/* Reset can only be triggered from suspend mode. */
+	ret = bmm350_reg_write(dev, BMM350_REG_PMU_CMD, BMM350_PMU_CMD_SUS);
+	if (ret != 0) {
+		return ret;
+	}
+	k_usleep(BMM350_ST_SUSPEND_DELAY);
+
+	/* 100 Hz ODR, 2x averaging, all axes enabled. */
+	ret = bmm350_reg_write(dev, BMM350_REG_PMU_CMD_AGGR_SET,
+			       BMM350_ODR_100HZ | (BMM350_AVG_2 << BMM350_AVG_POS));
+	if (ret != 0) {
+		return ret;
+	}
+	ret = bmm350_reg_write(dev, BMM350_REG_PMU_CMD_AXIS_EN, BMM350_EN_XYZ_MSK);
+	if (ret != 0) {
+		return ret;
+	}
+
+	/* Flux-guide reset with full CRST recharge. */
+	ret = bmm350_reg_write(dev, BMM350_REG_PMU_CMD, BMM350_PMU_CMD_FGR);
+	if (ret != 0) {
+		return ret;
+	}
+	k_usleep(BMM350_ST_FGR_DELAY);
+	ret = bmm350_get_pmu_cmd_status_0(dev, &status);
+	if (ret != 0) {
+		return ret;
+	}
+	if (status.pmu_cmd_value != BMM350_PMU_CMD_STATUS_0_FGR) {
+		return -EIO;
+	}
+
+	/* Bit reset with full CRST recharge. */
+	ret = bmm350_reg_write(dev, BMM350_REG_PMU_CMD, BMM350_PMU_CMD_BR_FAST);
+	if (ret != 0) {
+		return ret;
+	}
+	k_usleep(BMM350_ST_BR_FAST_DELAY);
+	ret = bmm350_get_pmu_cmd_status_0(dev, &status);
+	if (ret != 0) {
+		return ret;
+	}
+	if (status.pmu_cmd_value != BMM350_PMU_CMD_STATUS_0_BR_FAST) {
+		return -EIO;
+	}
+
+	/* Prime fast-forced mode. */
+	ret = bmm350_reg_write(dev, BMM350_REG_PMU_CMD, BMM350_PMU_CMD_FM_FAST);
+	if (ret != 0) {
+		return ret;
+	}
+	k_usleep(BMM350_ST_FM_FAST_DELAY);
+	ret = bmm350_get_pmu_cmd_status_0(dev, &status);
+	if (ret != 0) {
+		return ret;
+	}
+	if (status.pmu_cmd_value != BMM350_PMU_CMD_STATUS_0_FM_FAST) {
+		return -EIO;
+	}
+	k_usleep(10);
+
+	return 0;
+}
+
+/*
+ * Apply the given user self-test excitation (BMM350_SELF_TEST_*), trigger one
+ * fast-forced measurement and return the excited axis response in micro-Tesla.
+ */
+static int bmm350_self_test_axis(const struct device *dev, uint8_t st_cmd, uint8_t axis,
+				 int32_t *out_ut)
+{
+	struct bmm350_pmu_cmd_status_0 status;
+	int32_t xy_ut[2];
+	int ret;
+
+	ret = bmm350_reg_write(dev, BMM350_REG_TMR_SELFTEST_USER, st_cmd);
+	if (ret != 0) {
+		return ret;
+	}
+	k_usleep(BMM350_ST_USER_DELAY);
+
+	ret = bmm350_reg_write(dev, BMM350_REG_PMU_CMD, BMM350_PMU_CMD_FM_FAST);
+	if (ret != 0) {
+		return ret;
+	}
+	k_usleep(BMM350_ST_SAMPLE_DELAY);
+
+	ret = bmm350_get_pmu_cmd_status_0(dev, &status);
+	if (ret != 0) {
+		return ret;
+	}
+	if (status.pmu_cmd_value != BMM350_PMU_CMD_STATUS_0_FM_FAST) {
+		return -EIO;
+	}
+
+	ret = bmm350_self_test_read_xy(dev, xy_ut);
+	if (ret != 0) {
+		return ret;
+	}
+
+	*out_ut = xy_ut[axis];
+
+	return 0;
+}
+
+int bmm350_self_test(const struct device *dev, struct bmm350_self_test_result *result)
+{
+	uint8_t last_pwr_mode;
+	int ret;
+
+	if (result == NULL) {
+		return -EINVAL;
+	}
+
+	/* Remember the power mode so it can be restored after the test. */
+	ret = bmm350_reg_read(dev, BMM350_REG_PMU_CMD, &last_pwr_mode, 1);
+	if (ret != 0) {
+		return ret;
+	}
+
+	ret = bmm350_self_test_entry(dev);
+	if (ret == 0) {
+		ret = bmm350_self_test_axis(dev, BMM350_SELF_TEST_POS_X, 0, &result->x_pos);
+	}
+	if (ret == 0) {
+		ret = bmm350_self_test_axis(dev, BMM350_SELF_TEST_NEG_X, 0, &result->x_neg);
+	}
+	if (ret == 0) {
+		ret = bmm350_self_test_axis(dev, BMM350_SELF_TEST_POS_Y, 1, &result->y_pos);
+	}
+	if (ret == 0) {
+		ret = bmm350_self_test_axis(dev, BMM350_SELF_TEST_NEG_Y, 1, &result->y_neg);
+	}
+
+	/* Disable the user self-test regardless of the outcome. */
+	(void)bmm350_reg_write(dev, BMM350_REG_TMR_SELFTEST_USER, BMM350_SELF_TEST_DISABLE);
+	k_usleep(BMM350_ST_USER_DELAY);
+
+	/* Restore normal mode if the device was in normal mode before the test. */
+	if (last_pwr_mode == BMM350_PMU_CMD_NM) {
+		int restore_ret = bmm350_set_powermode(dev, BMM350_NORMAL_MODE);
+
+		if (ret == 0) {
+			ret = restore_ret;
+		}
+	}
+
+	if (ret != 0) {
+		return ret;
+	}
+
+	result->x_delta = result->x_pos - result->x_neg;
+	result->y_delta = result->y_pos - result->y_neg;
+
+	LOG_INF("%s: self-test XP=%d XN=%d YP=%d YN=%d (uT)", dev->name, result->x_pos,
+		result->x_neg, result->y_pos, result->y_neg);
+	LOG_INF("%s: self-test X_delta=%d Y_delta=%d (uT)", dev->name, result->x_delta,
+		result->y_delta);
 
 	return 0;
 }
@@ -814,6 +1036,11 @@ static void bmm350_submit_one_shot(const struct device *dev, struct rtio_iodev_s
 	read_sqe->flags |= RTIO_SQE_CHAINED;
 
 	cb_sqe = rtio_sqe_acquire(bus->rtio.ctx);
+	if (cb_sqe == NULL) {
+		rtio_sqe_drop_all(bus->rtio.ctx);
+		rtio_iodev_sqe_err(iodev_sqe, -ENOMEM);
+		return;
+	}
 
 	rtio_sqe_prep_callback_no_cqe(cb_sqe, bmm350_one_shot_complete,
 				      iodev_sqe, (void *)dev);
@@ -851,6 +1078,48 @@ static DEVICE_API(sensor, bmm350_api_funcs) = {
 #endif
 };
 
+#if DT_HAS_COMPAT_ON_BUS_STATUS_OKAY(bosch_bmm350, i3c)
+/* The BMM350 defaults to I2C mode after a reset, and swaps to I3C mode when
+ * addressed via a CCC.
+ *
+ * During standard start-up of an I3C controller using this sensor, the
+ * controller will issue a SETDASA to the sensor, which tells it to go into I3C
+ * mode.  Several INIT_PRIORITYs later, the sensor itself will initialize
+ * through bmm350_init_chip, performing the soft reset and swapping it to I2C
+ * mode.  Redo the address assignment here so the sensor stays I3C.
+ */
+static int bmm350_i3c_restore_dynamic_addr(const struct device *dev)
+{
+	const struct bmm350_config *config = dev->config;
+	const struct i3c_iodev_data *iodev_data = config->bus.rtio.iodev->data;
+	struct i3c_device_desc *desc;
+	uint8_t dynamic_addr;
+	int ret;
+
+	desc = i3c_device_find(iodev_data->bus, &config->bus.rtio.i3c.id);
+	if (desc == NULL) {
+		return -ENODEV;
+	}
+
+	/* Detach original DA first so we don't have a stray slot */
+	dynamic_addr = desc->dynamic_addr;
+	ret = i3c_detach_i3c_device(desc);
+	if ((ret != 0) && (ret != -EALREADY)) {
+		return ret;
+	}
+
+	/* Both ENTDAA and SETDASA reject a descriptor that still carries a DA */
+	desc->dynamic_addr = 0U;
+
+	/* Use ENTDAA if we have no static address, else SETDASA */
+	if (desc->static_addr == 0U) {
+		return i3c_do_daa(iodev_data->bus);
+	}
+
+	return i3c_bus_setdasa(desc, dynamic_addr);
+}
+#endif
+
 static int bmm350_init_chip(const struct device *dev)
 {
 	const struct bmm350_config *config = dev->config;
@@ -874,7 +1143,24 @@ static int bmm350_init_chip(const struct device *dev)
 
 	/* Set the command in the command register */
 	ret = bmm350_reg_write(dev, BMM350_REG_CMD, soft_reset);
+	if (ret != 0) {
+		LOG_ERR("failed to issue soft reset");
+		goto err_poweroff;
+	}
 	k_usleep(BMM350_SOFT_RESET_DELAY);
+
+#if DT_HAS_COMPAT_ON_BUS_STATUS_OKAY(bosch_bmm350, i3c)
+	if (config->bus.rtio.type == BMM350_BUS_TYPE_I3C) {
+		ret = bmm350_i3c_restore_dynamic_addr(dev);
+		if (ret != 0) {
+			LOG_ERR("failed to restore I3C mode after soft reset (%d)", ret);
+			/* We're still in a SUSPEND state from the soft reset above -
+			 * no need to set SUSPEND again in err_poweroff
+			 */
+			return ret;
+		}
+	}
+#endif
 	/* Read chip ID (can only be read in sleep mode)*/
 	if (bmm350_reg_read(dev, BMM350_REG_CHIP_ID, &chip_id[0], sizeof(chip_id)) < 0) {
 		LOG_ERR("failed reading chip id");
@@ -889,7 +1175,7 @@ static int bmm350_init_chip(const struct device *dev)
 	ret = bmm350_reg_write(dev, BMM350_REG_PAD_CTRL, config->drive_strength);
 	if (ret != 0) {
 		LOG_ERR("%s: failed to set pad drive strength", dev->name);
-		return ret;
+		goto err_poweroff;
 	}
 
 	ret = bmm350_otp_dump_after_boot(dev);
@@ -1004,17 +1290,33 @@ static int bmm350_init(const struct device *dev)
 		FIELD_PREP(BMM350_INT_CTRL_INT_OD_MSK, DT_INST_PROP(inst, push_pull_int)) |        \
 		BMM350_INT_CTRL_DRDY_DATA_REG_EN_MSK | BMM350_INT_CTRL_INT_OUTPUT_EN_MSK,
 
+#define BMM350_BUS_IODEV_DEFINE(inst)                                                              \
+	COND_CODE_1(DT_INST_ON_BUS(inst, i3c),                                                     \
+		    (I3C_DT_IODEV_DEFINE(bmm350_bus_##inst, DT_DRV_INST(inst))),                   \
+		    (I2C_DT_IODEV_DEFINE(bmm350_bus_##inst, DT_DRV_INST(inst))))
+
+#define BMM350_BUS_TYPE(inst)                                                                      \
+	COND_CODE_1(DT_INST_ON_BUS(inst, i3c), (BMM350_BUS_TYPE_I3C), (BMM350_BUS_TYPE_I2C))
+
+#if DT_HAS_COMPAT_ON_BUS_STATUS_OKAY(bosch_bmm350, i3c)
+#define BMM350_BUS_I3C_ID(inst)                                                                    \
+	COND_CODE_1(DT_INST_ON_BUS(inst, i3c), (.i3c.id = I3C_DEVICE_ID_DT_INST(inst),), ())
+#else
+#define BMM350_BUS_I3C_ID(inst)
+#endif
+
 #define BMM350_DEFINE(inst)                                                                        \
                                                                                                    \
 	RTIO_DEFINE(bmm350_rtio_ctx_##inst, 8, 8);                                                 \
-	I2C_DT_IODEV_DEFINE(bmm350_bus_##inst, DT_DRV_INST(inst));                                 \
+	BMM350_BUS_IODEV_DEFINE(inst);                                                             \
                                                                                                    \
 	static struct bmm350_data bmm350_data_##inst;                                              \
 	static const struct bmm350_config bmm350_config_##inst = {                                 \
 		.bus.rtio = {                                                                      \
 			.ctx = &bmm350_rtio_ctx_##inst,                                            \
 			.iodev = &bmm350_bus_##inst,                                               \
-			.type = BMM350_BUS_TYPE_I2C,                                               \
+			.type = BMM350_BUS_TYPE(inst),                                             \
+			BMM350_BUS_I3C_ID(inst)                                                    \
 		},										   \
 		.bus_io = &bmm350_bus_rtio,                                                        \
 		.default_odr = DT_INST_ENUM_IDX(inst, odr) + BMM350_DATA_RATE_400HZ,               \

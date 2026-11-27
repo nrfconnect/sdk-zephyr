@@ -4,7 +4,7 @@
  */
 
 #include <zephyr/sys/util_macro.h>
-#include <zephyr/arch/common/ffs.h>
+#include <zephyr/arch/cpu.h>
 #include <zephyr/audio/dmic.h>
 #include <zephyr/device.h>
 #include <zephyr/devicetree.h>
@@ -999,6 +999,7 @@ static int dmic_stm32_dfsdm_pm_action(const struct device *dev, enum pm_device_a
  */
 #define DMIC_DFSDM_HW_CHANNEL(flt) DT_FOREACH_CHILD_STATUS_OKAY_SEP(flt, DMIC_DFSDM_CHAN_IDX, ())
 
+/* The injected trigger is never external, so the HAL ignores ExtTrigger. */
 #define DMIC_DFSDM_FILTER_HFILTER(flt)                                                             \
 	{                                                                                          \
 		.Instance = DMIC_DFSDM_FLT_REG_ADDR(flt),                                          \
@@ -1007,7 +1008,7 @@ static int dmic_stm32_dfsdm_pm_action(const struct device *dev, enum pm_device_a
 				.InjectedParam =                                                   \
 					{                                                          \
 						.DmaMode = DISABLE,                                \
-						.ExtTrigger = DFSDM_FILTER_EXT_TRIG_TIM8_TRGO,     \
+						.ExtTrigger = DFSDM_FILTER_EXT_TRIG_TIM1_TRGO,     \
 						.ExtTriggerEdge =                                  \
 							DFSDM_FILTER_EXT_TRIG_BOTH_EDGES,          \
 						.ScanMode = DISABLE,                               \
@@ -1028,8 +1029,8 @@ static int dmic_stm32_dfsdm_pm_action(const struct device *dev, enum pm_device_a
                                                                                                    \
 	PINCTRL_DT_DEFINE(flt);                                                                    \
                                                                                                    \
-	K_MSGQ_DEFINE(dmic_stm32_dfsdm_msgq_##flt, sizeof(void *),                                 \
-		      CONFIG_DMIC_STM32_DFSDM_QUEUE_SIZE, 4);                                      \
+	K_MSGQ_DEFINE_STATIC_TYPE(dmic_stm32_dfsdm_msgq_##flt, void *,                             \
+				  CONFIG_AUDIO_DMIC_STM32_QUEUE_SIZE);                             \
                                                                                                    \
 	IF_ENABLED(DT_NODE_HAS_PROP(flt, dmas),                                                    \
 		(static int32_t __aligned(32)                                                      \

@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2024 BayLibre SAS
- * Copyright (c) 2026 Philipp Steiner <philipp.steiner1987@gmail.com>
+ * Copyright (c) 2026 Philipp Steiner
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -304,7 +304,7 @@ struct ptp_msg {
 	/** Single-linked list of TLVs attached to the message. */
 	sys_slist_t tlvs;
 	/** Protocol address of the sender/receiver of the message. */
-	struct net_sockaddr addr;
+	struct net_sockaddr_storage addr;
 };
 
 /**
@@ -364,7 +364,10 @@ void ptp_msg_pre_send(struct ptp_msg *msg);
  * @param[in] msg  Pointer to the received PTP message.
  * @param[in] cnt  Length of the message in bytes.
  *
- * @return 0 on success, negative otherwise.
+ * @retval 0 Success
+ * @retval -EPROTONOSUPPORT Unsupported PTP version
+ * @retval -EBADMSG Malformed message
+ * @retval -EMSGSIZE Message length does not match the length in the header
  */
 int ptp_msg_post_recv(struct ptp_port *port, struct ptp_msg *msg, int cnt);
 

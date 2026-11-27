@@ -205,7 +205,7 @@ static int transfer_request(struct coap_block_context *ctx, uint8_t *token, uint
 	/* send request */
 	ret = lwm2m_send_message_async(msg);
 	if (ret < 0) {
-		LOG_ERR("Error sending LWM2M packet (err:%d).", ret);
+		LOG_ERR("Error sending LwM2M packet (err:%d).", ret);
 		goto cleanup;
 	}
 
@@ -252,7 +252,7 @@ static int do_firmware_transfer_reply_cb(const struct coap_packet *response,
 	if (resp_code != COAP_RESPONSE_CODE_CONTENT) {
 		LOG_ERR("Unexpected response from server: %d.%d",
 			COAP_RESPONSE_CODE_CLASS(resp_code), COAP_RESPONSE_CODE_DETAIL(resp_code));
-		ret = -ENOMSG;
+		ret = -EBADMSG;
 		goto error;
 	}
 
@@ -361,7 +361,7 @@ static void do_transmit_timeout_cb(struct lwm2m_message *msg)
 {
 	LOG_ERR("TIMEOUT - Too many retry packet attempts! "
 		"Aborting firmware download.");
-	context.result_cb(context.obj_inst_id, -ENOMSG);
+	context.result_cb(context.obj_inst_id, -ETIMEDOUT);
 	cleanup_context();
 }
 
@@ -441,7 +441,6 @@ int lwm2m_pull_context_start_transfer(char *uri, struct requesting_object req, k
 	/* Check if we are not in the middle of downloading */
 	ret = k_sem_take(&lwm2m_pull_sem, K_NO_WAIT);
 	if (ret) {
-		context.result_cb(req.obj_inst_id, -EALREADY);
 		return -EALREADY;
 	}
 	k_sem_give(&lwm2m_pull_sem);

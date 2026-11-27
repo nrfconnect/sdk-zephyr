@@ -6,7 +6,7 @@
 
 /dts-v1/;
 
-#include <st/mp13/stm32mp135.dtsi>
+#include <st/mp13/stm32mp135f.dtsi>
 #include <st/mp13/stm32mp135faex-pinctrl.dtsi>
 #include <zephyr/dt-bindings/display/panel.h>
 #include <zephyr/dt-bindings/gpio/raspberrypi-csi-connector.h>
@@ -14,8 +14,8 @@
 #include <zephyr/dt-bindings/video/video-interfaces.h>
 
 / {
-	model = "STMicroelectronics STM32MP135-DK board";
 	compatible = "st,stm32mp135f-dk";
+	model = "STMicroelectronics STM32MP135-DK board";
 
 	chosen {
 		zephyr,flash = &ddr_code;
@@ -100,6 +100,18 @@
 &cpusw {
 	clocks = <&clk_hsi>;
 	clock-frequency = <DT_FREQ_M(64)>;
+	status = "okay";
+};
+
+&dma1 {
+	status = "okay";
+};
+
+&dma2 {
+	status = "okay";
+};
+
+&dmamux1 {
 	status = "okay";
 };
 
@@ -260,11 +272,15 @@ csi_interface: &dcmipp {
 	disp-on-gpios = <&gpioi 7 GPIO_ACTIVE_HIGH>;
 	bl-ctrl-gpios = <&gpioe 12 GPIO_ACTIVE_HIGH>;
 
-	status = "okay";
-
 	width = <480>;
 	height = <272>;
 	pixel-format = <PANEL_PIXEL_FORMAT_RGB_888>;
+
+	def-back-color-red = <0xff>;
+	def-back-color-green = <0xff>;
+	def-back-color-blue = <0xff>;
+
+	status = "okay";
 
 	display-timings {
 		compatible = "zephyr,panel-timing";
@@ -279,10 +295,6 @@ csi_interface: &dcmipp {
 		hfront-porch = <32>;
 		vfront-porch = <2>;
 	};
-
-	def-back-color-red = <0xff>;
-	def-back-color-green = <0xff>;
-	def-back-color-blue = <0xff>;
 };
 
 /*
@@ -306,18 +318,24 @@ csi_interface: &dcmipp {
 		     &eth1_ref_clk_pa1
 		     &eth1_rxd0_pc4
 		     &eth1_rxd1_pc5
-		     &eth1_crs_dv_pc1>;
+		     &eth1_crs_dv_pc1
+		     &eth1_mdio_pa2
+		     &eth1_mdc_pg2>;
 	pinctrl-names = "default";
 	phy-connection-type = "rmii";
 	phy-handle = <&eth_phy0>;
 	memory-regions = <&eth_ram>;
+	nvmem-cells = <&ethernet_mac1_address>;
+	nvmem-cell-names = "mac-address";
 
 	status = "okay";
 };
 
+&ptp_clock0 {
+	status = "okay";
+};
+
 &mdio0 {
-	pinctrl-0 = <&eth1_mdio_pa2 &eth1_mdc_pg2>;
-	pinctrl-names = "default";
 	status = "okay";
 
 	eth_phy0: ethernet-phy@0 {
@@ -332,6 +350,10 @@ csi_interface: &dcmipp {
 	status = "okay";
 };
 
+&hash {
+	status = "okay";
+};
+
 &mac1 {
 	pinctrl-0 = <&eth2_txd0_pf7
 		     &eth2_txd1_pg11
@@ -339,19 +361,25 @@ csi_interface: &dcmipp {
 		     &eth2_clk_pg8
 		     &eth2_rxd0_pf4
 		     &eth2_rxd1_pe2
-		     &eth2_crs_dv_pa12>;
+		     &eth2_crs_dv_pa12
+		     &eth2_mdio_pb2
+		     &eth2_mdc_pg5>;
 	pinctrl-names = "default";
 	phy-connection-type = "rmii";
 	phy-handle = <&eth_phy1>;
 	memory-regions = <&eth_ram>;
+	nvmem-cells = <&ethernet_mac2_address>;
+	nvmem-cell-names = "mac-address";
 	st,ext-phyclk;
 
 	status = "okay";
 };
 
+&ptp_clock1 {
+	status = "okay";
+};
+
 &mdio1 {
-	pinctrl-0 = <&eth2_mdio_pb2 &eth2_mdc_pg5>;
-	pinctrl-names = "default";
 	status = "okay";
 
 	eth_phy1: ethernet-phy@0 {

@@ -5,7 +5,7 @@
  */
 
 /dts-v1/;
-#include <espressif/esp32s3/esp32s3_r2.dtsi>
+#include <espressif/esp32s3/esp32s3.dtsi>
 #include <espressif/partitions_0x0_amp_4M.dtsi>
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 #include <zephyr/dt-bindings/led/led.h>
@@ -13,8 +13,8 @@
 #include "esp32s3_matrix-pinctrl.dtsi"
 
 / {
-	model = "ESP32-S3-Matrix PROCPU";
 	compatible = "waveshare,esp32-s3-matrix";
+	model = "ESP32-S3-Matrix PROCPU";
 
 	aliases {
 		sw0 = &button0;
@@ -44,17 +44,21 @@
 
 	rgb_matrix: rgb-matrix {
 		compatible = "led-strip-matrix";
-		status = "okay";
 		width = <8>;
 		height = <8>;
 		circulative;
 		led-strips = <&led_strip>;
+		status = "okay";
 	};
 };
 
 &flash0 {
 	reg = <0x0 DT_SIZE_M(4)>;
 	ranges = <0x0 0x0 DT_SIZE_M(4)>;
+};
+
+&psram0 {
+	size = <DT_SIZE_M(2)>;
 };
 
 &gpio0 {
@@ -66,12 +70,12 @@
 };
 
 &spi2 {
-	status = "okay";
 	#address-cells = <1>;
 	#size-cells = <0>;
 	pinctrl-0 = <&spim2_ws2812_led>;
 	pinctrl-names = "default";
 	line-idle-low;
+	status = "okay";
 
 	led_strip: ws2812@0 {
 		compatible = "worldsemi,ws2812-spi";

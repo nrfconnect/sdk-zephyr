@@ -5,7 +5,7 @@ canopen
 clang-format>=15.0.0
 elasticsearch<9
 exceptiongroup>=1.0.0rc8
-gcovr==6.0
+gcovr==8.6
 gitlint-core>=0.19.1
 gitpython>=3.1.50
 ijson
@@ -27,9 +27,11 @@ python-dotenv
 python-magic-bin; sys_platform == "win32"
 python-magic; sys_platform != "win32"
 pyyaml>=5.4
-reuse
+reuse @ https://github.com/fsfe/reuse-tool/archive/f94ae0b1bb1d4d2ea91f49df88f3184c5d781a1d.tar.gz \
+        --hash=sha256:aa155da6b54c41b0bb7a5652a571a9187c019d71f3b1bb63469acc738cf4e811
 ruff==0.14.2
 setuptools>=70.2.0
+spdx-python-model
 spdx-tools
 spdx3-validate
 sphinx-lint
@@ -37,7 +39,7 @@ tabulate
 tox
 tqdm>=4.67.1
 tree-sitter-cmake
-tree-sitter>=0.23
+tree-sitter>=0.23,<0.26
 unidiff
 vermin
 west>=0.14.0

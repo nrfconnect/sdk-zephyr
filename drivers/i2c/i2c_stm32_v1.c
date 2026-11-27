@@ -10,20 +10,22 @@
 
 #include <zephyr/drivers/clock_control/stm32_clock_control.h>
 #include <zephyr/drivers/clock_control.h>
-#include <zephyr/sys/util.h>
+#include <zephyr/drivers/i2c.h>
 #include <zephyr/kernel.h>
+#include <zephyr/logging/log.h>
+#include <zephyr/pm/device_runtime.h>
+#include <zephyr/sys/util.h>
+
 #include <soc.h>
 #include <stm32_bitops.h>
 #include <stm32_ll_i2c.h>
-#include <errno.h>
-#include <zephyr/drivers/i2c.h>
 
-#define LOG_LEVEL CONFIG_I2C_LOG_LEVEL
-#include <zephyr/logging/log.h>
-LOG_MODULE_REGISTER(i2c_ll_stm32_v1);
+#include <errno.h>
 
 #include "i2c_stm32.h"
 #include "i2c-priv.h"
+
+LOG_MODULE_REGISTER(i2c_ll_stm32_v1, CONFIG_I2C_LOG_LEVEL);
 
 #define I2C_STM32_TIMEOUT_USEC  1000
 #define I2C_REQUEST_WRITE       0x00
@@ -514,7 +516,10 @@ int i2c_stm32_target_register(const struct device *dev, struct i2c_target_config
 
 	bitrate_cfg = i2c_map_dt_bitrate(cfg->bitrate);
 
+	k_sem_take(&data->bus_mutex, K_FOREVER);
 	ret = i2c_stm32_runtime_configure(dev, bitrate_cfg);
+	k_sem_give(&data->bus_mutex);
+
 	if (ret < 0) {
 		LOG_ERR("i2c: failure initializing");
 		return ret;
@@ -522,7 +527,7 @@ int i2c_stm32_target_register(const struct device *dev, struct i2c_target_config
 
 	ret = pm_device_runtime_get(dev);
 	if (ret < 0) {
-		LOG_ERR("i2c: PM runtime failure: %d", ret);
+		LOG_ERR_PM_DEVICE_RUNTIME_GET(dev, ret);
 		return ret;
 	}
 
@@ -699,16 +704,17 @@ end:
 static int32_t i2c_stm32_msg_write(const struct device *dev, struct i2c_msg *msg,
 				   uint8_t *next_msg_flags, uint16_t saddr)
 {
+	const struct i2c_stm32_config *cfg = dev->config;
 	struct i2c_stm32_data *data = dev->data;
 
 	msg_init(dev, msg, next_msg_flags, saddr, I2C_REQUEST_WRITE);
 
 	i2c_stm32_enable_transfer_interrupts(dev);
 
-	if (k_sem_take(&data->device_sync_sem, I2C_TRANSFER_TIMEOUT) != 0) {
+	if (k_sem_take(&data->device_sync_sem, cfg->transfer_timeout) != 0) {
 		LOG_DBG("%s: WRITE timeout", __func__);
 		i2c_stm32_reset(dev);
-		return -EIO;
+		return -ETIMEDOUT;
 	}
 
 	return msg_end(dev, next_msg_flags, __func__);
@@ -726,10 +732,10 @@ static int32_t i2c_stm32_msg_read(const struct device *dev, struct i2c_msg *msg,
 	i2c_stm32_enable_transfer_interrupts(dev);
 	LL_I2C_EnableIT_RX(i2c);
 
-	if (k_sem_take(&data->device_sync_sem, I2C_TRANSFER_TIMEOUT) != 0) {
+	if (k_sem_take(&data->device_sync_sem, cfg->transfer_timeout) != 0) {
 		LOG_DBG("%s: READ timeout", __func__);
 		i2c_stm32_reset(dev);
-		return -EIO;
+		return -ETIMEDOUT;
 	}
 
 	return msg_end(dev, next_msg_flags, __func__);

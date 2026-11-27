@@ -98,6 +98,11 @@ def test_get_all_testsuites_short(class_testplan, all_testsuites_dict):
                       'test_d.check_1.unit_1b',
                       'test_e.check_1.feature5.1a',
                       'test_e.check_1.feature5.1b',
+                      'test_e.check_1.feature6.normal_case',
+                      'test_e.check_1.feature7.plain_case',
+                      'test_e.check_1.feature7.static_case',
+                      'test_e.check_1.feature7.static_fixture_case',
+                      'test_e.check_1.feature7.static_other_file',
                       'test_config.main']
 
     assert sorted(plan.get_all_tests()) == sorted(expected_tests)
@@ -633,6 +638,66 @@ def test_testplan_parse_configuration(tmp_path, config_yaml, expected_scenarios)
             assert expected_scenarios == {}
         for level in testplan.levels:
             assert sorted(level.scenarios) == sorted(expected_scenarios[level.name])
+
+
+def test_testplan_parse_build_toolchains(tmp_path):
+    tmp_config_file = tmp_path / 'config_file.yaml'
+    tmp_config_file.write_text(
+"""\
+platforms:
+  build_toolchains:
+    plat1:
+      - host/gnu
+      - host/llvm
+"""
+    )
+
+    tc = TestConfiguration(tmp_config_file)
+    assert tc.build_toolchains == {'plat1': ['host/gnu', 'host/llvm']}
+
+
+def test_testplan_parse_build_toolchains_default(tmp_path):
+    tmp_config_file = tmp_path / 'config_file.yaml'
+    tmp_config_file.write_text('platforms:\n  increased_platform_scope: true\n')
+
+    tc = TestConfiguration(tmp_config_file)
+    assert tc.build_toolchains == {}
+
+
+TESTDATA_TOOLCHAINS = [
+    # testsuite integration_toolchains win over everything else
+    (['zephyr', 'llvm'], ['host/gnu'], None, 'arm', ['zephyr', 'llvm']),
+    # platform build_toolchains multiply the builds
+    ([], ['host/gnu', 'host/llvm'], None, 'posix', ['host/gnu', 'host/llvm']),
+    # posix/unit platforms default to a single host toolchain
+    ([], [], None, 'posix', ['host/gnu']),
+    # otherwise the platform's preferred toolchain, then the environment's
+    ([], [], 'gnuarmemb', 'arm', ['gnuarmemb']),
+    ([], [], None, 'arm', ['zephyr/gnu']),
+]
+
+@pytest.mark.parametrize(
+    'integration_toolchains, build_toolchains, preferred_toolchain, arch, expected',
+    TESTDATA_TOOLCHAINS,
+    ids=['integration', 'build_toolchains', 'posix default', 'preferred', 'environment']
+)
+def test_testplan_get_toolchains(
+    integration_toolchains,
+    build_toolchains,
+    preferred_toolchain,
+    arch,
+    expected
+):
+    testplan = TestPlan(env=mock_twister_env())
+    testplan.env.toolchain = 'zephyr/gnu'
+    ts = mock.Mock(integration_toolchains=integration_toolchains)
+    plat = mock.Mock(
+        build_toolchains=build_toolchains,
+        preferred_toolchain=preferred_toolchain,
+        arch=arch
+    )
+
+    assert testplan.get_toolchains(ts, plat) == expected
 
 
 TESTDATA_2 = [
@@ -1284,6 +1349,7 @@ def test_testplan_add_configurations(
     testplan.test_config = mock.Mock()
     testplan.test_config.override_default_platforms = override_default_platforms
     testplan.test_config.default_platforms = ['p3', 'p1e1']
+    testplan.test_config.build_toolchains = {}
 
     def mock_gen_plat(board_roots, soc_roots, arch_roots):
         assert [tmp_path] == board_roots
@@ -1643,9 +1709,11 @@ def test_testplan_load_from_file(caplog, device_testing, expected_tfilter):
     ts1 = mock.Mock(testcases=[ts1tc1])
     ts1.name = 'TestSuite 1'
     ts1.toolchain = 'zephyr'
+    ts1.required_applications = []
     ts2 = mock.Mock(testcases=[])
     ts2.name = 'TestSuite 2'
     ts2.toolchain = 'zephyr'
+    ts2.required_applications = []
     ts3tc1 = mock.Mock()
     ts3tc1.name = 'TS3.tc1'
     ts3tc2 = mock.Mock()
@@ -1653,14 +1721,17 @@ def test_testplan_load_from_file(caplog, device_testing, expected_tfilter):
     ts3 = mock.Mock(testcases=[ts3tc1, ts3tc2])
     ts3.name = 'TestSuite 3'
     ts3.toolchain = 'zephyr'
+    ts3.required_applications = []
     ts4tc1 = mock.Mock()
     ts4tc1.name = 'TS4.tc1'
     ts4 = mock.Mock(testcases=[ts4tc1])
     ts4.name = 'TestSuite 4'
     ts4.toolchain = 'zephyr'
+    ts4.required_applications = []
     ts5 = mock.Mock(testcases=[])
     ts5.name = 'TestSuite 5'
     ts5.toolchain = 'zephyr'
+    ts5.required_applications = []
 
     env = mock_twister_env()
     env.outdir = os.path.join('out', 'dir')
@@ -1704,7 +1775,9 @@ def test_testplan_load_from_file(caplog, device_testing, expected_tfilter):
         {
             "name": "TestSuite 2",
             "platform": "Platform 1",
-            "toolchain": "zephyr"
+            "toolchain": "zephyr",
+            "status": null,
+            "reason": "Unknown Instance status"
         },
         {
             "name": "TestSuite 3",
@@ -1801,6 +1874,8 @@ def test_testplan_load_from_file(caplog, device_testing, expected_tfilter):
                 'available_ram': 0,
                 'available_rom': 0
             },
+            'status': TwisterStatus.NONE,
+            'reason': None,
             'retries': 0,
             'toolchain': 'zephyr',
             'testcases': []
@@ -1854,6 +1929,9 @@ def test_testplan_load_from_file(caplog, device_testing, expected_tfilter):
     for n, i in testplan.instances.items():
         assert expected_instances[n]['metrics'] == i.metrics
         assert expected_instances[n]['retries'] == i.retries
+        if 'status' in expected_instances[n]:
+            assert expected_instances[n]['status'] == i.status
+            assert expected_instances[n]['reason'] == i.reason
         for t in i.testcases:
             assert expected_instances[n]['testcases'][str(t)]['status'] == t.status
             assert expected_instances[n]['testcases'][str(t)]['reason'] == t.reason

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <nxp/nxp_imx/rt/MIMXRT685SFVKB-pinctrl.h>
+#include <nxp/imxrt/imxrt6xx/pinctrl/MIMXRT685SFVKB-pinctrl.h>
 #include <zephyr/dt-bindings/gpio/gpio.h>
 
 /*
@@ -40,7 +40,6 @@
 &acmp {
 	pinctrl-0 = <&acmp_default>;
 	pinctrl-names = "default";
-	status = "okay";
 
 	positive-mux-input = "IN1";
 	positive-port-input = "MUX";
@@ -52,4 +51,5 @@
 	dac-vref-source = "VIN2";
 	dac-value = <127>;
 	dac-enable;
+	status = "okay";
 };

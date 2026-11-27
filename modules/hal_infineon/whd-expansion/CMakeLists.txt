@@ -1,12 +1,12 @@
-# SPDX-FileCopyrightText: <text>Copyright (c) 2026 Infineon Technologies AG,
-# or an affiliate of Infineon Technologies AG. All rights reserved.</text>
+# SPDX-FileCopyrightText: Copyright (c) 2026 Infineon Technologies AG,
+# SPDX-FileCopyrightText: or an affiliate of Infineon Technologies AG. All rights reserved.
 #
 # SPDX-License-Identifier: Apache-2.0
 
 if(CONFIG_AIROC_WIFI6)
-    set(whd_wifi_ver COMPONENT_WIFI6)
+  set(whd_wifi_ver COMPONENT_WIFI6)
 else()
-    set(whd_wifi_ver COMPONENT_WIFI5)
+  set(whd_wifi_ver COMPONENT_WIFI5)
 endif()
 
 set(hal_dir                  ${ZEPHYR_HAL_INFINEON_MODULE_DIR})
@@ -302,6 +302,18 @@ if(CONFIG_CYW55513_MURATA_2FY_SM AND NOT CONFIG_AIROC_WIFI_CUSTOM)
   set(NVRAM_IMAGE_NAME ${hal_wifi_dir_resources}/nvram/COMPONENT_55500/COMPONENT_MURATA-2FY/cyw55500-sdio-mur-2FY.txt)
 endif()
 
+# CYW55513_MOD_PSE84_SOM clm, nvram
+if(CONFIG_CYW55513_MOD_PSE84_SOM AND NOT CONFIG_AIROC_WIFI_CUSTOM)
+  # clm
+  if(CONFIG_AIROC_WLAN_MFG_FIRMWARE)
+    set(CLM_IMAGE_NAME ${hal_blobs_dir}/clm/COMPONENT_55500/COMPONENT_CYW55513_MOD_PSE84_SOM/55500A1-mfgtest.clm_blob)
+  else()
+    set(CLM_IMAGE_NAME ${hal_blobs_dir}/clm/COMPONENT_55500/COMPONENT_CYW55513_MOD_PSE84_SOM/55500A1.clm_blob)
+  endif()
+  # nvram
+  set(NVRAM_IMAGE_NAME ${hal_wifi_dir_resources}/nvram/COMPONENT_55500/COMPONENT_CYW55513_MOD_PSE84_SOM/cyw55513modpse84som_rev3.txt)
+endif()
+
 # CYW955573M2IPA1_SM
 if(CONFIG_CYW955573M2IPA1_SM AND NOT CONFIG_AIROC_WIFI_CUSTOM)
   # clm
@@ -315,29 +327,37 @@ if(CONFIG_CYW955573M2IPA1_SM AND NOT CONFIG_AIROC_WIFI_CUSTOM)
   set(NVRAM_IMAGE_NAME ${hal_wifi_dir_resources}/nvram/COMPONENT_55572/COMPONENT_CYW955573M2IPA1/cyw955573m2ipa1_rev1.01.txt)
 endif()
 
-# set fw size
-file(SIZE ${FW_IMAGE_NAME} FW_IMAGE_SIZE)
-zephyr_compile_definitions(FW_IMAGE_NAME="${FW_IMAGE_NAME}")
-zephyr_compile_definitions(FW_IMAGE_SIZE=${FW_IMAGE_SIZE})
+############################################################################################################
+## Generate include files for fw/clm/nvram
+############################################################################################################
 
-# set clm size
-file(SIZE ${CLM_IMAGE_NAME} CLM_IMAGE_SIZE)
-zephyr_compile_definitions(CLM_IMAGE_NAME="${CLM_IMAGE_NAME}")
-zephyr_compile_definitions(CLM_IMAGE_SIZE=${CLM_IMAGE_SIZE})
+if(CONFIG_AIROC_WIFI_CUSTOM)
+  zephyr_compile_definitions(RESOURCE_READ_FROM_C_FILE)
+else()
+  # set fw size
+  file(SIZE ${FW_IMAGE_NAME} FW_IMAGE_SIZE)
+  zephyr_compile_definitions(FW_IMAGE_NAME="${FW_IMAGE_NAME}")
+  zephyr_compile_definitions(FW_IMAGE_SIZE=${FW_IMAGE_SIZE})
 
-# set nvram size
-file(SIZE ${NVRAM_IMAGE_NAME} NVRAM_IMAGE_SIZE)
-zephyr_compile_definitions(NVRAM_IMAGE_NAME="${NVRAM_IMAGE_NAME}")
-zephyr_compile_definitions(NVRAM_IMAGE_SIZE=${NVRAM_IMAGE_SIZE})
+  # set clm size
+  file(SIZE ${CLM_IMAGE_NAME} CLM_IMAGE_SIZE)
+  zephyr_compile_definitions(CLM_IMAGE_NAME="${CLM_IMAGE_NAME}")
+  zephyr_compile_definitions(CLM_IMAGE_SIZE=${CLM_IMAGE_SIZE})
 
-# generate FW inc_blob from fw_bin
-if(EXISTS ${airoc_wifi_fw_bin})
-  message(INFO " generate include of blob FW file: ${airoc_wifi_fw_bin}")
-  generate_inc_file_for_target(app ${airoc_wifi_fw_bin} ${airoc_wifi_fw_bin_gen_inc})
-endif()
+  # set nvram size
+  file(SIZE ${NVRAM_IMAGE_NAME} NVRAM_IMAGE_SIZE)
+  zephyr_compile_definitions(NVRAM_IMAGE_NAME="${NVRAM_IMAGE_NAME}")
+  zephyr_compile_definitions(NVRAM_IMAGE_SIZE=${NVRAM_IMAGE_SIZE})
 
-# generate CLM inc_blob from clm_bin
-if(EXISTS ${airoc_wifi_clm_bin})
-  message(INFO " generate include of blob CLM file: ${airoc_wifi_clm_bin}")
-  generate_inc_file_for_target(app ${airoc_wifi_clm_bin} ${airoc_wifi_clm_bin_gen_inc})
+  # generate FW inc_blob from fw_bin
+  if(EXISTS ${airoc_wifi_fw_bin})
+    message(INFO " generate include of blob FW file: ${airoc_wifi_fw_bin}")
+    generate_inc_file_for_target(app ${airoc_wifi_fw_bin} ${airoc_wifi_fw_bin_gen_inc})
+  endif()
+
+  # generate CLM inc_blob from clm_bin
+  if(EXISTS ${airoc_wifi_clm_bin})
+    message(INFO " generate include of blob CLM file: ${airoc_wifi_clm_bin}")
+    generate_inc_file_for_target(app ${airoc_wifi_clm_bin} ${airoc_wifi_clm_bin_gen_inc})
+  endif()
 endif()

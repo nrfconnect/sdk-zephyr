@@ -71,6 +71,27 @@ class SocBoardFilesProcessing:
     priority: int = IGNORED_RUN_ONCE_PRIORITY
     yaml: object = None
 
+
+def zephyr_base_abs_path(dir: Path, file: Path) -> Path:
+    return dir / file if dir.is_absolute() else ZEPHYR_BASE / dir / file
+
+
+def gather_runner_policy_files(cache, processed_socs, processed_boards, check_files):
+    for directory in cache.get_list('SOC_DIRECTORIES'):
+        soc_yml = zephyr_base_abs_path(Path(directory), Path('soc.yml'))
+        soc_dir = soc_yml.parent.resolve()
+        if soc_dir not in processed_socs:
+            check_files.append(SocBoardFilesProcessing(soc_yml))
+            processed_socs.add(soc_dir)
+
+    for directory in cache.get_list('BOARD_DIRECTORIES'):
+        board_yml = zephyr_base_abs_path(Path(directory), Path('board.yml'))
+        board_dir = board_yml.parent.resolve()
+        if board_dir not in processed_boards:
+            check_files.append(SocBoardFilesProcessing(board_yml, True))
+            processed_boards.add(board_dir)
+
+
 def import_from_path(module_name, file_path):
     spec = importlib.util.spec_from_file_location(module_name, file_path)
     module = importlib.util.module_from_spec(spec)
@@ -104,10 +125,7 @@ def add_parser_common(command, parser_adder=None, parser=None):
                        help='override default runner from --build-dir')
     group.add_argument('--domain', action='append',
                        help='execute runner only for given domain')
-    rebuild_group = group.add_mutually_exclusive_group()
-    rebuild_group.add_argument('--skip-rebuild', action='store_true',
-                       help='(deprecated) do not invoke cmake')
-    rebuild_group.add_argument('--rebuild', action=argparse.BooleanOptionalAction,
+    group.add_argument('--rebuild', action=argparse.BooleanOptionalAction,
                        help='manually specify to reinvoke cmake or not')
 
     group = parser.add_argument_group(
@@ -173,6 +191,16 @@ def get_domains_to_process(build_dir, args, domain_file, get_all_domain=False):
         # Use domains from domain file with flash order
         return domains.get_domains(args.domain, default_flash_order=True)
 
+def filter_used_cmds(used_cmds, board_names):
+    # Reduce entries to only those having matching board names (either exact or with regex) and
+    # remove any entries with empty board lists
+    for entry in used_cmds:
+        entry.boards = [match for match in entry.boards
+                        if any(re.match(fr'^{match}$', check) is not None
+                               for check in board_names)]
+
+    return [entry for entry in used_cmds if len(entry.boards) > 0]
+
 def do_run_common(command, user_args, user_runner_args, domain_file=None):
     # This is the main routine for all the "west flash", "west debug",
     # etc. commands.
@@ -187,7 +215,9 @@ def do_run_common(command, user_args, user_runner_args, domain_file=None):
     # interfere with other images if they run one per time an image is flashed.
     used_cmds = []
 
-    # Holds a set of processed board names for flash running information.
+    # Holds the SoC and board directories already gathered for flash
+    # running information, so that each is only processed once.
+    processed_socs = set()
     processed_boards = set()
 
     # Holds a dictionary of board image flash counts, the first element is
@@ -218,6 +248,10 @@ def do_run_common(command, user_args, user_runner_args, domain_file=None):
 
     domains = get_domains_to_process(build_dir, user_args, domain_file)
 
+    # Must be defined even for a single domain so the filter_used_cmds() call
+    # below always has a board set to work with.
+    board_names = set()
+
     if len(domains) > 1:
         if len(user_runner_args) > 0:
             command.wrn("Specifying runner options for multiple domains is experimental.\n"
@@ -226,7 +260,6 @@ def do_run_common(command, user_args, user_runner_args, domain_file=None):
 
         # Process all domains to load board names and populate flash runner
         # parameters.
-        board_names = set()
         for d in domains:
             if d.build_dir is None:
                 build_dir = get_build_dir(user_args, config=command.config)
@@ -242,15 +275,7 @@ def do_run_common(command, user_args, user_runner_args, domain_file=None):
             # Load board flash runner configuration (if it exists) and store
             # single-use commands in a dictionary so that they get executed
             # once per unique board name.
-            for directory in cache.get_list('SOC_DIRECTORIES'):
-                if directory not in processed_boards:
-                    check_files.append(SocBoardFilesProcessing(Path(directory) / 'soc.yml'))
-                    processed_boards.add(directory)
-
-            for directory in cache.get_list('BOARD_DIRECTORIES'):
-                if directory not in processed_boards:
-                    check_files.append(SocBoardFilesProcessing(Path(directory) / 'board.yml', True))
-                    processed_boards.add(directory)
+            gather_runner_policy_files(cache, processed_socs, processed_boards, check_files)
 
         for check in check_files:
             try:
@@ -275,6 +300,8 @@ def do_run_common(command, user_args, user_runner_args, domain_file=None):
                         highest_entry = check
 
             except FileNotFoundError:
+                command.dbg(f'no runner policy file at {check.filename}',
+                            level=Verbosity.DBG_MORE)
                 continue
 
         if highest_entry is not None:
@@ -295,23 +322,7 @@ def do_run_common(command, user_args, user_runner_args, domain_file=None):
 
                         used_cmds.append(UsedFlashCommand(cmd, targets, data['runners'], run_first))
 
-    # Reduce entries to only those having matching board names (either exact or with regex) and
-    # remove any entries with empty board lists
-    for i, entry in enumerate(used_cmds):
-        for l, match in enumerate(entry.boards):
-            match_found = False
-
-            # Check if there is a matching board for this regex
-            for check in board_names:
-                if re.match(fr'^{match}$', check) is not None:
-                    match_found = True
-                    break
-
-            if not match_found:
-                del entry.boards[l]
-
-        if len(entry.boards) == 0:
-            del used_cmds[i]
+    used_cmds = filter_used_cmds(used_cmds, board_names)
 
     # Set up runner logging to delegate to the WestCommand logging methods.
     forward_logging_to_west(command, 'runners')
@@ -404,7 +415,7 @@ def do_run_common_image(command, user_args, user_runner_args, used_cmds,
     # the board has enabled this functionality, check if the board should be
     # reset or not. If this is not specified in the board/soc file, leave it up to
     # the runner's default configuration to decide if a reset should occur.
-    if runner_cls.capabilities().reset and '--no-reset' not in final_argv:
+    if command_name != 'attach' and runner_cls.capabilities().reset and '--no-reset' not in final_argv:
         if board_image_count is not None:
             reset = True
 
@@ -544,10 +555,6 @@ def load_cmake_cache(build_dir, args):
 def skip_rebuild(command, args):
     if args.rebuild is not None:
         return not args.rebuild
-
-    if args.skip_rebuild:
-        command.wrn("--skip-rebuild is deprecated. Please use --no-rebuild instead")
-        return True
 
     rebuild_config = command.config.getboolean(f'{command.name}.rebuild', default=None)
 

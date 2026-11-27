@@ -10,6 +10,7 @@ Protocols
    coap
    coap_client
    coap_server
+   coap_oscore
    ftp_client
    http_client
    http_server
@@ -18,5 +19,6 @@ Protocols
    mqtt
    mqtt_sn
    ocpp
+   rtp
    tftp
    latmon

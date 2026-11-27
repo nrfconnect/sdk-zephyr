@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024-2025 Renesas Electronics Corporation
+ * Copyright (c) 2024-2026 Renesas Electronics Corporation
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -7,19 +7,20 @@
 
 #include <renesas/ra/ra8/r7fa8m1ahecbd.dtsi>
 #include <zephyr/dt-bindings/gpio/gpio.h>
-#include <zephyr/dt-bindings/flash_controller/xspi.h>
+#include <zephyr/dt-bindings/flash_controller/ospi.h>
 #include <zephyr/dt-bindings/adc/adc.h>
+#include <zephyr/dt-bindings/gpio/mikro-bus.h>
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 #include "ek_ra8m1-pinctrl.dtsi"
 
 / {
-	model = "Renesas EK-RA8M1";
 	compatible = "renesas,ra8m1", "renesas,ra8";
+	model = "Renesas EK-RA8M1";
 
 	chosen {
 		zephyr,sram = &sram0;
-		zephyr,flash-controller = &flash1;
-		zephyr,flash = &flash0;
+		zephyr,flash-controller = &code_flash_ctrl;
+		zephyr,flash = &code_flash;
 		zephyr,console = &uart9;
 		zephyr,shell-uart = &uart9;
 		zephyr,entropy = &trng;
@@ -51,20 +52,20 @@
 		#gpio-cells = <2>;
 		gpio-map-mask = <0xffffffff 0xffffffc0>;
 		gpio-map-pass-thru = <0 0x3f>;
-		gpio-map = <0 0 &ioport0 4 0>,	/* AN  */
-			   <1 0 &ioport5 2 0>,	/* RST */
-			   <2 0 &ioport4 13 0>,	/* CS   */
-			   <3 0 &ioport4 12 0>,	/* SCK  */
-			   <4 0 &ioport4 10 0>,	/* MISO */
-			   <5 0 &ioport4 11 0>,	/* MOSI */
+		gpio-map = <MIKROBUS_AN 0 &ioport0 4 0>,
+			   <MIKROBUS_RST 0 &ioport5 2 0>,
+			   <MIKROBUS_CS 0 &ioport4 13 0>,
+			   <MIKROBUS_SCK 0 &ioport4 12 0>,
+			   <MIKROBUS_MISO 0 &ioport4 10 0>,
+			   <MIKROBUS_MOSI 0 &ioport4 11 0>,
 			   /* +3.3V */
 			   /* GND */
-			   <6 0 &ioport9 7 0>,	/* PWM  */
-			   <7 0 &ioport0 10 0>,	/* INT  */
-			   <8 0 &ioport3 9 0>,	/* RX   */
-			   <9 0 &ioport3 10 0>,	/* TX   */
-			   <10 0 &ioport4 0 0>,	/* SCL  */
-			   <11 0 &ioport4 1 0>;	/* SDA  */
+			   <MIKROBUS_PWM 0 &ioport9 7 0>,
+			   <MIKROBUS_INT 0 &ioport0 10 0>,
+			   <MIKROBUS_RX 0 &ioport3 9 0>,
+			   <MIKROBUS_TX 0 &ioport3 10 0>,
+			   <MIKROBUS_SCL 0 &ioport4 0 0>,
+			   <MIKROBUS_SDA 0 &ioport4 1 0>;
 		/* +5V */
 		/* GND */
 	};
@@ -121,6 +122,8 @@
 		sw1 = &button1;
 		watchdog0 = &wdt;
 		adc0 = &adc0;
+		lin0 = &lin0;
+		i2c-0 = &iic1;
 	};
 
 	transceiver0: can-phy0 {
@@ -166,15 +169,15 @@
 };
 
 &pll2 {
-	status = "okay";
 	clocks = <&xtal>;
 	div = <2>;
 	mul = <80 0>;
+	status = "okay";
 
 	pll2p {
-		status = "okay";
 		freq = <DT_FREQ_M(400)>;
 		div = <2>;
+		status = "okay";
 	};
 };
 
@@ -265,6 +268,8 @@
 		current-speed = <115200>;
 		status = "okay";
 	};
+
+	lin0: lin {};
 };
 
 &sci1 {
@@ -315,19 +320,22 @@ mikrobus_serial: &uart3 {};
 
 mikrobus_spi: &spi1 {};
 
+mikrobus_lin: &lin0 {};
+
 &iic1 {
 	#address-cells = <1>;
 	#size-cells = <0>;
 	clock-frequency = <I2C_BITRATE_FAST_PLUS>;
 	pinctrl-0 = <&iic1_default>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &adc0 {
-	status = "okay";
 	pinctrl-0 = <&adc0_default>;
 	pinctrl-names = "default";
 	average-count = <4>;
+	status = "okay";
 };
 
 &dac0 {
@@ -364,15 +372,16 @@ mikrobus_spi: &spi1 {};
 	status = "okay";
 };
 
-&flash1 {
+&data_flash {
 	partitions {
-		compatible = "fixed-partitions";
+		ranges;
 		#address-cells = <1>;
 		#size-cells = <1>;
 
 		storage_partition: partition@0 {
-			label = "storage";
+			compatible = "zephyr,mapped-partition";
 			reg = <0x0 DT_SIZE_K(12)>;
+			label = "storage";
 		};
 	};
 };
@@ -399,12 +408,14 @@ pmod_header: &pmod1_header {};
 
 &eth {
 	local-mac-address = [74 90 50 b0 6d 5a];
-	status = "okay";
 	phy-handle = <&phy>;
+	pinctrl-0 = <&ether_default>;
+	pinctrl-names = "default";
+	status = "okay";
 };
 
 &mdio {
-	pinctrl-0 = <&ether_default>;
+	pinctrl-0 = <&mdio_default>;
 	pinctrl-names = "default";
 	status = "okay";
 
@@ -446,6 +457,11 @@ pmod_sd_shield: &sdhc0 {};
 	pinctrl-0 = <&usbfs_default>;
 	pinctrl-names = "default";
 	maximum-speed = "full-speed";
+	status = "okay";
+
+	zephyr_uhc0: uhc {
+		status = "okay";
+	};
 };
 
 &wdt {
@@ -471,43 +487,31 @@ pmod_sd_shield: &sdhc0 {};
 &ospi0 {
 	pinctrl-0 = <&ospi0_default>;
 	pinctrl-names = "default";
+	ddr-sampling-extension = <7>;
 	status = "okay";
 
-	s28hl512t: ospi-nor-flash@90000000 {
+	ext_flash_ctrl: flash-controller@1 {
 		compatible = "renesas,ra-ospi-b-nor";
-		protocol-mode = <XSPI_OCTO_MODE>;
-		data-rate = <XSPI_DTR_TRANSFER>;
-		ospi-max-frequency = <DT_FREQ_M(200)>;
-		reg = <0x90000000 DT_SIZE_M(64)>;
-		write-block-size = <1>;
-		status = "okay";
+		reg = <1>;
+		ranges = <0x0 0x90000000 DT_SIZE_M(64)>;
+		protocol-mode = <OSPI_OPI_MODE>;
+		nor-max-frequency = <DT_FREQ_M(166)>;
+		jedec-id = [34 5a 1a];
+		enter-4byte-command = <0xb7>;
+		default-8d-dummy-cycles = <20>;
+		rdsr-addr-4bytes;
+		#address-cells = <1>;
+		#size-cells = <1>;
+		status = "disabled";
 
-		pages_layout: pages_layout {
-			pages_layout_4k: pages_layout_4k {
-				pages-count = <32>;
-				pages-size = <DT_SIZE_K(4)>;
-			};
-
-			pages_layout_128k: pages_layout_128k {
-				pages-count = <1>;
-				pages-size = <DT_SIZE_K(128)>;
-			};
-
-			pages_layout_256k: pages_layout_256k {
-				pages-count = <255>;
-				pages-size = <DT_SIZE_K(256)>;
-			};
-		};
-
-		partitions {
-			compatible = "fixed-partitions";
+		ext_flash: s28hl512t: nor-flash@0 {
+			compatible = "soc-nv-flash";
+			reg = <0x0 DT_SIZE_M(64)>;
+			ranges = <0x0 0x0 DT_SIZE_M(64)>;
+			write-block-size = <16>;
+			erase-block-size = <DT_SIZE_K(256)>;
 			#address-cells = <1>;
 			#size-cells = <1>;
-
-			partition@0 {
-				label = "nor";
-				reg = <0x00000000 DT_SIZE_M(64)>;
-			};
 		};
 	};
 };

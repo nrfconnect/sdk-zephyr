@@ -1,7 +1,7 @@
 /*
  * Copyright 2022 Google LLC
  * Copyright 2023 Microsoft Corporation
- * Copyright (c) 2025 Philipp Steiner <philipp.steiner1987@gmail.com>
+ * Copyright (c) 2025 Philipp Steiner
  * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  * Copyright (c) 2026 Analog Devices Inc.
  *
@@ -203,6 +203,28 @@ enum fuel_gauge_prop_type {
 };
 
 typedef uint16_t fuel_gauge_prop_t;
+
+/**
+ * @brief Type for custom signed integer property values.
+ *
+ * Used only by downstream custom properties (>= FUEL_GAUGE_CUSTOM_BEGIN).
+ */
+typedef int32_t fuel_gauge_custom_value_int_t;
+
+/**
+ * @brief Type for custom unsigned integer property values.
+ *
+ * Used only by downstream custom properties (>= FUEL_GAUGE_CUSTOM_BEGIN).
+ */
+typedef uint32_t fuel_gauge_custom_value_uint_t;
+
+/**
+ * @brief Type for custom boolean property values.
+ *
+ * Used only by downstream custom properties (>= FUEL_GAUGE_CUSTOM_BEGIN),
+ * typically for feature/status flags.
+ */
+typedef bool fuel_gauge_custom_value_bool_t;
 
 /** Property field to value/type union */
 union fuel_gauge_prop_val {
@@ -427,6 +449,12 @@ union fuel_gauge_prop_val {
 	uint8_t state_of_health;
 	/** FUEL_GAUGE_THERM_VOLTAGE_UV */
 	uint32_t therm_voltage_uv;
+	/** Generic integer value for downstream custom properties */
+	fuel_gauge_custom_value_int_t custom_int;
+	/** Generic unsigned value for downstream custom properties */
+	fuel_gauge_custom_value_uint_t custom_uint;
+	/** Generic boolean value for downstream custom properties */
+	fuel_gauge_custom_value_bool_t custom_bool;
 };
 
 /**
@@ -483,6 +511,15 @@ typedef int (*fuel_gauge_get_buffer_property_t)(const struct device *dev,
 						size_t dst_len);
 
 /**
+ * @brief Callback API for setting a fuel_gauge buffer property.
+ *
+ * See fuel_gauge_set_buffer_prop() for argument description
+ */
+typedef int (*fuel_gauge_set_buffer_property_t)(const struct device *dev,
+						fuel_gauge_prop_t prop_type, const void *src,
+						size_t src_len);
+
+/**
  * @brief Callback API for doing a battery cutoff.
  *
  * See fuel_gauge_battery_cutoff() for argument description
@@ -507,6 +544,8 @@ __subsystem struct fuel_gauge_driver_api {
 	fuel_gauge_set_property_t set_property;
 	/** @driver_ops_optional @copybrief fuel_gauge_get_buffer_prop */
 	fuel_gauge_get_buffer_property_t get_buffer_property;
+	/** @driver_ops_optional @copybrief fuel_gauge_set_buffer_prop */
+	fuel_gauge_set_buffer_property_t set_buffer_property;
 	/** @driver_ops_optional @copybrief fuel_gauge_battery_cutoff */
 	fuel_gauge_battery_cutoff_t battery_cutoff;
 };
@@ -649,6 +688,39 @@ static inline int z_impl_fuel_gauge_get_buffer_prop(const struct device *dev,
 	}
 
 	return api->get_buffer_property(dev, prop_type, dst, dst_len);
+}
+
+/**
+ * @brief Set a battery fuel-gauge buffer property
+ *
+ * Writes a variable length buffer property, such as a configuration image or a manufacturer
+ * defined data block, to the fuel gauge device.
+ *
+ * The source is an opaque, pointer-free byte buffer. When called from user mode, only the
+ * @p src_len bytes starting at @p src are validated before they are handed to the driver, so
+ * the buffer must not contain pointers that the driver dereferences.
+ *
+ * @param dev Pointer to the battery fuel-gauge device
+ * @param prop_type Type of property that is written to the fuel gauge device
+ * @param src Byte buffer holding the data that is written to the fuel gauge
+ * @param src_len Length of the source buffer in bytes
+ *
+ * @return 0 if successful, negative errno code if failure.
+ */
+__syscall int fuel_gauge_set_buffer_prop(const struct device *dev, fuel_gauge_prop_t prop_type,
+					 const void *src, size_t src_len);
+
+static inline int z_impl_fuel_gauge_set_buffer_prop(const struct device *dev,
+						    fuel_gauge_prop_t prop_type, const void *src,
+						    size_t src_len)
+{
+	const struct fuel_gauge_driver_api *api = DEVICE_API_GET(fuel_gauge, dev);
+
+	if (api->set_buffer_property == NULL) {
+		return -ENOSYS;
+	}
+
+	return api->set_buffer_property(dev, prop_type, src, src_len);
 }
 
 /**

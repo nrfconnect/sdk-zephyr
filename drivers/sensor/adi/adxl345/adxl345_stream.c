@@ -11,6 +11,18 @@
 
 LOG_MODULE_DECLARE(ADXL345, CONFIG_SENSOR_LOG_LEVEL);
 
+/*
+ * End the stream with an error. The FIFO may still hold samples above its
+ * watermark, keeping the edge-triggered interrupt line asserted; clearing
+ * fifo_watermark_irq makes the next stream reconfigure and flush the FIFO.
+ */
+static void adxl345_stream_fail(struct adxl345_dev_data *data,
+				struct rtio_iodev_sqe *iodev_sqe, int err)
+{
+	data->fifo_watermark_irq = 0;
+	rtio_iodev_sqe_err(iodev_sqe, err);
+}
+
 void adxl345_submit_stream(const struct device *dev, struct rtio_iodev_sqe *iodev_sqe)
 {
 	const struct sensor_read_config *cfg =
@@ -171,7 +183,7 @@ static void adxl345_process_fifo_samples_cb(struct rtio *r, const struct rtio_sq
 
 	if (rtio_sqe_rx_buf(current_sqe, min_read_size, ideal_read_size, &buf, &buf_len) != 0) {
 		LOG_ERR("Failed to get buffer");
-		rtio_iodev_sqe_err(current_sqe, -ENOMEM);
+		adxl345_stream_fail(data, current_sqe, -ENOMEM);
 		gpio_pin_interrupt_configure_dt(&cfg->interrupt, GPIO_INT_EDGE_TO_ACTIVE);
 		return;
 	}
@@ -203,6 +215,8 @@ static void adxl345_process_fifo_samples_cb(struct rtio *r, const struct rtio_sq
 
 	((struct adxl345_fifo_data *)buf)->fifo_byte_count = read_len;
 
+	uint16_t read_samples = read_len / sample_set_size;
+
 	uint8_t *read_buf = buf + sizeof(*hdr);
 
 	/* Flush completions */
@@ -222,13 +236,14 @@ static void adxl345_process_fifo_samples_cb(struct rtio *r, const struct rtio_sq
 
 	/* Bail/cancel attempt to read sensor on any error */
 	if (res != 0) {
-		rtio_iodev_sqe_err(current_sqe, res);
+		adxl345_stream_fail(data, current_sqe, res);
 		return;
 	}
 
 
-	data->fifo_samples = fifo_samples;
-	for (size_t i = 0; i < fifo_samples; i++) {
+	data->fifo_total_bytes = 0;
+	data->fifo_samples = read_samples;
+	for (size_t i = 0; i < read_samples; i++) {
 		struct rtio_sqe *write_fifo_addr = rtio_sqe_acquire(data->rtio_ctx);
 		struct rtio_sqe *read_fifo_data = rtio_sqe_acquire(data->rtio_ctx);
 
@@ -246,7 +261,7 @@ static void adxl345_process_fifo_samples_cb(struct rtio *r, const struct rtio_sq
 		if (cfg->bus_type == ADXL345_BUS_I2C) {
 			read_fifo_data->iodev_flags |= RTIO_IODEV_I2C_STOP | RTIO_IODEV_I2C_RESTART;
 		}
-		if (i == fifo_samples-1) {
+		if (i == read_samples - 1U) {
 			struct rtio_sqe *complete_op = rtio_sqe_acquire(data->rtio_ctx);
 
 			read_fifo_data->flags |= RTIO_SQE_CHAINED;
@@ -271,6 +286,7 @@ static void adxl345_process_status1_cb(struct rtio *r, const struct rtio_sqe *sq
 	uint8_t status1 = data->status1;
 
 	if (data->sqe == NULL) {
+		data->fifo_watermark_irq = 0;
 		return;
 	}
 
@@ -324,7 +340,7 @@ static void adxl345_process_status1_cb(struct rtio *r, const struct rtio_sqe *sq
 
 	/* Bail/cancel attempt to read sensor on any error */
 	if (res != 0) {
-		rtio_iodev_sqe_err(current_sqe, res);
+		adxl345_stream_fail(data, current_sqe, res);
 		return;
 	}
 
@@ -340,7 +356,7 @@ static void adxl345_process_status1_cb(struct rtio *r, const struct rtio_sqe *sq
 		data->sqe = NULL;
 		if (rtio_sqe_rx_buf(current_sqe, sizeof(struct adxl345_fifo_data),
 				    sizeof(struct adxl345_fifo_data), &buf, &buf_len) != 0) {
-			rtio_iodev_sqe_err(current_sqe, -ENOMEM);
+			adxl345_stream_fail(data, current_sqe, -ENOMEM);
 			gpio_pin_interrupt_configure_dt(&cfg->interrupt, GPIO_INT_EDGE_TO_ACTIVE);
 			return;
 		}
@@ -390,13 +406,14 @@ void adxl345_stream_irq_handler(const struct device *dev)
 	int rc;
 
 	if (data->sqe == NULL) {
+		data->fifo_watermark_irq = 0;
 		return;
 	}
 
 	rc = sensor_clock_get_cycles(&cycles);
 	if (rc != 0) {
 		LOG_ERR("Failed to get sensor clock cycles");
-		rtio_iodev_sqe_err(data->sqe, rc);
+		adxl345_stream_fail(data, data->sqe, rc);
 		return;
 	}
 

@@ -151,6 +151,8 @@ set_property(TARGET compiler-cpp PROPERTY dialect_cpp2b "-std=c++2b"
   "-Wno-register" "-Wno-volatile")
 set_property(TARGET compiler-cpp PROPERTY dialect_cpp23 "-std=c++23"
   "-Wno-register" "-Wno-volatile")
+set_property(TARGET compiler-cpp PROPERTY dialect_cpp26 "-std=c++26"
+  "-Wno-register" "-Wno-volatile")
 
 # Flag for disabling strict aliasing rule in C and C++
 set_compiler_property(PROPERTY no_strict_aliasing -fno-strict-aliasing)
@@ -198,6 +200,7 @@ set_compiler_property(PROPERTY security_canaries -fstack-protector)
 set_compiler_property(PROPERTY security_canaries_strong -fstack-protector-strong)
 set_compiler_property(PROPERTY security_canaries_all -fstack-protector-all)
 set_compiler_property(PROPERTY security_canaries_explicit -fstack-protector-explicit)
+set_compiler_property(PROPERTY security_canaries_none -fno-stack-protector)
 
 # Only a valid option with GCC 7.x and above, so let's do check and set.
 if(CONFIG_STACK_CANARIES_TLS)
@@ -253,10 +256,6 @@ set_compiler_property(PROPERTY linker_script -T)
 
 # Flags to not track macro expansion
 set_compiler_property(PROPERTY no_track_macro_expansion -ftrack-macro-expansion=0)
-
-# GCC 11 by default emits DWARF version 5 which cannot be parsed by
-# pyelftools. Can be removed once pyelftools supports v5.
-check_set_compiler_property(APPEND PROPERTY debug -gdwarf-4)
 
 set_compiler_property(PROPERTY no_common -fno-common)
 
@@ -314,3 +313,6 @@ set_compiler_property(PROPERTY func_instrumentation_exclude_function_list
   "-finstrument-functions-exclude-function-list=${CONFIG_INSTRUMENTATION_EXCLUDE_FUNCTION_LIST}")
 set_compiler_property(PROPERTY func_instrumentation_exclude_file_list
   "-finstrument-functions-exclude-file-list=${CONFIG_INSTRUMENTATION_EXCLUDE_FILE_LIST}")
+
+# Compiler flag to let compiler use __aeabi_read_tp for setting thread pointer for TLS
+check_set_compiler_property(APPEND PROPERTY thread_local_storage -mtp=soft)

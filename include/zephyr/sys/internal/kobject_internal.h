@@ -30,8 +30,10 @@ struct z_stack_data {
 
 /* Object extra data. Only some objects use this, determined by object type */
 union k_object_data {
+#ifdef CONFIG_SYS_MUTEX_IMPL_K_MUTEX
 	/* Backing mutex for K_OBJ_SYS_MUTEX */
 	struct k_mutex *mutex;
+#endif /* CONFIG_SYS_MUTEX_IMPL_K_MUTEX*/
 
 	/* Numerical thread ID for K_OBJ_THREAD */
 	unsigned int thread_id;
@@ -43,9 +45,6 @@ union k_object_data {
 	/* Stack buffer size for K_OBJ_THREAD_STACK_ELEMENT */
 	size_t stack_size;
 #endif /* CONFIG_GEN_PRIV_STACKS */
-
-	/* Futex wait queue and spinlock for K_OBJ_FUTEX */
-	struct z_futex_data *futex_data;
 
 	/* All other objects */
 	int unused;

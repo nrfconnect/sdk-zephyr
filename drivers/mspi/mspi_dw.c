@@ -23,7 +23,7 @@
 
 LOG_MODULE_REGISTER(mspi_dw, CONFIG_MSPI_LOG_LEVEL);
 
-#if defined(CONFIG_MSPI_XIP)
+#if defined(CONFIG_MSPI_MEMMAP)
 struct xip_params {
 	uint32_t read_cmd;
 	uint32_t write_cmd;
@@ -59,7 +59,7 @@ struct mspi_dw_data {
 	/* Active sub-packet fed to start_next_packet(). */
 	struct mspi_xfer_packet sub_pkt;
 
-#if defined(CONFIG_MSPI_XIP)
+#if defined(CONFIG_MSPI_MEMMAP)
 	uint32_t xip_freq;
 	struct xip_params xip_params_stored;
 	struct xip_params xip_params_active;
@@ -121,6 +121,7 @@ struct mspi_dw_config {
 	uint8_t max_queued_dummy_bytes;
 	uint8_t tx_fifo_threshold;
 	uint8_t rx_fifo_threshold;
+	uint8_t rx_sample_dly;
 #ifdef CONFIG_MSPI_DMA
 	uint8_t dma_tx_data_level;
 	uint8_t dma_rx_data_level;
@@ -159,7 +160,7 @@ DEFINE_MM_REG_WR(dmatdlr,	0x50)
 DEFINE_MM_REG_WR(dmardlr,	0x54)
 #endif
 
-#if defined(CONFIG_MSPI_XIP)
+#if defined(CONFIG_MSPI_MEMMAP)
 DEFINE_MM_REG_WR(xip_incr_inst,		0x100)
 DEFINE_MM_REG_WR(xip_wrap_inst,		0x104)
 DEFINE_MM_REG_WR(xip_ctrl,		0x108)
@@ -712,7 +713,7 @@ static bool apply_addr_length(struct mspi_dw_data *dev_data,
 	return true;
 }
 
-#if defined(CONFIG_MSPI_XIP)
+#if defined(CONFIG_MSPI_MEMMAP)
 static bool apply_xip_io_mode(const struct mspi_dw_data *dev_data,
 			      struct xip_ctrl *ctrl)
 {
@@ -839,7 +840,7 @@ static bool apply_xip_addr_length(const struct mspi_dw_data *dev_data,
 
 	return true;
 }
-#endif /* defined(CONFIG_MSPI_XIP) */
+#endif /* defined(CONFIG_MSPI_MEMMAP) */
 
 static int _api_dev_config(const struct device *dev,
 			   const enum mspi_dev_cfg_mask param_mask,
@@ -875,7 +876,7 @@ static int _api_dev_config(const struct device *dev,
 	}
 
 	if (param_mask & MSPI_DEVICE_CONFIG_IO_MODE) {
-#if defined(CONFIG_MSPI_XIP)
+#if defined(CONFIG_MSPI_MEMMAP)
 		dev_data->xip_params_stored.io_mode = cfg->io_mode;
 #endif
 
@@ -885,7 +886,7 @@ static int _api_dev_config(const struct device *dev,
 	}
 
 	if (param_mask & MSPI_DEVICE_CONFIG_CPP) {
-#if defined(CONFIG_MSPI_XIP)
+#if defined(CONFIG_MSPI_MEMMAP)
 		/* Make sure the new setting is compatible with the one used
 		 * for XIP if it is enabled.
 		 */
@@ -929,7 +930,7 @@ static int _api_dev_config(const struct device *dev,
 			return -EINVAL;
 		}
 
-#if defined(CONFIG_MSPI_XIP)
+#if defined(CONFIG_MSPI_MEMMAP)
 		/* Make sure the new setting is compatible with the one used
 		 * for XIP if it is enabled.
 		 */
@@ -974,7 +975,7 @@ static int _api_dev_config(const struct device *dev,
 		}
 	}
 
-#if defined(CONFIG_MSPI_XIP)
+#if defined(CONFIG_MSPI_MEMMAP)
 	if (param_mask & MSPI_DEVICE_CONFIG_READ_CMD) {
 		dev_data->xip_params_stored.read_cmd = cfg->read_cmd;
 	}
@@ -1015,6 +1016,8 @@ static int _api_dev_config(const struct device *dev,
 	} else {
 		dev_data->max_clocks_per_ce = 0;
 	}
+
+	vendor_specific_dev_config(dev, param_mask, cfg);
 
 	return 0;
 }
@@ -1118,7 +1121,7 @@ static int start_next_packet(const struct device *dev)
 	const struct mspi_xfer_packet *packet = &dev_data->sub_pkt;
 	bool data_only_packet = dev_data->xfer.cmd_length == 0 &&
 				dev_data->xfer.addr_length == 0;
-	bool xip_enabled = COND_CODE_1(CONFIG_MSPI_XIP,
+	bool xip_enabled = COND_CODE_1(CONFIG_MSPI_MEMMAP,
 				       (dev_data->xip_enabled != 0),
 				       (false));
 	unsigned int key;
@@ -1603,7 +1606,7 @@ static int run_one_packet(const struct device *dev, const struct mspi_xfer_packe
 static int finalize_packet(const struct device *dev, int rc)
 {
 	struct mspi_dw_data *dev_data = dev->data;
-	bool xip_enabled = COND_CODE_1(CONFIG_MSPI_XIP,
+	bool xip_enabled = COND_CODE_1(CONFIG_MSPI_MEMMAP,
 				       (dev_data->xip_enabled != 0),
 				       (false));
 
@@ -1741,7 +1744,7 @@ static int api_transceive(const struct device *dev,
 
 	rc = pm_device_runtime_get(dev);
 	if (rc < 0) {
-		LOG_ERR("pm_device_runtime_get() failed: %d", rc);
+		LOG_ERR_PM_DEVICE_RUNTIME_GET(dev, rc);
 		return rc;
 	}
 
@@ -1774,7 +1777,7 @@ static int finalize_transceive(const struct device *dev, int rc)
 
 	rc2 = pm_device_runtime_put(dev);
 	if (rc2 < 0) {
-		LOG_ERR("pm_device_runtime_put() failed: %d", rc2);
+		LOG_ERR_PM_DEVICE_RUNTIME_PUT(dev, rc2);
 		rc = (rc < 0 ? rc : rc2);
 	}
 
@@ -1832,10 +1835,10 @@ static int api_timing_config(const struct device *dev,
 }
 #endif /* defined(CONFIG_MSPI_TIMING) */
 
-#if defined(CONFIG_MSPI_XIP)
+#if defined(CONFIG_MSPI_MEMMAP)
 static int _api_xip_config(const struct device *dev,
 			   const struct mspi_dev_id *dev_id,
-			   const struct mspi_xip_cfg *cfg)
+			   const struct mspi_memmap_cfg *cfg)
 {
 	struct mspi_dw_data *dev_data = dev->data;
 	int rc;
@@ -1860,7 +1863,7 @@ static int _api_xip_config(const struct device *dev,
 			 */
 			rc = pm_device_runtime_put(dev);
 			if (rc < 0) {
-				LOG_ERR("pm_device_runtime_put() failed: %d", rc);
+				LOG_ERR_PM_DEVICE_RUNTIME_PUT(dev, rc);
 				return rc;
 			}
 		}
@@ -1892,7 +1895,7 @@ static int _api_xip_config(const struct device *dev,
 		 */
 		rc = pm_device_runtime_get(dev);
 		if (rc < 0) {
-			LOG_ERR("pm_device_runtime_get() failed: %d", rc);
+			LOG_ERR_PM_DEVICE_RUNTIME_GET(dev, rc);
 			return rc;
 		}
 
@@ -1901,18 +1904,19 @@ static int _api_xip_config(const struct device *dev,
 		ctrl.write |= FIELD_PREP(XIP_WRITE_CTRL_WAIT_CYCLES_MASK,
 					 params->tx_dummy);
 
-		/* Make sure the baud rate and serial clock phase/polarity
-		 * registers are configured properly. They may not be if
-		 * non-XIP transfers have not been performed yet.
+		/* Make sure the baud rate, serial clock phase/polarity and RX
+		 * sample delay registers are configured properly. They may not
+		 * be if non-XIP transfers have not been performed yet.
 		 */
 		write_ctrlr0(dev, dev_data->ctrlr0);
 		write_baudr(dev, dev_data->baudr);
+		write_rx_sample_dly(dev, dev_data->rx_sample_dly);
 
 		write_xip_incr_inst(dev, params->read_cmd);
 		write_xip_wrap_inst(dev, params->read_cmd);
 		write_xip_ctrl(dev, ctrl.read);
 
-		if (cfg->permission == MSPI_XIP_READ_WRITE) {
+		if (cfg->permission == MSPI_MEMMAP_READ_WRITE) {
 #if MEMMAP_WRITE_SUPPORT_INSTANCES != 0
 			write_xip_write_incr_inst(dev, params->write_cmd);
 			write_xip_write_wrap_inst(dev, params->write_cmd);
@@ -1921,7 +1925,7 @@ static int _api_xip_config(const struct device *dev,
 			LOG_ERR("XIP write access not supported by this controller");
 			rc = pm_device_runtime_put(dev);
 			if (rc < 0) {
-				LOG_ERR("pm_device_runtime_put() failed: %d", rc);
+				LOG_ERR_PM_DEVICE_RUNTIME_PUT(dev, rc);
 			}
 			return -ENOTSUP;
 #endif
@@ -1958,9 +1962,9 @@ static int _api_xip_config(const struct device *dev,
 	return 0;
 }
 
-static int api_xip_config(const struct device *dev,
-			  const struct mspi_dev_id *dev_id,
-			  const struct mspi_xip_cfg *cfg)
+static int api_memmap_config(const struct device *dev,
+			     const struct mspi_dev_id *dev_id,
+			     const struct mspi_memmap_cfg *cfg)
 {
 	struct mspi_dw_data *dev_data = dev->data;
 	int rc, rc2;
@@ -1972,7 +1976,7 @@ static int api_xip_config(const struct device *dev,
 
 	rc = pm_device_runtime_get(dev);
 	if (rc < 0) {
-		LOG_ERR("pm_device_runtime_get() failed: %d", rc);
+		LOG_ERR_PM_DEVICE_RUNTIME_GET(dev, rc);
 		return rc;
 	}
 
@@ -1992,13 +1996,13 @@ static int api_xip_config(const struct device *dev,
 
 	rc2 = pm_device_runtime_put(dev);
 	if (rc2 < 0) {
-		LOG_ERR("pm_device_runtime_put() failed: %d", rc2);
+		LOG_ERR_PM_DEVICE_RUNTIME_PUT(dev, rc2);
 		rc = (rc < 0 ? rc : rc2);
 	}
 
 	return rc;
 }
-#endif /* defined(CONFIG_MSPI_XIP) */
+#endif /* defined(CONFIG_MSPI_MEMMAP) */
 
 static int dev_pm_action_cb(const struct device *dev,
 			    enum pm_device_action action)
@@ -2025,7 +2029,7 @@ static int dev_pm_action_cb(const struct device *dev,
 
 	if (IS_ENABLED(CONFIG_PM_DEVICE) &&
 	    action == PM_DEVICE_ACTION_SUSPEND) {
-		bool xip_enabled = COND_CODE_1(CONFIG_MSPI_XIP,
+		bool xip_enabled = COND_CODE_1(CONFIG_MSPI_MEMMAP,
 					       (dev_data->xip_enabled != 0),
 					       (false));
 
@@ -2076,6 +2080,7 @@ static int dev_init(const struct device *dev)
 
 	dev_data->ctrlr0 |= FIELD_PREP(CTRLR0_SSI_IS_MST_BIT,
 				       dev_config->op_mode == MSPI_OP_MODE_CONTROLLER);
+	dev_data->rx_sample_dly = dev_config->rx_sample_dly;
 
 	dev_config->irq_config();
 
@@ -2141,8 +2146,8 @@ static DEVICE_API(mspi, drv_api) = {
 #if defined(CONFIG_MSPI_TIMING)
 	.timing_config      = api_timing_config,
 #endif
-#if defined(CONFIG_MSPI_XIP)
-	.xip_config         = api_xip_config,
+#if defined(CONFIG_MSPI_MEMMAP)
+	.memmap_config      = api_memmap_config,
 #endif
 };
 
@@ -2186,7 +2191,8 @@ static DEVICE_API(mspi, drv_api) = {
 				7 * TX_FIFO_DEPTH(inst) / 8 - 1),	\
 	.rx_fifo_threshold =						\
 		DT_INST_PROP_OR(inst, rx_fifo_threshold,		\
-				1 * RX_FIFO_DEPTH(inst) / 8 - 1)
+				1 * RX_FIFO_DEPTH(inst) / 8 - 1),	\
+	.rx_sample_dly = DT_INST_PROP_OR(inst, rx_sample_delay_initial, 0)
 
 #define MSPI_DW_DMA_DATA_LEVELS(inst)					\
 	.dma_tx_data_level =						\

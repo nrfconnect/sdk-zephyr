@@ -6,14 +6,14 @@
 
 /dts-v1/;
 
-#include <espressif/esp32c3/esp32c3_fx4.dtsi>
+#include <espressif/esp32c3/esp32c3.dtsi>
 #include "icev_wireless-pinctrl.dtsi"
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 #include <espressif/partitions_0x0_default.dtsi>
 
 / {
-	model = "ICEV Wireless";
 	compatible = "espressif,esp32c3";
+	model = "ICEV Wireless";
 
 	chosen {
 		zephyr,sram = &sram1;
@@ -51,6 +51,11 @@
 	};
 };
 
+&flash0 {
+	reg = <0x0 DT_SIZE_M(4)>;
+	ranges = <0x0 0x0 DT_SIZE_M(4)>;
+};
+
 &uart0 {
 	current-speed = <115200>;
 	pinctrl-0 = <&uart0_default>;
@@ -73,11 +78,11 @@
 };
 
 &spi2 {
-	status = "okay";
 	#address-cells = <1>;
 	#size-cells = <0>;
 	pinctrl-0 = <&spim2_default>;
 	pinctrl-names = "default";
+	status = "okay";
 };
 
 &gpio0 {

@@ -11,8 +11,8 @@
 #include "rzt2l_rsk-pinctrl.dtsi"
 
 / {
-	model = "Renesas Starter Kit+ for RZ/T2L";
 	compatible = "renesas,rzt2l-rsk";
+	model = "Renesas Starter Kit+ for RZ/T2L";
 
 	chosen {
 		zephyr,sram = &atcm;
@@ -25,6 +25,7 @@
 	aliases {
 		led0 = &led1;
 		sw0 = &sw2;
+		i2c-0 = &i2c1;
 	};
 
 	leds {
@@ -112,11 +113,56 @@
 	pinctrl-names = "default";
 	status = "okay";
 
-	at25sf128a: qspi-nor-flash@68000000 {
+	ext_flash_ctrl: flash-controller@0 {
 		compatible = "renesas,rz-qspi-xspi";
-		reg = <0x68000000 DT_SIZE_M(16)>; /* 128 Mbits */
-		write-block-size = <1>;
-		erase-block-size = <4096>;
+		reg = <0>;
+		ranges = <0x0 0x68000000 DT_SIZE_M(16)>;
+		#address-cells = <1>;
+		#size-cells = <1>;
 		status = "okay";
+
+		at25sf128a: qspi-nor-flash@0 {
+			compatible = "soc-nv-flash";
+			reg = <0x0 DT_SIZE_M(16)>;
+			ranges;
+			write-block-size = <1>;
+			erase-block-size = <4096>;
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			partitions {
+				ranges;
+				#address-cells = <1>;
+				#size-cells = <1>;
+
+				loader_param: partition@0 {
+					compatible = "zephyr,mapped-partition";
+					reg = <0x00000000 0x4c>;
+					label = "loader-param";
+					read-only;
+				};
+
+				loader_program: partition@4c {
+					compatible = "zephyr,mapped-partition";
+					reg = <0x0000004c (DT_SIZE_K(56) - 0x4C)>;
+					label = "loader-program";
+					read-only;
+				};
+
+				slot0_partition: partition@e000 {
+					compatible = "zephyr,mapped-partition";
+					reg = <0x0000e000 DT_SIZE_M(4)>;
+					label = "image-0";
+					read-only;
+				};
+
+				storage_partition: partition@40e000 {
+					compatible = "zephyr,mapped-partition";
+					reg = <0x0040e000
+					       (DT_SIZE_M(16) - DT_SIZE_M(4) - DT_SIZE_K(56))>;
+					label = "storage";
+				};
+			};
+		};
 	};
 };

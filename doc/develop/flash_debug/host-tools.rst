@@ -118,17 +118,19 @@ A typical flash layout for devices without a ROM bootloader is:
 
 	&flash0 {
 		partitions {
-			compatible = "fixed-partitions";
 			#address-cells = <1>;
 			#size-cells = <1>;
+			ranges;
 
 			boot_partition: partition@0 {
+				compatible = "zephyr,mapped-partition";
 				label = "sam-ba";
 				reg = <0x00000000 0x2000>;
 				read-only;
 			};
 
 			code_partition: partition@2000 {
+				compatible = "zephyr,mapped-partition";
 				label = "code";
 				reg = <0x2000 0x3a000>;
 				read-only;
@@ -140,6 +142,7 @@ A typical flash layout for devices without a ROM bootloader is:
 			* if enabled.
 			*/
 			storage_partition: partition@3c000 {
+				compatible = "zephyr,mapped-partition";
 				label = "storage";
 				reg = <0x0003c000 0x00004000>;
 			};
@@ -159,11 +162,12 @@ partition is:
 
 	&flash0 {
 		partitions {
-			compatible = "fixed-partitions";
 			#address-cells = <1>;
 			#size-cells = <1>;
+			ranges;
 
 			code_partition: partition@0 {
+				compatible = "zephyr,mapped-partition";
 				label = "code";
 				reg = <0x0 0xF0000>;
 				read-only;
@@ -175,6 +179,7 @@ partition is:
 			* if enabled.
 			*/
 			storage_partition: partition@F0000 {
+				compatible = "zephyr,mapped-partition";
 				label = "storage";
 				reg = <0x000F0000 0x00100000>;
 			};
@@ -302,6 +307,16 @@ LinkServer west runner   ``--probe`` option to pass the probe index.
    you would like to single step from the start of their application, you
    will need to add a breakpoint at ``main`` or the reset handler manually.
 
+5. That breakpoint, and any other GDB command, can be installed automatically
+   with ``--gdb-init``, which this runner appends to the GDB client for
+   ``west debug`` and ``west attach``, e.g.:
+
+   .. code-block:: console
+
+      west debug --runner=linkserver --gdb-init 'b main'
+
+   See :ref:`gdb-init-runner-option`.
+
 .. _jlink-debug-host-tools:
 .. _runner_jlink:
 
@@ -332,6 +347,41 @@ drivers. RTT Viewer and SystemView can be downloaded separately, but are not
 required.
 
 Note that the J-Link GDB server does not yet support Zephyr RTOS-awareness.
+
+.. _gdb-init-runner-option:
+
+Passing Extra GDB Commands
+--------------------------
+
+The ``jlink`` runner accepts ``--gdb-init``, which appends a command to the GDB
+client started by ``west debug`` and ``west attach``. The option can be given
+multiple times and the commands run in the order given, last of everything the
+runner sends to GDB and before the target is resumed. Since they are only
+appended, they cannot change the runner's own connect, load and reset sequence.
+``west flash``, ``west reset``, ``west rtt`` and ``west debugserver`` are
+unaffected.
+
+For example, to enable J-Link semihosting for the duration of a debug session:
+
+.. code-block:: console
+
+   west debug -r jlink --gdb-init 'monitor semihosting enable' \
+     --gdb-init 'monitor semihosting basedir .'
+
+The same commands can be made the default for a board by adding them to its
+:file:`board.cmake`:
+
+.. code-block:: cmake
+
+   board_runner_args(jlink "--gdb-init=monitor semihosting enable")
+
+Note that ``--gdb-init`` only reaches the GDB client. Options for the J-Link GDB
+server itself are passed with ``--tool-opt``, and J-Link Commander commands run
+while flashing are passed with ``--pre-script-cmd``.
+
+The ``linkserver``, ``openocd`` and ``intel_cyclonev`` runners accept the same
+option. Which commands it applies to, and where the commands are inserted, is up
+to each runner.
 
 .. _openocd-debug-host-tools:
 .. _runner_openocd:
@@ -636,6 +686,46 @@ It can be used through the ``west flash`` command to flash Zephyr applications.
 
 For advanced usage via the GUI or CLI, check out the `STM32CubeProgrammer User Manual`_.
 
+.. _runner_xsdb:
+
+XSDB Flash & Debug Host Tools
+*****************************
+
+The AMD XSDB utility (Xilinx Software Command-line Tool for Debug) is the
+command-line tool used to program and debug many AMD adaptive SoC and FPGA
+platforms.
+It is **not** included in the Zephyr SDK: install `AMD Vitis`_ (or the equivalent
+AMD toolchain distribution for your platform) and ensure the ``xsdb``
+executable is on your system :ref:`PATH <env_vars>`.
+
+Boards that select the ``xsdb`` west runner normally ship a board-specific
+``support/xsdb.cfg`` next to the board definition. See your board's documentation
+for required boot artifacts (PDI, bitstream, FSBL, etc.).
+
+Supported west commands include ``flash``, ``debug``, and ``debugserver``.
+
+For this runner, ``west debug`` and ``west debugserver`` both start the same
+native XSDB interactive session. Unlike GDB-based runners (where
+``debugserver`` starts a remote stub for an IDE), the xsdb runner always
+launches XSDB directly, loads the application through the board ``xsdb.cfg``,
+and leaves you at the XSDB prompt.
+
+.. code-block:: console
+
+   west flash --runner xsdb
+
+   west debug --runner xsdb
+
+   west debugserver --runner xsdb
+
+.. note::
+
+   This is the same class of dependency as other proprietary host tools in this
+   chapter (for example :ref:`J-Link <jlink-debug-host-tools>` or
+   :ref:`STM32CubeCLT <stm32cubeclt-host-tools>`): Zephyr integrates with the
+   tool via the west runner; obtaining and licensing the toolchain is the user's
+   responsibility.
+
 .. _runner_uf2:
 
 UF2 Uploader
@@ -694,6 +784,19 @@ at: `Realtek Supported Boards`_
 .. code-block:: console
 
    west flash [--runner mpcli] --port /dev/ttyX
+
+
+.. _iar-debug-host-tools:
+.. _runner_iar:
+
+IAR EW & C-Spy Host Tools
+*************************
+
+IAR provides Embedded Workbench and CSpyBat for debugging and flashing. The iar runner works with
+EWARM 10.10 or newer.
+
+.. _AMD Vitis:
+   https://www.amd.com/en/products/software/adaptive-socs-and-fpgas/vitis.html
 
 .. _J-Link Software and Documentation Pack:
    https://www.segger.com/downloads/jlink/#J-LinkSoftwareAndDocumentationPack

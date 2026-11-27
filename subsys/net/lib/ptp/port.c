@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2024 BayLibre SAS
- * Copyright (c) 2026 Philipp Steiner <philipp.steiner1987@gmail.com>
+ * Copyright (c) 2026 Philipp Steiner
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -25,6 +25,13 @@ LOG_MODULE_REGISTER(ptp_port, CONFIG_PTP_LOG_LEVEL);
 
 #define DEFAULT_LOG_MSG_INTERVAL (0x7F)
 
+/* Sanity bounds for message intervals advertised by a remote PTP Instance. The
+ * values are used as shift counts when arming the timers, so they must never be
+ * adopted unchecked.
+ */
+#define PTP_LOG_MSG_INTERVAL_MIN (-10)
+#define PTP_LOG_MSG_INTERVAL_MAX 22
+
 #define PORT_DELAY_REQ_CLEAR_TO (3 * NSEC_PER_SEC)
 
 #define PTP_LOG_MIN_PDELAY_REQ_INTERVAL_MIN (-7)
@@ -44,6 +51,18 @@ BUILD_ASSERT(CONFIG_PTP_FOREIGN_TIME_TRANSMITTER_RECORD_SIZE >= 5 * CONFIG_PTP_N
 K_MEM_SLAB_DEFINE_STATIC_TYPE(foreign_tts_slab, struct ptp_foreign_tt_clock,
 			      CONFIG_PTP_FOREIGN_TIME_TRANSMITTER_RECORD_SIZE);
 #endif
+
+/* Announce messages kept in the foreign timeTransmitter records come from the
+ * same pool as every other message. They may take half of it, so that senders
+ * of Announce messages cannot use up the messages needed to receive and send.
+ */
+#define FOREIGN_MSGS_MAX (CONFIG_PTP_MSG_POLL_SIZE / 2)
+
+BUILD_ASSERT(FOREIGN_MSGS_MAX >= FOREIGN_TIME_TRANSMITTER_THRESHOLD,
+	     "PTP_MSG_POLL_SIZE is too small to qualify a foreign timeTransmitter!");
+
+/* Number of messages kept in the foreign timeTransmitter records of all ports. */
+static int foreign_msgs_count;
 
 char str_port_id[] = "FF:FF:FF:FF:FF:FF:FF:FF-FFFF";
 
@@ -95,6 +114,108 @@ static int port_msg_send(struct ptp_port *port, struct ptp_msg *msg, enum ptp_so
 	return ptp_transport_send(port, msg, idx);
 }
 
+static int port_msg_sendto(struct ptp_port *port, struct ptp_msg *msg, enum ptp_socket idx)
+{
+	ptp_msg_pre_send(msg);
+
+	return ptp_transport_sendto(port, msg, idx);
+}
+
+#if defined(CONFIG_PTP_NETWORK_MODE_HYBRID)
+static void port_hybrid_fallback_reset(struct ptp_port *port __maybe_unused)
+{
+#if !defined(CONFIG_PTP_NETWORK_MODE_HYBRID_NO_FALLBACK)
+	port->hybrid_unanswered = 0;
+	port->hybrid_fallback_active = false;
+#endif
+}
+
+static void port_hybrid_tt_addr_update(struct ptp_port *port, struct ptp_msg *msg)
+{
+#if !defined(CONFIG_PTP_NETWORK_MODE_HYBRID_NO_FALLBACK)
+	if (!port->tt_addr_valid ||
+	    !ptp_port_id_eq(&port->tt_id, &msg->header.src_port_id)) {
+		/* A new timeTransmitter was selected, give unicast Delay_Req
+		 * messages another try.
+		 */
+		port->tt_id = msg->header.src_port_id;
+		port_hybrid_fallback_reset(port);
+	}
+#endif
+
+	memcpy(&port->tt_addr, &msg->addr, sizeof(port->tt_addr));
+	port->tt_addr_valid = true;
+}
+
+static void port_hybrid_tt_addr_invalidate(struct ptp_port *port)
+{
+	port->tt_addr_valid = false;
+	port_hybrid_fallback_reset(port);
+}
+
+static void port_hybrid_delay_resp_received(struct ptp_port *port __maybe_unused)
+{
+#if !defined(CONFIG_PTP_NETWORK_MODE_HYBRID_NO_FALLBACK)
+	port->hybrid_unanswered = 0;
+#endif
+}
+
+static bool port_hybrid_delay_req_prepare(struct ptp_port *port, struct ptp_msg *msg)
+{
+	if (!port->tt_addr_valid) {
+		return false;
+	}
+
+#if !defined(CONFIG_PTP_NETWORK_MODE_HYBRID_NO_FALLBACK)
+	if (port->hybrid_fallback_active) {
+		return false;
+	}
+
+	if (port->hybrid_unanswered >= CONFIG_PTP_HYBRID_FALLBACK_ATTEMPTS) {
+		LOG_WRN("Port %d timeTransmitter does not respond to unicast Delay_Req, "
+			"falling back to multicast",
+			port->port_ds.id.port_number);
+		port->hybrid_fallback_active = true;
+		return false;
+	}
+#endif
+
+	msg->header.flags[0] |= PTP_MSG_UNICAST_FLAG;
+	memcpy(&msg->addr, &port->tt_addr, sizeof(msg->addr));
+
+	return true;
+}
+
+static void port_hybrid_delay_req_sent(struct ptp_port *port __maybe_unused)
+{
+#if !defined(CONFIG_PTP_NETWORK_MODE_HYBRID_NO_FALLBACK)
+	port->hybrid_unanswered++;
+#endif
+}
+#else
+static void port_hybrid_tt_addr_update(struct ptp_port *port __unused, struct ptp_msg *msg __unused)
+{
+}
+
+static void port_hybrid_tt_addr_invalidate(struct ptp_port *port __unused)
+{
+}
+
+static void port_hybrid_delay_resp_received(struct ptp_port *port __unused)
+{
+}
+
+static bool port_hybrid_delay_req_prepare(struct ptp_port *port __unused,
+					  struct ptp_msg *msg __unused)
+{
+	return false;
+}
+
+static void port_hybrid_delay_req_sent(struct ptp_port *port __unused)
+{
+}
+#endif /* CONFIG_PTP_NETWORK_MODE_HYBRID */
+
 static void port_timer_set_timeout(struct k_timer *timer, uint8_t factor, int8_t log_seconds)
 {
 	uint64_t timeout = log_seconds < 0 ?
@@ -135,6 +256,8 @@ static void port_synchronize(struct ptp_port *port,
 	t1 = origin_ts.second * NSEC_PER_SEC + origin_ts.nanosecond;
 	t2 = ingress_ts.second * NSEC_PER_SEC + ingress_ts.nanosecond;
 	t1c = t1 + (correction1 >> 16) + (correction2 >> 16);
+
+	ptp_clock_sync_interval_set(port->port_ds.log_sync_interval);
 
 	if (port->port_ds.delay_mechanism == PTP_DM_P2P) {
 		ptp_clock_synchronize_with_delay(t2, t1c, port->port_ds.mean_link_delay,
@@ -590,7 +713,7 @@ static int port_announce_msg_transmit(struct ptp_port *port)
 	msg->header.flags[1]	      = tpds->flags;
 	msg->header.src_port_id	      = port->port_ds.id;
 	msg->header.sequence_id	      = port->seq_id.announce++;
-	msg->header.log_msg_interval  = port->port_ds.log_sync_interval;
+	msg->header.log_msg_interval  = port->port_ds.log_announce_interval;
 
 	msg->announce.current_utc_offset = tpds->current_utc_offset;
 	msg->announce.gm_priority1	 = pds->gm_priority1;
@@ -645,7 +768,14 @@ static int port_delay_req_msg_transmit(struct ptp_port *port)
 	}
 
 	sys_slist_append(&port->delay_req_list, &msg->node);
-	ret = port_msg_send(port, msg, PTP_SOCKET_EVENT);
+	if (port_hybrid_delay_req_prepare(port, msg)) {
+		ret = port_msg_sendto(port, msg, PTP_SOCKET_EVENT);
+		if (ret >= 0) {
+			port_hybrid_delay_req_sent(port);
+		}
+	} else {
+		ret = port_msg_send(port, msg, PTP_SOCKET_EVENT);
+	}
 	if (ret < 0) {
 		sys_slist_find_and_remove(&port->delay_req_list, &msg->node);
 		ptp_msg_unref(msg);
@@ -769,15 +899,64 @@ static void port_timer_to_handler(struct k_timer *timer)
 	ptp_clock_signal_timeout();
 }
 
+/* Release the oldest message of a foreign timeTransmitter record. */
+static void foreign_clock_msg_drop(struct ptp_foreign_tt_clock *foreign)
+{
+	struct ptp_msg *msg = (struct ptp_msg *)k_fifo_get(&foreign->messages, K_NO_WAIT);
+
+	ptp_msg_unref(msg);
+	foreign->messages_count--;
+	foreign_msgs_count--;
+}
+
+/* Keep a message in a foreign timeTransmitter record as its newest one. */
+static void foreign_clock_msg_add(struct ptp_foreign_tt_clock *foreign, struct ptp_msg *msg)
+{
+	ptp_msg_ref(msg);
+	foreign->messages_count++;
+	foreign_msgs_count++;
+	k_fifo_put(&foreign->messages, (void *)msg);
+}
+
+/* Make sure that one more message can be kept in a foreign timeTransmitter
+ * record. When the limit is reached, the oldest message of the record makes
+ * room for the new one. The record of the current timeTransmitter may also
+ * take the place of a message of another record of the same port.
+ */
+static bool foreign_clock_msg_reserve(struct ptp_foreign_tt_clock *foreign, bool current_tt)
+{
+	struct ptp_foreign_tt_clock *other;
+
+	if (foreign_msgs_count < FOREIGN_MSGS_MAX) {
+		return true;
+	}
+
+	if (foreign->messages_count > 0) {
+		foreign_clock_msg_drop(foreign);
+		return true;
+	}
+
+	if (!current_tt) {
+		return false;
+	}
+
+	SYS_SLIST_FOR_EACH_CONTAINER(&foreign->port->foreign_list, other, node) {
+		if (other != foreign && other->messages_count > 0) {
+			foreign_clock_msg_drop(other);
+			return true;
+		}
+	}
+
+	return false;
+}
+
 static void foreign_clock_cleanup(struct ptp_foreign_tt_clock *foreign)
 {
 	struct ptp_msg *msg;
 	int64_t age, timeout, current = k_uptime_get();
 
 	while (foreign->messages_count > FOREIGN_TIME_TRANSMITTER_THRESHOLD) {
-		msg = (struct ptp_msg *)k_fifo_get(&foreign->messages, K_NO_WAIT);
-		ptp_msg_unref(msg);
-		foreign->messages_count--;
+		foreign_clock_msg_drop(foreign);
 	}
 
 	/* Remove messages that don't arrived at
@@ -805,20 +984,14 @@ static void foreign_clock_cleanup(struct ptp_foreign_tt_clock *foreign)
 			break;
 		}
 
-		msg = (struct ptp_msg *)k_fifo_get(&foreign->messages, K_NO_WAIT);
-		ptp_msg_unref(msg);
-		foreign->messages_count--;
+		foreign_clock_msg_drop(foreign);
 	}
 }
 
 static void port_clear_foreign_clock_records(struct ptp_foreign_tt_clock *foreign)
 {
-	struct ptp_msg *msg;
-
 	while (!k_fifo_is_empty(&foreign->messages)) {
-		msg = (struct ptp_msg *)k_fifo_get(&foreign->messages, K_NO_WAIT);
-		ptp_msg_unref(msg);
-		foreign->messages_count--;
+		foreign_clock_msg_drop(foreign);
 	}
 }
 
@@ -983,8 +1156,19 @@ static void port_sync_msg_process(struct ptp_port *port, struct ptp_msg *msg)
 		return;
 	}
 
-	if (port->port_ds.log_sync_interval != msg->header.log_msg_interval) {
-		port->port_ds.log_sync_interval = msg->header.log_msg_interval;
+	/* The interval is only specified for multicast Sync messages. For unicast
+	 * ones it is not applicable, because it is subject to unicast negotiation,
+	 * and the field carries 0x7F (IEEE 1588-2019 Table 42).
+	 */
+	if ((msg->header.flags[0] & PTP_MSG_UNICAST_FLAG) == 0 &&
+	    msg->header.log_msg_interval != DEFAULT_LOG_MSG_INTERVAL) {
+		if (IN_RANGE(msg->header.log_msg_interval,
+			     PTP_LOG_MSG_INTERVAL_MIN, PTP_LOG_MSG_INTERVAL_MAX)) {
+			port->port_ds.log_sync_interval = msg->header.log_msg_interval;
+		} else {
+			LOG_WRN("Port %d ignoring bogus Sync interval 2^%d",
+				port->port_ds.id.port_number, msg->header.log_msg_interval);
+		}
 	}
 
 	if (!port_sync_rx_timestamp_valid(port, msg)) {
@@ -1068,11 +1252,14 @@ static int port_delay_req_msg_process(struct ptp_port *port, struct ptp_msg *msg
 	resp->delay_resp.req_port_id = msg->header.src_port_id;
 
 	if (msg->header.flags[0] & PTP_MSG_UNICAST_FLAG) {
-		/* TODO handle unicast messages */
+		/* Respond directly to the requesting timeReceiver. */
 		resp->header.flags[0] |= PTP_MSG_UNICAST_FLAG;
+		resp->header.log_msg_interval = DEFAULT_LOG_MSG_INTERVAL;
+		memcpy(&resp->addr, &msg->addr, sizeof(resp->addr));
+		ret = port_msg_sendto(port, resp, PTP_SOCKET_EVENT);
+	} else {
+		ret = port_msg_send(port, resp, PTP_SOCKET_EVENT);
 	}
-
-	ret = port_msg_send(port, resp, PTP_SOCKET_EVENT);
 	ptp_msg_unref(resp);
 
 	if (ret < 0) {
@@ -1122,6 +1309,25 @@ static void port_delay_resp_msg_process(struct ptp_port *port, struct ptp_msg *m
 
 	sys_slist_remove(&port->delay_req_list, prev, &req->node);
 	ptp_msg_unref(req);
+
+	port_hybrid_delay_resp_received(port);
+
+	if (msg->header.log_msg_interval == DEFAULT_LOG_MSG_INTERVAL) {
+		/* 0x7F means the interval is not applicable, because it is subject
+		 * to unicast negotiation (IEEE 1588-2019 Table 42). A
+		 * timeTransmitter answering unicast Delay_Req messages may instead
+		 * advertise its preferred interval (RFC 9760, section 7.2), so the
+		 * field is evaluated for unicast Delay_Resp messages as well.
+		 */
+		return;
+	}
+
+	if (msg->header.log_msg_interval < PTP_LOG_MSG_INTERVAL_MIN ||
+	    msg->header.log_msg_interval > PTP_LOG_MSG_INTERVAL_MAX) {
+		LOG_WRN("Port %d ignoring bogus Delay_Req interval 2^%d",
+			port->port_ds.id.port_number, msg->header.log_msg_interval);
+		return;
+	}
 
 	port->port_ds.log_min_delay_req_interval = msg->header.log_msg_interval;
 }
@@ -1542,6 +1748,7 @@ static void port_disable(struct ptp_port *port)
 	port_clear_delay_req(port);
 	port_pdelay_clear_exchange(port);
 	port_pdelay_reset_measurement(port);
+	port_hybrid_tt_addr_invalidate(port);
 
 	net_if_unregister_timestamp_cb(&port->sync_ts_cb);
 	net_if_unregister_timestamp_cb(&port->delay_req_ts_cb);
@@ -1592,17 +1799,22 @@ int port_state_update(struct ptp_port *port, enum ptp_port_event event, bool tt_
 	return 0;
 }
 
-static __maybe_unused void port_link_monitor(struct net_mgmt_event_callback *cb,
-			      uint64_t mgmt_event,
-			      struct net_if *iface)
+/* In the test, only part of the subsystem is included, exclude this. */
+#ifdef CONFIG_PTP
+static void port_link_monitor(uint64_t mgmt_event, struct net_if *iface, void *info __unused,
+			      size_t info_length __unused, void *user_data __unused)
 {
-	ARG_UNUSED(cb);
-
 	enum ptp_port_event event = PTP_EVT_NONE;
-	struct ptp_port *port = ptp_clock_port_from_iface(iface);
+	struct ptp_port *port;
 	uint8_t iface_state = mgmt_event == NET_EVENT_IF_UP ? PORT_LINK_UP : PORT_LINK_DOWN;
 
-	if (!port) {
+	if ((mgmt_event != NET_EVENT_IF_UP) && (mgmt_event != NET_EVENT_IF_DOWN)) {
+		return;
+	}
+
+	port = ptp_clock_port_from_iface(iface);
+
+	if (port == NULL) {
 		return;
 	}
 
@@ -1627,6 +1839,9 @@ static __maybe_unused void port_link_monitor(struct net_mgmt_event_callback *cb,
 
 	ptp_port_event_handle(port, event, false);
 }
+
+NET_MGMT_REGISTER_EVENT_HANDLER(ptp_iface_events, PORT_LINK_EVENT_MASK, port_link_monitor, NULL);
+#endif /* CONFIG_PTP */
 
 void ptp_port_init(struct net_if *iface, void *user_data)
 {
@@ -1668,6 +1883,7 @@ void ptp_port_init(struct net_if *iface, void *user_data)
 	port->pdelay_prev_resp_origin_ns = 0;
 	port->pdelay_prev_resp_ingress_ns = 0;
 	port->pdelay_prev_rate_sample_valid = false;
+	port_hybrid_tt_addr_invalidate(port);
 
 	port_ds_init(port);
 	sys_slist_init(&port->foreign_list);
@@ -1681,9 +1897,6 @@ void ptp_port_init(struct net_if *iface, void *user_data)
 
 	ptp_clock_pollfd_invalidate();
 	ptp_clock_port_add(port);
-
-	net_mgmt_init_event_callback(&port->link_cb, port_link_monitor, PORT_LINK_EVENT_MASK);
-	net_mgmt_add_event_callback(&port->link_cb);
 
 	LOG_DBG("Port %d initialized", port->port_ds.id.port_number);
 }
@@ -1704,16 +1917,25 @@ enum ptp_port_event ptp_port_event_gen(struct ptp_port *port, int idx)
 	}
 
 	cnt = ptp_transport_recv(port, msg, idx);
-	if (cnt <= 0) {
+	if (cnt < 0) {
 		LOG_ERR("Error during message reception");
 		ptp_msg_unref(msg);
 		return PTP_EVT_FAULT_DETECTED;
 	}
 
-	ret = ptp_msg_post_recv(port, msg, cnt);
-	if (ret) {
+	if (cnt == 0) {
+		/* Nothing to process, e.g. an empty datagram */
 		ptp_msg_unref(msg);
-		return PTP_EVT_FAULT_DETECTED;
+		return PTP_EVT_NONE;
+	}
+
+	/* Anyone on the multicast group can send an unsupported or malformed
+	 * message, so it is discarded and does not fault the port.
+	 */
+	ret = ptp_msg_post_recv(port, msg, cnt);
+	if (ret != 0) {
+		ptp_msg_unref(msg);
+		return PTP_EVT_NONE;
 	}
 
 	if (ptp_port_id_eq(&msg->header.src_port_id, &port->port_ds.id)) {
@@ -1776,6 +1998,15 @@ void ptp_port_event_handle(struct ptp_port *port, enum ptp_port_event event, boo
 		return;
 	}
 
+	if (tt_diff) {
+		/*
+		 * The Sync interval learned so far belongs to the previous time
+		 * transmitter; the new one may send unicast Sync messages, which do
+		 * not advertise it.
+		 */
+		port->port_ds.log_sync_interval = CONFIG_PTP_SYNC_LOG_INTERVAL;
+	}
+
 	if (!port_state_update(port, event, tt_diff)) {
 		/* No PTP Port state change */
 		return;
@@ -1826,6 +2057,7 @@ void ptp_port_event_handle(struct ptp_port *port, enum ptp_port_event event, boo
 		}
 		port_clear_delay_req(port);
 		port_pdelay_clear_exchange(port);
+		port_hybrid_tt_addr_invalidate(port);
 		__fallthrough;
 	case PTP_PS_TIME_RECEIVER:
 		port_timer_set_timeout_random(&port->timers.announce,
@@ -1942,6 +2174,7 @@ enum ptp_port_event ptp_port_timer_event_gen(struct ptp_port *port, struct k_tim
 
 			port_delay_req_cleanup(port);
 			port_pdelay_clear_request_exchange(port);
+			port_hybrid_tt_addr_invalidate(port);
 			port_timer_set_timeout_random(&port->timers.announce,
 						      port->port_ds.announce_receipt_timeout,
 						      1,
@@ -2054,9 +2287,13 @@ int ptp_port_add_foreign_tt(struct ptp_port *port, struct ptp_msg *msg)
 		diff = ptp_msg_announce_cmp(&msg->announce, &last->announce);
 	}
 
-	ptp_msg_ref(msg);
-	foreign->messages_count++;
-	k_fifo_put(&foreign->messages, (void *)msg);
+	if (!foreign_clock_msg_reserve(foreign, false)) {
+		LOG_DBG("Port %d keeps no more messages of foreign timeTransmitters",
+			port->port_ds.id.port_number);
+		return 0;
+	}
+
+	foreign_clock_msg_add(foreign, msg);
 
 	return (foreign->messages_count == FOREIGN_TIME_TRANSMITTER_THRESHOLD ? 1 : 0) || diff;
 }
@@ -2079,32 +2316,37 @@ int ptp_port_update_current_time_transmitter(struct ptp_port *port, struct ptp_m
 {
 	struct ptp_foreign_tt_clock *foreign = port->best;
 	struct ptp_msg *last = NULL;
+	int diff = 0;
 
 	if (!foreign ||
 	    !ptp_port_id_eq(&msg->header.src_port_id, &foreign->dataset.sender)) {
 		return ptp_port_add_foreign_tt(port, msg);
 	}
 
+	/* The timeTransmitter address for unicast Delay_Req is learned only from
+	 * Announce messages, the source addresses of Sync and Follow_Up messages
+	 * might have been replaced by the address of a Transparent Clock.
+	 */
+	port_hybrid_tt_addr_update(port, msg);
+
 	foreign_clock_cleanup(foreign);
 
 	if (foreign->messages_count > 0) {
+		/* Compared before the limit can release this message. */
 		last = (struct ptp_msg *)k_fifo_peek_tail(&foreign->messages);
+		diff = ptp_msg_announce_cmp(&msg->announce, &last->announce);
 	}
 
-	ptp_msg_ref(msg);
-	foreign->messages_count++;
-	k_fifo_put(&foreign->messages, (void *)msg);
+	if (foreign_clock_msg_reserve(foreign, true)) {
+		foreign_clock_msg_add(foreign, msg);
+	}
 
 	port_timer_set_timeout_random(&port->timers.announce,
 				      port->port_ds.announce_receipt_timeout,
 				      1,
 				      port->port_ds.log_announce_interval);
 
-	if (last) {
-		return ptp_msg_announce_cmp(&msg->announce, &last->announce);
-	}
-
-	return 0;
+	return diff;
 }
 
 int ptp_port_management_msg_process(struct ptp_port *port,

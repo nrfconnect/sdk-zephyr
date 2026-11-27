@@ -12,6 +12,7 @@
 
 #include <zephyr/net/http/service.h>
 #include <zephyr/net/socket.h>
+#include <zephyr/sys/fdtable.h>
 #include <zephyr/ztest.h>
 
 #define BUFFER_SIZE                    1024
@@ -27,6 +28,8 @@
 #define TEST_DYNAMIC_GET_PAYLOAD "Test dynamic GET"
 #define TEST_STATIC_PAYLOAD "Hello, World!"
 #define TEST_STATIC_FS_PAYLOAD "Hello, World from static file!"
+#define TEST_LONG_HEADER_NAME "Test-Header-With-A-Name-Longer-Than-The-Response-Format-Buffer"
+#define TEST_LONG_CONTENT_TYPE "application/vnd.zephyr.example-type+json"
 
 /* Random base64 encoded data */
 #define TEST_LONG_PAYLOAD_CHUNK_1                                                                  \
@@ -175,6 +178,19 @@ BUILD_ASSERT(sizeof(long_payload) - 1 > CONFIG_HTTP_SERVER_CLIENT_BUFFER_SIZE,
 	0x00, 0x00, 0x10, 0x09, 0x04, 0x00, 0x00, 0x00, TEST_STREAM_ID_1, \
 	0x2f, 0x2a, 0x5f, 0x87, 0x49, 0x7c, 0xa5, 0x8a, 0xe8, 0x19, 0xaa, 0x0f, \
 	0x0d, 0x02, 0x31, 0x37
+/* Same header block as above, but split exactly on a header field boundary,
+ * so that the continuation frame header is processed by the regular frame
+ * header handler instead of being consumed by the incomplete header handling.
+ */
+#define TEST_HTTP2_PARTIAL_HEADERS_POST_DYNAMIC_STREAM_1_ALIGNED \
+	0x00, 0x00, 0x22, 0x01, 0x00, 0x00, 0x00, 0x00, TEST_STREAM_ID_1, \
+	0x83, 0x86, 0x41, 0x87, 0x0b, 0xe2, 0x5c, 0x0b, 0x89, 0x70, 0xff, 0x04, \
+	0x86, 0x62, 0x4f, 0x55, 0x0e, 0x93, 0x13, 0x7a, 0x88, 0x25, 0xb6, 0x50, \
+	0xc3, 0xcb, 0xbc, 0xb8, 0x3f, 0x53, 0x03, 0x2a, 0x2f, 0x2a
+#define TEST_HTTP2_CONTINUATION_POST_DYNAMIC_STREAM_1_ALIGNED \
+	0x00, 0x00, 0x0e, 0x09, 0x04, 0x00, 0x00, 0x00, TEST_STREAM_ID_1, \
+	0x5f, 0x87, 0x49, 0x7c, 0xa5, 0x8a, 0xe8, 0x19, 0xaa, 0x0f, 0x0d, 0x02, \
+	0x31, 0x37
 #define TEST_HTTP2_DATA_POST_DYNAMIC_STREAM_1 \
 	0x00, 0x00, 0x11, 0x00, 0x01, 0x00, 0x00, 0x00, TEST_STREAM_ID_1, \
 	0x54, 0x65, 0x73, 0x74, 0x20, 0x64, 0x79, 0x6e, 0x61, 0x6d, 0x69, 0x63, \
@@ -186,6 +202,34 @@ BUILD_ASSERT(sizeof(long_payload) - 1 > CONFIG_HTTP_SERVER_CLIENT_BUFFER_SIZE,
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, \
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, \
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+#define TEST_HTTP2_HEADERS_PADDED_EMPTY_STREAM_1 \
+	0x00, 0x00, 0x00, 0x01, 0x0c, 0x00, 0x00, 0x00, TEST_STREAM_ID_1
+/* The GET / block preceded by a dynamic table size update of 4096, 4097 and 1. */
+#define TEST_HTTP2_HEADERS_GET_ROOT_TABLE_SIZE_4096_STREAM_1 \
+	0x00, 0x00, 0x24, 0x01, 0x05, 0x00, 0x00, 0x00, TEST_STREAM_ID_1, \
+	0x3f, 0xe1, 0x1f, \
+	0x82, 0x84, 0x86, 0x41, 0x8a, 0x0b, 0xe2, 0x5c, 0x0b, 0x89, 0x70, 0xdc, \
+	0x78, 0x0f, 0x03, 0x53, 0x03, 0x2a, 0x2f, 0x2a, 0x90, 0x7a, 0x8a, 0xaa, \
+	0x69, 0xd2, 0x9a, 0xc4, 0xc0, 0x57, 0x68, 0x0b, 0x83
+#define TEST_HTTP2_HEADERS_GET_ROOT_TABLE_SIZE_4097_STREAM_1 \
+	0x00, 0x00, 0x24, 0x01, 0x05, 0x00, 0x00, 0x00, TEST_STREAM_ID_1, \
+	0x3f, 0xe2, 0x1f, \
+	0x82, 0x84, 0x86, 0x41, 0x8a, 0x0b, 0xe2, 0x5c, 0x0b, 0x89, 0x70, 0xdc, \
+	0x78, 0x0f, 0x03, 0x53, 0x03, 0x2a, 0x2f, 0x2a, 0x90, 0x7a, 0x8a, 0xaa, \
+	0x69, 0xd2, 0x9a, 0xc4, 0xc0, 0x57, 0x68, 0x0b, 0x83
+#define TEST_HTTP2_HEADERS_GET_ROOT_TABLE_SIZE_1_STREAM_1 \
+	0x00, 0x00, 0x22, 0x01, 0x05, 0x00, 0x00, 0x00, TEST_STREAM_ID_1, \
+	0x21, \
+	0x82, 0x84, 0x86, 0x41, 0x8a, 0x0b, 0xe2, 0x5c, 0x0b, 0x89, 0x70, 0xdc, \
+	0x78, 0x0f, 0x03, 0x53, 0x03, 0x2a, 0x2f, 0x2a, 0x90, 0x7a, 0x8a, 0xaa, \
+	0x69, 0xd2, 0x9a, 0xc4, 0xc0, 0x57, 0x68, 0x0b, 0x83
+#define TEST_HTTP2_HEADERS_PRIORITY_SHORT_STREAM_1 \
+	0x00, 0x00, 0x03, 0x01, 0x24, 0x00, 0x00, 0x00, TEST_STREAM_ID_1, 0x00, 0x00, 0x00
+#define TEST_HTTP2_DATA_EMPTY_STREAM_1 \
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, TEST_STREAM_ID_1
+#define TEST_HTTP2_DATA_PADDING_ONLY_STREAM_1 \
+	0x00, 0x00, 0x05, 0x00, 0x08, 0x00, 0x00, 0x00, TEST_STREAM_ID_1, 0x04, \
+	0x00, 0x00, 0x00, 0x00
 #define TEST_HTTP2_DATA_POST_DYNAMIC_STREAM_1_NO_END_STREAM \
 	0x00, 0x00, 0x11, 0x00, 0x00, 0x00, 0x00, 0x00, TEST_STREAM_ID_1, \
 	0x54, 0x65, 0x73, 0x74, 0x20, 0x64, 0x79, 0x6e, 0x61, 0x6d, 0x69, 0x63, \
@@ -434,6 +478,15 @@ enum dynamic_response_headers_variant {
 
 	/* Long body data split across multiple callbacks */
 	DYNAMIC_RESPONSE_HEADERS_VARIANT_BODY_LONG,
+
+	/* Send a header with a long name */
+	DYNAMIC_RESPONSE_HEADERS_VARIANT_LONG_HEADER_NAME,
+
+	/* Headers too long for the server to assemble in a single piece */
+	DYNAMIC_RESPONSE_HEADERS_VARIANT_LONG_HEADERS,
+
+	/* Send body data before all request data is received, nothing on final data */
+	DYNAMIC_RESPONSE_HEADERS_VARIANT_BODY_EARLY,
 };
 
 static uint8_t dynamic_response_headers_variant;
@@ -455,6 +508,16 @@ static int dynamic_response_headers_cb(struct http_client_ctx *client,
 		{.name = "Content-Type", .value = "application/json"},
 	};
 
+	static const struct http_header long_name_headers[] = {
+		{.name = TEST_LONG_HEADER_NAME, .value = "test_data"},
+	};
+
+	static const struct http_header long_headers[] = {
+		{.name = "Test-Header", .value = "test_data"},
+		{.name = "Test-Long-Header", .value = TEST_LONG_PAYLOAD_CHUNK_1},
+		{.name = "Test-Header2", .value = "test_data2"},
+	};
+
 	if (status == HTTP_SERVER_TRANSACTION_ABORTED ||
 	    status == HTTP_SERVER_TRANSACTION_COMPLETE) {
 		offset = 0;
@@ -462,9 +525,10 @@ static int dynamic_response_headers_cb(struct http_client_ctx *client,
 	}
 
 	if (status != HTTP_SERVER_REQUEST_DATA_FINAL &&
-	    dynamic_response_headers_variant != DYNAMIC_RESPONSE_HEADERS_VARIANT_BODY_LONG) {
-		/* Long body variant is the only one which needs to take some action before final
-		 * data has been received from server
+	    dynamic_response_headers_variant != DYNAMIC_RESPONSE_HEADERS_VARIANT_BODY_LONG &&
+	    dynamic_response_headers_variant != DYNAMIC_RESPONSE_HEADERS_VARIANT_BODY_EARLY) {
+		/* Long body and early body variants are the only ones which need to take some
+		 * action before final data has been received from server
 		 */
 		return 0;
 	}
@@ -487,6 +551,12 @@ static int dynamic_response_headers_cb(struct http_client_ctx *client,
 	case DYNAMIC_RESPONSE_HEADERS_VARIANT_OVERRIDE_HEADER:
 		response_ctx->headers = override_headers;
 		response_ctx->header_count = ARRAY_SIZE(extra_headers);
+		response_ctx->final_chunk = true;
+		break;
+
+	case DYNAMIC_RESPONSE_HEADERS_VARIANT_LONG_HEADER_NAME:
+		response_ctx->headers = long_name_headers;
+		response_ctx->header_count = ARRAY_SIZE(long_name_headers);
 		response_ctx->final_chunk = true;
 		break;
 
@@ -543,6 +613,21 @@ static int dynamic_response_headers_cb(struct http_client_ctx *client,
 			zassert(false, "unexpected HTTP method");
 		}
 		break;
+
+	case DYNAMIC_RESPONSE_HEADERS_VARIANT_LONG_HEADERS:
+		response_ctx->headers = long_headers;
+		response_ctx->header_count = ARRAY_SIZE(long_headers);
+		response_ctx->body = TEST_DYNAMIC_GET_PAYLOAD;
+		response_ctx->body_len = strlen(response_ctx->body);
+		response_ctx->final_chunk = true;
+		break;
+
+	case DYNAMIC_RESPONSE_HEADERS_VARIANT_BODY_EARLY:
+		if (status == HTTP_SERVER_REQUEST_DATA_MORE) {
+			response_ctx->body = TEST_DYNAMIC_GET_PAYLOAD;
+			response_ctx->body_len = strlen(response_ctx->body);
+		}
+		break;
 	}
 
 	return 0;
@@ -560,6 +645,205 @@ struct http_resource_detail_dynamic dynamic_response_headers_detail = {
 
 HTTP_RESOURCE_DEFINE(dynamic_response_headers_resource, test_http_service, "/response_headers",
 		     &dynamic_response_headers_detail);
+
+struct http_resource_detail_dynamic dynamic_long_content_type_detail = {
+	.common = {
+		.type = HTTP_RESOURCE_TYPE_DYNAMIC,
+		.bitmask_of_supported_http_methods = BIT(HTTP_GET) | BIT(HTTP_POST),
+		.content_type = TEST_LONG_CONTENT_TYPE,
+	},
+	.cb = dynamic_response_headers_cb,
+	.user_data = NULL
+};
+
+HTTP_RESOURCE_DEFINE(dynamic_long_content_type_resource, test_http_service, "/long_content_type",
+		     &dynamic_long_content_type_detail);
+
+/* Fake socket standing in for a client connection, to check how
+ * http_server_sendall_iov() copes with partial writes and with sockets that
+ * do not support sendmsg(), and how many calls a response is sent in.
+ */
+struct fake_socket_ctx {
+	/* Largest number of bytes accepted by one call, 0 for no limit */
+	size_t max_write;
+	/* errno to fail sendmsg() with, 0 to let it succeed */
+	int sendmsg_errno;
+	size_t sendmsg_calls;
+	size_t sendto_calls;
+	bool empty_iov_seen;
+	uint8_t data[128];
+	size_t data_len;
+};
+
+static struct fake_socket_ctx fake_socket;
+
+static size_t fake_socket_store(struct fake_socket_ctx *sock, const void *buf, size_t len)
+{
+	len = MIN(len, sizeof(sock->data) - sock->data_len);
+	memcpy(&sock->data[sock->data_len], buf, len);
+	sock->data_len += len;
+
+	return len;
+}
+
+static ssize_t fake_socket_sendto(void *obj, const void *buf, size_t len, int flags,
+				  const struct net_sockaddr *dest_addr, net_socklen_t addrlen)
+{
+	struct fake_socket_ctx *sock = obj;
+
+	sock->sendto_calls++;
+
+	if (sock->max_write > 0) {
+		len = MIN(len, sock->max_write);
+	}
+
+	return fake_socket_store(sock, buf, len);
+}
+
+static ssize_t fake_socket_sendmsg(void *obj, const struct net_msghdr *msg, int flags)
+{
+	struct fake_socket_ctx *sock = obj;
+	size_t budget = sock->max_write > 0 ? sock->max_write : SIZE_MAX;
+	size_t sent = 0;
+
+	sock->sendmsg_calls++;
+
+	if (sock->sendmsg_errno != 0) {
+		errno = sock->sendmsg_errno;
+		return -1;
+	}
+
+	for (size_t i = 0; i < msg->msg_iovlen && sent < budget; i++) {
+		if (msg->msg_iov[i].iov_len == 0) {
+			sock->empty_iov_seen = true;
+		}
+
+		sent += fake_socket_store(sock, msg->msg_iov[i].iov_base,
+					  MIN(msg->msg_iov[i].iov_len, budget - sent));
+	}
+
+	return sent;
+}
+
+static const struct socket_op_vtable fake_socket_vtable = {
+	.sendto = fake_socket_sendto,
+	.sendmsg = fake_socket_sendmsg,
+};
+
+static const struct socket_op_vtable fake_socket_no_sendmsg_vtable = {
+	.sendto = fake_socket_sendto,
+};
+
+/* Reset the fake socket and return a file descriptor for it */
+static int fake_socket_open(const struct socket_op_vtable *vtable, size_t max_write,
+			    int sendmsg_errno)
+{
+	int fd;
+
+	memset(&fake_socket, 0, sizeof(fake_socket));
+	fake_socket.max_write = max_write;
+	fake_socket.sendmsg_errno = sendmsg_errno;
+
+	fd = zvfs_reserve_fd();
+	zassert_true(fd >= 0, "Failed to reserve fd (%d)", errno);
+	zvfs_finalize_typed_fd(fd, &fake_socket, &vtable->fd_vtable, ZVFS_MODE_IFSOCK);
+
+	return fd;
+}
+
+/* Buffers passed to http_server_sendall_iov(), including empty ones */
+static const char *const sendall_iov_buffers[] = {"", "Hello", ", ", "", "gathered", " world", ""};
+#define SENDALL_IOV_NON_EMPTY_BUFFERS 4
+#define SENDALL_IOV_DATA              "Hello, gathered world"
+
+static int sendall_iov_fd = -1;
+static int sendall_iov_ret;
+
+static int sendall_iov_cb(struct http_client_ctx *client, enum http_transaction_status status,
+			  const struct http_request_ctx *request_ctx,
+			  struct http_response_ctx *response_ctx, void *user_data)
+{
+	struct net_iovec iov[ARRAY_SIZE(sendall_iov_buffers)];
+	int real_fd = client->fd;
+
+	if (status != HTTP_SERVER_REQUEST_DATA_FINAL) {
+		return 0;
+	}
+
+	ARRAY_FOR_EACH(sendall_iov_buffers, i) {
+		iov[i].iov_base = (void *)sendall_iov_buffers[i];
+		iov[i].iov_len = strlen(sendall_iov_buffers[i]);
+	}
+
+	/* Send through the fake socket, then put the real one back to complete
+	 * the HTTP transaction.
+	 */
+	client->fd = sendall_iov_fd;
+	sendall_iov_ret = http_server_sendall_iov(client, iov, ARRAY_SIZE(iov));
+	client->fd = real_fd;
+
+	response_ctx->final_chunk = true;
+
+	return 0;
+}
+
+struct http_resource_detail_dynamic sendall_iov_detail = {
+	.common = {
+		.type = HTTP_RESOURCE_TYPE_DYNAMIC,
+		.bitmask_of_supported_http_methods = BIT(HTTP_GET),
+		.content_type = "text/plain",
+	},
+	.cb = sendall_iov_cb,
+	.user_data = NULL
+};
+
+HTTP_RESOURCE_DEFINE(sendall_iov_resource, test_http_service, "/sendall_iov", &sendall_iov_detail);
+
+static int response_writes_fd = -1;
+static int response_writes_real_fd = -1;
+static K_SEM_DEFINE(response_writes_done, 0, 1);
+
+/* Respond in a single callback, with the response sent through the fake socket
+ * to count the calls it is sent in.
+ */
+static int response_writes_cb(struct http_client_ctx *client, enum http_transaction_status status,
+			      const struct http_request_ctx *request_ctx,
+			      struct http_response_ctx *response_ctx, void *user_data)
+{
+	if (status == HTTP_SERVER_TRANSACTION_ABORTED ||
+	    status == HTTP_SERVER_TRANSACTION_COMPLETE) {
+		/* Put the real socket back for the rest of the connection */
+		client->fd = response_writes_real_fd;
+		k_sem_give(&response_writes_done);
+		return 0;
+	}
+
+	if (status != HTTP_SERVER_REQUEST_DATA_FINAL) {
+		return 0;
+	}
+
+	response_writes_real_fd = client->fd;
+	client->fd = response_writes_fd;
+
+	response_ctx->body = (const uint8_t *)TEST_DYNAMIC_GET_PAYLOAD;
+	response_ctx->body_len = strlen(TEST_DYNAMIC_GET_PAYLOAD);
+	response_ctx->final_chunk = true;
+
+	return 0;
+}
+
+struct http_resource_detail_dynamic response_writes_detail = {
+	.common = {
+		.type = HTTP_RESOURCE_TYPE_DYNAMIC,
+		.bitmask_of_supported_http_methods = BIT(HTTP_GET) | BIT(HTTP_POST),
+		.content_type = "text/plain",
+	},
+	.cb = response_writes_cb,
+	.user_data = NULL
+};
+
+HTTP_RESOURCE_DEFINE(response_writes_resource, test_http_service, "/response_writes",
+		     &response_writes_detail);
 
 static int client_fd = -1;
 static uint8_t buf[BUFFER_SIZE];
@@ -1283,6 +1567,209 @@ ZTEST(server_function_tests, test_http2_post_data_with_padding)
 						 sizeof(request_post_dynamic));
 }
 
+/* A frame too short for the field its flag announces is malformed and ends
+ * the connection. The frame is followed by another one, as the server only
+ * handles a frame once it has some payload buffered.
+ */
+static void common_verify_http2_short_field(const uint8_t *request, size_t request_len)
+{
+	size_t offset = 0;
+	int ret;
+
+	ret = zsock_send(client_fd, request, request_len, 0);
+	zassert_not_equal(ret, -1, "send() failed (%d)", errno);
+
+	memset(buf, 0, sizeof(buf));
+
+	expect_http2_settings_frame(&offset, false);
+	expect_http2_settings_frame(&offset, true);
+
+	do {
+		ret = zsock_recv(client_fd, buf, sizeof(buf), 0);
+		zassert_not_equal(ret, -1, "recv() failed (%d)", errno);
+	} while (ret > 0);
+
+	zassert_equal(ret, 0, "Connection should've been closed");
+}
+
+ZTEST(server_function_tests, test_http2_header_table_size_update_before_ack)
+{
+	/* Until the client acknowledges the server's SETTINGS, a dynamic table
+	 * size update up to the protocol default of 4096 is valid.
+	 */
+	static const uint8_t request[] = {
+		TEST_HTTP2_MAGIC,
+		TEST_HTTP2_SETTINGS,
+		TEST_HTTP2_HEADERS_GET_ROOT_TABLE_SIZE_4096_STREAM_1,
+		TEST_HTTP2_GOAWAY,
+	};
+	size_t offset = 0;
+	int ret;
+
+	ret = zsock_send(client_fd, request, sizeof(request), 0);
+	zassert_not_equal(ret, -1, "send() failed (%d)", errno);
+
+	memset(buf, 0, sizeof(buf));
+
+	expect_http2_settings_frame(&offset, false);
+	expect_http2_settings_frame(&offset, true);
+	expect_http2_headers_frame(&offset, TEST_STREAM_ID_1, HTTP2_FLAG_END_HEADERS, NULL, 0);
+	expect_http2_data_frame(&offset, TEST_STREAM_ID_1, TEST_STATIC_PAYLOAD,
+				strlen(TEST_STATIC_PAYLOAD), HTTP2_FLAG_END_STREAM);
+}
+
+/* A header block the server refuses to decode: the stream gets a 500 and the
+ * connection is closed, with no response to the request itself.
+ */
+static void common_verify_http2_header_block_rejected(const uint8_t *request, size_t request_len)
+{
+	const struct http_header expected_headers[] = {
+		{.name = ":status", .value = "500"}
+	};
+	size_t offset = 0;
+	int ret;
+
+	ret = zsock_send(client_fd, request, request_len, 0);
+	zassert_not_equal(ret, -1, "send() failed (%d)", errno);
+
+	memset(buf, 0, sizeof(buf));
+
+	expect_http2_settings_frame(&offset, false);
+	expect_http2_settings_frame(&offset, true);
+	expect_http2_headers_frame(&offset, TEST_STREAM_ID_1, HTTP2_FLAG_END_HEADERS,
+				   expected_headers, 1);
+	expect_http2_data_frame(&offset, TEST_STREAM_ID_1, NULL, 0, HTTP2_FLAG_END_STREAM);
+
+	do {
+		ret = zsock_recv(client_fd, buf, sizeof(buf), 0);
+		zassert_not_equal(ret, -1, "recv() failed (%d)", errno);
+	} while (ret > 0);
+
+	zassert_equal(ret, 0, "Connection should've been closed");
+}
+
+ZTEST(server_function_tests, test_http2_header_table_size_update_too_large)
+{
+	/* Above the protocol default, acknowledged or not. */
+	static const uint8_t request[] = {
+		TEST_HTTP2_MAGIC,
+		TEST_HTTP2_SETTINGS,
+		TEST_HTTP2_HEADERS_GET_ROOT_TABLE_SIZE_4097_STREAM_1,
+		TEST_HTTP2_GOAWAY,
+	};
+
+	common_verify_http2_header_block_rejected(request, sizeof(request));
+}
+
+ZTEST(server_function_tests, test_http2_header_table_size_update_after_ack)
+{
+	/* Once acknowledged, the server's table size of zero is the limit. */
+	static const uint8_t request[] = {
+		TEST_HTTP2_MAGIC,
+		TEST_HTTP2_SETTINGS,
+		TEST_HTTP2_SETTINGS_ACK,
+		TEST_HTTP2_HEADERS_GET_ROOT_TABLE_SIZE_1_STREAM_1,
+		TEST_HTTP2_GOAWAY,
+	};
+
+	common_verify_http2_header_block_rejected(request, sizeof(request));
+}
+
+ZTEST(server_function_tests, test_http2_headers_padded_empty)
+{
+	static const uint8_t request[] = {
+		TEST_HTTP2_MAGIC,
+		TEST_HTTP2_SETTINGS,
+		TEST_HTTP2_SETTINGS_ACK,
+		TEST_HTTP2_HEADERS_PADDED_EMPTY_STREAM_1,
+		TEST_HTTP2_GOAWAY,
+	};
+
+	common_verify_http2_short_field(request, sizeof(request));
+}
+
+ZTEST(server_function_tests, test_http2_headers_priority_short)
+{
+	static const uint8_t request[] = {
+		TEST_HTTP2_MAGIC,
+		TEST_HTTP2_SETTINGS,
+		TEST_HTTP2_SETTINGS_ACK,
+		TEST_HTTP2_HEADERS_PRIORITY_SHORT_STREAM_1,
+		TEST_HTTP2_GOAWAY,
+	};
+
+	common_verify_http2_short_field(request, sizeof(request));
+}
+
+ZTEST(server_function_tests, test_http2_post_data_padding_only)
+{
+	/* A DATA frame of nothing but padding carries no body. */
+	static const uint8_t request_post_dynamic[] = {
+		TEST_HTTP2_MAGIC,
+		TEST_HTTP2_SETTINGS,
+		TEST_HTTP2_SETTINGS_ACK,
+		TEST_HTTP2_HEADERS_POST_DYNAMIC_STREAM_1,
+		TEST_HTTP2_DATA_PADDING_ONLY_STREAM_1,
+		TEST_HTTP2_DATA_POST_DYNAMIC_STREAM_1_PADDED,
+		TEST_HTTP2_GOAWAY,
+	};
+	size_t offset = 0;
+	int ret;
+
+	ret = zsock_send(client_fd, request_post_dynamic, sizeof(request_post_dynamic), 0);
+	zassert_not_equal(ret, -1, "send() failed (%d)", errno);
+
+	memset(buf, 0, sizeof(buf));
+
+	expect_http2_settings_frame(&offset, false);
+	expect_http2_settings_frame(&offset, true);
+	/* The empty chunk is acknowledged with WINDOW_UPDATEs. */
+	expect_http2_window_update_frame(&offset, TEST_STREAM_ID_1);
+	expect_http2_window_update_frame(&offset, 0);
+	expect_http2_headers_frame(&offset, TEST_STREAM_ID_1,
+				   HTTP2_FLAG_END_HEADERS | HTTP2_FLAG_END_STREAM, NULL, 0);
+
+	zassert_equal(dynamic_payload_len, strlen(TEST_DYNAMIC_POST_PAYLOAD),
+		      "Wrong dynamic resource length");
+	zassert_mem_equal(dynamic_payload, TEST_DYNAMIC_POST_PAYLOAD,
+			  dynamic_payload_len, "Wrong dynamic resource data");
+	zassert_true(dynamic_complete, "Callback not called with transaction complete status");
+}
+
+ZTEST(server_function_tests, test_http2_post_data_empty)
+{
+	/* An empty DATA frame consumes no flow control credit, so none is
+	 * granted back.
+	 */
+	static const uint8_t request_post_dynamic[] = {
+		TEST_HTTP2_MAGIC,
+		TEST_HTTP2_SETTINGS,
+		TEST_HTTP2_SETTINGS_ACK,
+		TEST_HTTP2_HEADERS_POST_DYNAMIC_STREAM_1,
+		TEST_HTTP2_DATA_EMPTY_STREAM_1,
+		TEST_HTTP2_DATA_POST_DYNAMIC_STREAM_1_PADDED,
+		TEST_HTTP2_GOAWAY,
+	};
+	size_t offset = 0;
+	int ret;
+
+	ret = zsock_send(client_fd, request_post_dynamic, sizeof(request_post_dynamic), 0);
+	zassert_not_equal(ret, -1, "send() failed (%d)", errno);
+
+	memset(buf, 0, sizeof(buf));
+
+	expect_http2_settings_frame(&offset, false);
+	expect_http2_settings_frame(&offset, true);
+	expect_http2_headers_frame(&offset, TEST_STREAM_ID_1,
+				   HTTP2_FLAG_END_HEADERS | HTTP2_FLAG_END_STREAM, NULL, 0);
+
+	zassert_equal(dynamic_payload_len, strlen(TEST_DYNAMIC_POST_PAYLOAD),
+		      "Wrong dynamic resource length");
+	zassert_mem_equal(dynamic_payload, TEST_DYNAMIC_POST_PAYLOAD,
+			  dynamic_payload_len, "Wrong dynamic resource data");
+	zassert_true(dynamic_complete, "Callback not called with transaction complete status");
+}
+
 ZTEST(server_function_tests, test_http2_post_headers_with_priority)
 {
 	static const uint8_t request_post_dynamic[] = {
@@ -1350,6 +1837,50 @@ ZTEST(server_function_tests, test_http2_post_missing_continuation)
 
 	/* Expect settings, but processing headers (and lack of continuation
 	 * frame) should break the stream, and trigger disconnect.
+	 */
+	expect_http2_settings_frame(&offset, false);
+	expect_http2_settings_frame(&offset, true);
+
+	ret = zsock_recv(client_fd, buf, sizeof(buf), 0);
+	zassert_equal(ret, 0, "Connection should've been closed");
+}
+
+ZTEST(server_function_tests, test_http2_post_headers_with_continuation_aligned)
+{
+	static const uint8_t request_post_dynamic[] = {
+		TEST_HTTP2_MAGIC,
+		TEST_HTTP2_SETTINGS,
+		TEST_HTTP2_SETTINGS_ACK,
+		TEST_HTTP2_PARTIAL_HEADERS_POST_DYNAMIC_STREAM_1_ALIGNED,
+		TEST_HTTP2_CONTINUATION_POST_DYNAMIC_STREAM_1_ALIGNED,
+		TEST_HTTP2_DATA_POST_DYNAMIC_STREAM_1,
+		TEST_HTTP2_GOAWAY,
+	};
+
+	common_verify_http2_dynamic_post_request(request_post_dynamic,
+						 sizeof(request_post_dynamic));
+}
+
+ZTEST(server_function_tests, test_http2_unexpected_continuation)
+{
+	static const uint8_t request_post_dynamic[] = {
+		TEST_HTTP2_MAGIC,
+		TEST_HTTP2_SETTINGS,
+		TEST_HTTP2_SETTINGS_ACK,
+		TEST_HTTP2_CONTINUATION_POST_DYNAMIC_STREAM_1,
+		TEST_HTTP2_GOAWAY,
+	};
+	size_t offset = 0;
+	int ret;
+
+	(void)memset(buf, 0, sizeof(buf));
+
+	ret = zsock_send(client_fd, request_post_dynamic,
+			 sizeof(request_post_dynamic), 0);
+	zassert_not_equal(ret, -1, "send() failed (%d)", errno);
+
+	/* A continuation frame which is not preceded by a headers frame is a
+	 * protocol error, the connection should be closed.
 	 */
 	expect_http2_settings_frame(&offset, false);
 	expect_http2_settings_frame(&offset, true);
@@ -1983,6 +2514,60 @@ ZTEST(server_function_tests, test_http1_dynamic_post_response_header_override)
 	test_http1_dynamic_response_header_override(true);
 }
 
+static void test_http1_dynamic_response_header_long_name(bool post)
+{
+	static const char response[] = "HTTP/1.1 200\r\n"
+				       "Transfer-Encoding: chunked\r\n"
+				       TEST_LONG_HEADER_NAME ": test_data\r\n"
+				       "Content-Type: text/plain\r\n"
+				       "\r\n"
+				       "0\r\n\r\n";
+
+	dynamic_response_headers_variant = DYNAMIC_RESPONSE_HEADERS_VARIANT_LONG_HEADER_NAME;
+
+	test_http1_dynamic_response_headers_default(response, post);
+}
+
+ZTEST(server_function_tests, test_http1_dynamic_get_response_header_long_name)
+{
+	test_http1_dynamic_response_header_long_name(false);
+}
+
+ZTEST(server_function_tests, test_http1_dynamic_post_response_header_long_name)
+{
+	test_http1_dynamic_response_header_long_name(true);
+}
+
+static void test_http1_dynamic_response_long_content_type(bool post)
+{
+	static const char get_request[] = "GET /long_content_type HTTP/1.1\r\n"
+					  "Accept: */*\r\n"
+					  "\r\n";
+	static const char post_request[] = "POST /long_content_type HTTP/1.1\r\n"
+					   "Accept: */*\r\n"
+					   "Content-Length: 17\r\n"
+					   "\r\n" TEST_DYNAMIC_POST_PAYLOAD;
+	static const char response[] = "HTTP/1.1 200\r\n"
+				       "Transfer-Encoding: chunked\r\n"
+				       "Content-Type: " TEST_LONG_CONTENT_TYPE "\r\n"
+				       "\r\n"
+				       "0\r\n\r\n";
+
+	dynamic_response_headers_variant = DYNAMIC_RESPONSE_HEADERS_VARIANT_NONE;
+
+	test_http1_dynamic_response_headers(post ? post_request : get_request, response);
+}
+
+ZTEST(server_function_tests, test_http1_dynamic_get_response_long_content_type)
+{
+	test_http1_dynamic_response_long_content_type(false);
+}
+
+ZTEST(server_function_tests, test_http1_dynamic_post_response_long_content_type)
+{
+	test_http1_dynamic_response_long_content_type(true);
+}
+
 static void test_http2_dynamic_response_header_override(bool post)
 {
 	size_t offset = 0;
@@ -2199,6 +2784,209 @@ ZTEST(server_function_tests, test_http2_dynamic_post_response_header_long)
 	test_http2_dynamic_response_headers(request, req_offset, expected_headers,
 					    ARRAY_SIZE(expected_headers), true, &offset);
 	zassert_mem_equal(dynamic_response_headers_buffer, long_payload, strlen(long_payload));
+}
+
+static void test_http1_dynamic_response_header_long_headers(bool post)
+{
+	static const char response[] = "HTTP/1.1 200\r\n"
+				       "Transfer-Encoding: chunked\r\n"
+				       "Test-Header: test_data\r\n"
+				       "Test-Long-Header: " TEST_LONG_PAYLOAD_CHUNK_1 "\r\n"
+				       "Test-Header2: test_data2\r\n"
+				       "Content-Type: text/plain\r\n"
+				       "\r\n"
+				       "10\r\n" TEST_DYNAMIC_GET_PAYLOAD "\r\n"
+				       "0\r\n\r\n";
+
+	dynamic_response_headers_variant = DYNAMIC_RESPONSE_HEADERS_VARIANT_LONG_HEADERS;
+
+	test_http1_dynamic_response_headers_default(response, post);
+}
+
+ZTEST(server_function_tests, test_http1_dynamic_get_response_header_long_headers)
+{
+	test_http1_dynamic_response_header_long_headers(false);
+}
+
+ZTEST(server_function_tests, test_http1_dynamic_post_response_header_long_headers)
+{
+	test_http1_dynamic_response_header_long_headers(true);
+}
+
+static void test_sendall_iov(const struct socket_op_vtable *vtable, size_t max_write,
+			     int sendmsg_errno)
+{
+	static const char request[] = "GET /sendall_iov HTTP/1.1\r\n"
+				      "Accept: */*\r\n"
+				      "\r\n";
+	static const char response[] = "HTTP/1.1 200\r\n"
+				       "Transfer-Encoding: chunked\r\n"
+				       "Content-Type: text/plain\r\n"
+				       "\r\n"
+				       "0\r\n\r\n";
+	size_t offset = 0;
+	int ret;
+
+	sendall_iov_fd = fake_socket_open(vtable, max_write, sendmsg_errno);
+
+	ret = zsock_send(client_fd, request, strlen(request), 0);
+	zassert_not_equal(ret, -1, "send() failed (%d)", errno);
+
+	test_read_data(&offset, strlen(response));
+	zassert_mem_equal(buf, response, strlen(response));
+
+	(void)zsock_close(sendall_iov_fd);
+	sendall_iov_fd = -1;
+}
+
+static void test_sendall_iov_check_data(void)
+{
+	zassert_equal(sendall_iov_ret, 0, "Unexpected result (%d)", sendall_iov_ret);
+	zassert_false(fake_socket.empty_iov_seen, "Empty buffer passed to sendmsg()");
+	zassert_equal(fake_socket.data_len, strlen(SENDALL_IOV_DATA));
+	zassert_mem_equal(fake_socket.data, SENDALL_IOV_DATA, strlen(SENDALL_IOV_DATA));
+}
+
+ZTEST(server_function_tests, test_sendall_iov_gather)
+{
+	test_sendall_iov(&fake_socket_vtable, 0, 0);
+
+	test_sendall_iov_check_data();
+	zassert_equal(fake_socket.sendmsg_calls, 1);
+	zassert_equal(fake_socket.sendto_calls, 0);
+}
+
+ZTEST(server_function_tests, test_sendall_iov_partial_writes)
+{
+	const size_t max_write = 4;
+
+	test_sendall_iov(&fake_socket_vtable, max_write, 0);
+
+	test_sendall_iov_check_data();
+	zassert_equal(fake_socket.sendmsg_calls, DIV_ROUND_UP(strlen(SENDALL_IOV_DATA), max_write));
+	zassert_equal(fake_socket.sendto_calls, 0);
+}
+
+ZTEST(server_function_tests, test_sendall_iov_no_sendmsg)
+{
+	test_sendall_iov(&fake_socket_no_sendmsg_vtable, 0, 0);
+
+	test_sendall_iov_check_data();
+	zassert_equal(fake_socket.sendmsg_calls, 0);
+	zassert_equal(fake_socket.sendto_calls, SENDALL_IOV_NON_EMPTY_BUFFERS);
+}
+
+ZTEST(server_function_tests, test_sendall_iov_sendmsg_enotsup)
+{
+	test_sendall_iov(&fake_socket_vtable, 0, ENOTSUP);
+
+	test_sendall_iov_check_data();
+	zassert_equal(fake_socket.sendmsg_calls, 1);
+	zassert_equal(fake_socket.sendto_calls, SENDALL_IOV_NON_EMPTY_BUFFERS);
+}
+
+ZTEST(server_function_tests, test_sendall_iov_sendmsg_error)
+{
+	test_sendall_iov(&fake_socket_vtable, 0, EIO);
+
+	zassert_equal(sendall_iov_ret, -EIO, "Unexpected result (%d)", sendall_iov_ret);
+	zassert_equal(fake_socket.sendmsg_calls, 1);
+	zassert_equal(fake_socket.sendto_calls, 0);
+	zassert_equal(fake_socket.data_len, 0);
+}
+
+static void test_http1_dynamic_response_writes(bool post)
+{
+	static const char get_request[] = "GET /response_writes HTTP/1.1\r\n"
+					  "Accept: */*\r\n"
+					  "\r\n";
+	static const char post_request[] = "POST /response_writes HTTP/1.1\r\n"
+					   "Accept: */*\r\n"
+					   "Content-Length: 17\r\n"
+					   "\r\n" TEST_DYNAMIC_POST_PAYLOAD;
+	static const char response[] = "HTTP/1.1 200\r\n"
+				       "Transfer-Encoding: chunked\r\n"
+				       "Content-Type: text/plain\r\n"
+				       "\r\n"
+				       "10\r\n" TEST_DYNAMIC_GET_PAYLOAD "\r\n"
+				       "0\r\n\r\n";
+	const char *request = post ? post_request : get_request;
+	int ret;
+
+	BUILD_ASSERT(sizeof(response) - 1 <= sizeof(fake_socket.data));
+
+	response_writes_fd = fake_socket_open(&fake_socket_vtable, 0, 0);
+	k_sem_reset(&response_writes_done);
+
+	ret = zsock_send(client_fd, request, strlen(request), 0);
+	zassert_not_equal(ret, -1, "send() failed (%d)", errno);
+
+	ret = k_sem_take(&response_writes_done, K_SECONDS(TIMEOUT_S));
+	zassert_ok(ret, "Transaction not completed");
+
+	(void)zsock_close(response_writes_fd);
+	response_writes_fd = -1;
+
+	/* Headers, body chunk and terminating chunk go out in one call */
+	zassert_equal(fake_socket.data_len, strlen(response));
+	zassert_mem_equal(fake_socket.data, response, strlen(response));
+	zassert_equal(fake_socket.sendmsg_calls, 1);
+	zassert_equal(fake_socket.sendto_calls, 0);
+}
+
+ZTEST(server_function_tests, test_http1_dynamic_get_response_single_write)
+{
+	test_http1_dynamic_response_writes(false);
+}
+
+ZTEST(server_function_tests, test_http1_dynamic_post_response_single_write)
+{
+	test_http1_dynamic_response_writes(true);
+}
+
+/* The response is started while request data is still arriving and nothing
+ * is added once the request is complete, so the server has to terminate the
+ * response on its own, exactly once.
+ */
+ZTEST(server_function_tests, test_http1_dynamic_post_response_early_body)
+{
+	static const char request_part1[] = "POST /response_headers HTTP/1.1\r\n"
+					    "Accept: */*\r\n"
+					    "Content-Length: 17\r\n"
+					    "\r\n"
+					    "Test dyn";
+	static const char request_part2[] = "amic POST";
+	static const char response_part1[] = "HTTP/1.1 200\r\n"
+					     "Transfer-Encoding: chunked\r\n"
+					     "Content-Type: text/plain\r\n"
+					     "\r\n"
+					     "10\r\n" TEST_DYNAMIC_GET_PAYLOAD "\r\n";
+	static const char response_part2[] = "0\r\n\r\n";
+	size_t offset = 0;
+	int ret;
+
+	dynamic_response_headers_variant = DYNAMIC_RESPONSE_HEADERS_VARIANT_BODY_EARLY;
+
+	ret = zsock_send(client_fd, request_part1, strlen(request_part1), 0);
+	zassert_not_equal(ret, -1, "send() failed (%d)", errno);
+
+	test_read_data(&offset, strlen(response_part1));
+	zassert_equal(offset, strlen(response_part1), "Unexpected data before request completed");
+	zassert_mem_equal(buf, response_part1, strlen(response_part1));
+	test_consume_data(&offset, strlen(response_part1));
+
+	ret = zsock_send(client_fd, request_part2, strlen(request_part2), 0);
+	zassert_not_equal(ret, -1, "send() failed (%d)", errno);
+
+	test_read_data(&offset, strlen(response_part2));
+	zassert_mem_equal(buf, response_part2, strlen(response_part2));
+	test_consume_data(&offset, strlen(response_part2));
+
+	/* Give a duplicate terminating chunk time to arrive */
+	k_msleep(100);
+
+	ret = zsock_recv(client_fd, buf, sizeof(buf), ZSOCK_MSG_DONTWAIT);
+	zassert_true(offset == 0 && ret < 0 && errno == EAGAIN, "Unexpected trailing data");
 }
 
 ZTEST(server_function_tests, test_http1_409_method_not_allowed)
@@ -2732,6 +3520,123 @@ ZTEST(server_function_tests, test_http1_static_fs)
 			  "Received data doesn't match expected response");
 }
 
+ZTEST(server_function_tests, test_http1_static_fs_query)
+{
+	static const char http1_request[] =
+		"GET /static_file.html?v=1 HTTP/1.1\r\n"
+		"Host: 127.0.0.1:8080\r\n"
+		"User-Agent: curl/7.68.0\r\n"
+		"Accept: */*\r\n"
+		"\r\n";
+	static const char expected_response[] =
+		"HTTP/1.1 200 OK\r\n"
+		"Content-Length: 30\r\n"
+		"Content-Type: text/html\r\n"
+		"\r\n"
+		TEST_STATIC_FS_PAYLOAD;
+	size_t offset = 0;
+	int ret;
+
+	ret = setup_fs("");
+	zassert_equal(ret, TC_PASS, "Failed to mount fs");
+
+	ret = zsock_send(client_fd, http1_request, strlen(http1_request), 0);
+	zassert_not_equal(ret, -1, "send() failed (%d)", errno);
+
+	memset(buf, 0, sizeof(buf));
+
+	test_read_data(&offset, sizeof(expected_response) - 1);
+	zassert_mem_equal(buf, expected_response, sizeof(expected_response) - 1,
+			  "Received data doesn't match expected response");
+}
+
+/* HPACK-encoded "GET /static_file.html" request, END_STREAM | END_HEADERS set.
+ * :method: GET (indexed, 0x82), :scheme: http (indexed, 0x86) and :path with an
+ * indexed name (4) and a literal, non-Huffman value.
+ */
+#define TEST_HTTP2_HEADERS_GET_STATIC_FS(_stream_id) \
+	0x00, 0x00, 0x15, 0x01, 0x05, 0x00, 0x00, 0x00, _stream_id, \
+	0x82, 0x86, 0x04, 0x11, 0x2f, 0x73, 0x74, 0x61, 0x74, 0x69, 0x63, 0x5f, \
+	0x66, 0x69, 0x6c, 0x65, 0x2e, 0x68, 0x74, 0x6d, 0x6c
+
+ZTEST(server_function_tests, test_http2_static_fs)
+{
+	static const uint8_t request_get_static_fs[] = {
+		TEST_HTTP2_MAGIC,
+		TEST_HTTP2_SETTINGS,
+		TEST_HTTP2_SETTINGS_ACK,
+		TEST_HTTP2_HEADERS_GET_STATIC_FS(TEST_STREAM_ID_1),
+	};
+	/* Second request, sent once the first one has been served. Serving a
+	 * static filesystem resource must not clobber the connection RX state,
+	 * so the server has to keep processing the connection normally.
+	 */
+	static const uint8_t request_get_static_fs_again[] = {
+		TEST_HTTP2_HEADERS_GET_STATIC_FS(TEST_STREAM_ID_2),
+		TEST_HTTP2_GOAWAY,
+	};
+	size_t offset = 0;
+	int ret;
+
+	ret = setup_fs("");
+	zassert_equal(ret, TC_PASS, "Failed to mount fs");
+
+	ret = zsock_send(client_fd, request_get_static_fs,
+			 sizeof(request_get_static_fs), 0);
+	zassert_not_equal(ret, -1, "send() failed (%d)", errno);
+
+	memset(buf, 0, sizeof(buf));
+
+	expect_http2_settings_frame(&offset, false);
+	expect_http2_settings_frame(&offset, true);
+	expect_http2_headers_frame(&offset, TEST_STREAM_ID_1, HTTP2_FLAG_END_HEADERS, NULL, 0);
+	expect_http2_data_frame(&offset, TEST_STREAM_ID_1, TEST_STATIC_FS_PAYLOAD,
+				strlen(TEST_STATIC_FS_PAYLOAD), HTTP2_FLAG_END_STREAM);
+
+	ret = zsock_send(client_fd, request_get_static_fs_again,
+			 sizeof(request_get_static_fs_again), 0);
+	zassert_not_equal(ret, -1, "send() failed (%d)", errno);
+
+	expect_http2_headers_frame(&offset, TEST_STREAM_ID_2, HTTP2_FLAG_END_HEADERS, NULL, 0);
+	expect_http2_data_frame(&offset, TEST_STREAM_ID_2, TEST_STATIC_FS_PAYLOAD,
+				strlen(TEST_STATIC_FS_PAYLOAD), HTTP2_FLAG_END_STREAM);
+}
+
+/* HPACK-encoded "GET /static_file.html?v=1" request, encoded as above. */
+#define TEST_HTTP2_HEADERS_GET_STATIC_FS_QUERY(_stream_id) \
+	0x00, 0x00, 0x19, 0x01, 0x05, 0x00, 0x00, 0x00, _stream_id, \
+	0x82, 0x86, 0x04, 0x15, 0x2f, 0x73, 0x74, 0x61, 0x74, 0x69, 0x63, 0x5f, \
+	0x66, 0x69, 0x6c, 0x65, 0x2e, 0x68, 0x74, 0x6d, 0x6c, 0x3f, 0x76, 0x3d, \
+	0x31
+
+ZTEST(server_function_tests, test_http2_static_fs_query)
+{
+	static const uint8_t request_get_static_fs[] = {
+		TEST_HTTP2_MAGIC,
+		TEST_HTTP2_SETTINGS,
+		TEST_HTTP2_SETTINGS_ACK,
+		TEST_HTTP2_HEADERS_GET_STATIC_FS_QUERY(TEST_STREAM_ID_1),
+		TEST_HTTP2_GOAWAY,
+	};
+	size_t offset = 0;
+	int ret;
+
+	ret = setup_fs("");
+	zassert_equal(ret, TC_PASS, "Failed to mount fs");
+
+	ret = zsock_send(client_fd, request_get_static_fs,
+			 sizeof(request_get_static_fs), 0);
+	zassert_not_equal(ret, -1, "send() failed (%d)", errno);
+
+	memset(buf, 0, sizeof(buf));
+
+	expect_http2_settings_frame(&offset, false);
+	expect_http2_settings_frame(&offset, true);
+	expect_http2_headers_frame(&offset, TEST_STREAM_ID_1, HTTP2_FLAG_END_HEADERS, NULL, 0);
+	expect_http2_data_frame(&offset, TEST_STREAM_ID_1, TEST_STATIC_FS_PAYLOAD,
+				strlen(TEST_STATIC_FS_PAYLOAD), HTTP2_FLAG_END_STREAM);
+}
+
 ZTEST(server_function_tests, test_http1_static_fs_compression)
 {
 #define HTTP1_COMPRESSION_REQUEST                                                                  \
@@ -2769,8 +3674,7 @@ ZTEST(server_function_tests, test_http1_static_fs_compression)
 			continue;
 		}
 		TC_PRINT("Testing %s compression...\n", http_compression_text(i));
-		zassert(i < ARRAY_SIZE(file_ending_map) && &file_ending_map[i] != NULL,
-			"No file ending defined for compression");
+		zassert(i < ARRAY_SIZE(file_ending_map), "No file ending defined for compression");
 
 		sprintf(http1_request, HTTP1_COMPRESSION_REQUEST, http_compression_text(i));
 		expected_response_size = sprintf(expected_response, HTTP1_COMPRESSION_RESPONSE,

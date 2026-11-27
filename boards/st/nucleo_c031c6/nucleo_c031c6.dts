@@ -11,8 +11,8 @@
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 
 / {
-	model = "STMicroelectronics STM32C031C6-NUCLEO board";
 	compatible = "st,stm32c031c6-nucleo";
+	model = "STMicroelectronics STM32C031C6-NUCLEO board";
 
 	chosen {
 		zephyr,console = &usart2;
@@ -44,8 +44,8 @@
 		user_button: button {
 			label = "user button";
 			gpios = <&gpioc 13 GPIO_ACTIVE_LOW>;
-			status = "okay";
 			zephyr,code = <INPUT_KEY_0>;
+			status = "okay";
 		};
 	};
 
@@ -61,12 +61,14 @@
 
 /* Add the STM32C031Cx package-specific wake-up pins */
 &pwr {
-	wkup-pin@2 {
-		wkup-gpios = <&gpioc 13 STM32_PWR_WKUP_PIN_NOT_MUXED>;
-	};
+	wakeup-controller {
+		wkup@2 {
+			wkup-gpios = <&gpioc 13 STM32_PWR_WKUP_PIN_NOT_MUXED>;
+		};
 
-	wkup-pin@6 {
-		wkup-gpios = <&gpiob 5 STM32_PWR_WKUP_PIN_NOT_MUXED>;
+		wkup@6 {
+			wkup-gpios = <&gpiob 5 STM32_PWR_WKUP_PIN_NOT_MUXED>;
+		};
 	};
 };
 
@@ -125,18 +127,22 @@
 	pinctrl-names = "default";
 	scl-gpios = <&gpiob 8 GPIO_ACTIVE_HIGH>;
 	sda-gpios = <&gpiob 9 GPIO_ACTIVE_HIGH>;
-	status = "okay";
 	clock-frequency = <I2C_BITRATE_FAST>;
+	status = "okay";
 };
 
-&adc1 {
+&adc1_common {
 	clocks = <&rcc STM32_CLOCK(APB1_2, 20)>,
 		 <&rcc STM32_SRC_SYSCLK ADC_SEL(0)>;
 	clock-names = "adcx", "adc_ker";
-	pinctrl-0 = <&adc1_in0_pa0 &adc1_in1_pa1 &adc1_in4_pa4>;
-	pinctrl-names = "default";
 	st,adc-clock-source = "ASYNC";
 	st,adc-prescaler = <32>;
+	status = "okay";
+};
+
+&adc1 {
+	pinctrl-0 = <&adc1_in0_pa0 &adc1_in1_pa1 &adc1_in4_pa4>;
+	pinctrl-names = "default";
 	status = "okay";
 };
 

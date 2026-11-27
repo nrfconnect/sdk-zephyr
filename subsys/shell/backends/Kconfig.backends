@@ -18,7 +18,6 @@ config SHELL_BACKEND_SERIAL
 	bool "Serial backend"
 	default "$(dt_chosen_enabled,$(DT_CHOSEN_Z_SHELL_UART))"
 	select SERIAL
-	select RING_BUFFER
 	help
 	  Enable serial backend.
 
@@ -430,6 +429,11 @@ config SHELL_BACKEND_RPMSG
 
 if SHELL_BACKEND_RPMSG
 
+config SHELL_BACKEND_RPMSG_FORCE_TX_BLOCKING_MODE
+	bool "Force blocking mode for TX"
+	help
+	  Force the RPMsg shell backend to wait for an available TX buffer.
+
 config SHELL_PROMPT_RPMSG
 	string "Displayed prompt name"
 	default "ipc:~$ "
@@ -536,6 +540,14 @@ config SHELL_BACKEND_TELNET
 	select NET_SOCKETS
 	help
 	  Enable TELNET backend.
+
+	  Security warning: this backend exposes the full Zephyr shell over an
+	  unauthenticated, unencrypted TCP port. Anyone able to reach the device
+	  on the network gets the same control as a local console user, which
+	  typically includes flash erase/write, reboot, settings modification
+	  and secret exfiltration through any shell-exposed subsystem. It is
+	  strongly discouraged in production unless the network path itself is
+	  trusted.
 
 if SHELL_BACKEND_TELNET
 

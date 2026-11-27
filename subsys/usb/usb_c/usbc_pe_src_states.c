@@ -31,8 +31,9 @@ void pe_src_init(const struct device *dev)
 	struct usbc_port_data *data = dev->data;
 	struct policy_engine *pe = data->pe;
 
-	/* Initial role of source is DFP */
-	pe_set_data_role(dev, TC_ROLE_DFP);
+	/* Initial roles are source and DFP */
+	pe->power_role = TC_ROLE_SOURCE;
+	pe->data_role = TC_ROLE_DFP;
 
 	/* Reject Sink Request by default */
 	pe->snk_request_reply = SNK_REQUEST_REJECT;
@@ -103,12 +104,6 @@ void pe_src_startup_entry(void *obj)
 
 	/* Reset the protocol layer */
 	prl_reset(dev);
-
-	/* Set power role to Source */
-	pe->power_role = TC_ROLE_SOURCE;
-
-	/* Notify DPM of power role */
-	policy_notify(dev, POWER_ROLE_IS_SOURCE);
 
 	/* Invalidate explicit contract */
 	atomic_clear_bit(pe->flags, PE_FLAGS_EXPLICIT_CONTRACT);
@@ -541,8 +536,7 @@ void pe_src_transition_to_default_entry(void *obj)
 	 *	 it receives the HARD_RESET_RECEIVED notification.
 	 */
 	policy_notify(dev, HARD_RESET_RECEIVED);
-	pe->data_role = TC_ROLE_DFP;
-	policy_notify(dev, DATA_ROLE_IS_DFP);
+	pe_set_data_role(dev, TC_ROLE_DFP);
 }
 
 enum smf_state_result pe_src_transition_to_default_run(void *obj)

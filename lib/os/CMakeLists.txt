@@ -84,14 +84,10 @@ endif()
 
 zephyr_sources_ifdef(CONFIG_CBPRINTF_COMPLETE cbprintf_complete.c)
 zephyr_sources_ifdef(CONFIG_CBPRINTF_NANO cbprintf_nano.c)
-add_subdirectory_ifdef(CONFIG_CPU_LOAD_METRIC cpu_load)
+add_subdirectory_ifdef(CONFIG_CPU_LOAD cpu_load)
 
 if(NOT CONFIG_PICOLIBC)
   zephyr_sources(cbprintf.c)
-endif()
-
-if(CONFIG_ASSERT OR CONFIG_ASSERT_VERBOSE)
-zephyr_sources(assert.c)
 endif()
 
 zephyr_sources_ifdef(CONFIG_MPSC_PBUF mpsc_pbuf.c)
@@ -116,6 +112,7 @@ zephyr_syscall_header_ifdef(CONFIG_ZVFS_FDTABLE
 )
 
 zephyr_sources_ifdef(CONFIG_BOOTARGS boot_args.c)
+zephyr_sources_ifdef(CONFIG_BOOT_FDT boot_fdt.c)
 
 zephyr_syscall_header_ifdef(
   CONFIG_ATOMIC_OPERATIONS_C

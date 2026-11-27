@@ -22,6 +22,7 @@ The subsystem currently supports the following CTAP2 commands:
 - ``authenticatorMakeCredential``
 - ``authenticatorGetAssertion``
 - ``authenticatorGetInfo``
+- ``authenticatorClientPIN``
 - ``authenticatorGetNextAssertion``
 - ``authenticatorSelection``
 
@@ -38,6 +39,7 @@ Transport
    Available transports:
 
    - **USB HID (CTAPHID)** — :kconfig:option:`CONFIG_FIDO2_TRANSPORT_USB_HID`
+   - **Bluetooth LE (CTAPBLE)** — :kconfig:option:`CONFIG_FIDO2_TRANSPORT_BLE`
 
 User Presence (UP)
    Confirms that a human is physically present. Backends are selected via
@@ -51,6 +53,7 @@ Credential Storage
    Persists discoverable (resident) credentials. Backends are
    selected via :kconfig:option:`CONFIG_FIDO2_STORAGE_BACKEND`:
 
+   - **PSA Protected Storage** — :kconfig:option:`CONFIG_FIDO2_STORAGE_PSA_PROTECTED_STORAGE`
    - **Settings subsystem** — :kconfig:option:`CONFIG_FIDO2_STORAGE_SETTINGS`
    - **None** — :kconfig:option:`CONFIG_FIDO2_STORAGE_NONE` (non-discoverable credentials only)
 

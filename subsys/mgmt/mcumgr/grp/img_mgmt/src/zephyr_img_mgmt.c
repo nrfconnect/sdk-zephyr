@@ -592,7 +592,7 @@ int img_mgmt_erase_image_data(unsigned int off, unsigned int num_bytes)
 
 #ifdef CONFIG_MCUBOOT_IMG_MANAGER
 	/* Right now MCUmgr supports only mcuboot images.
-	 * Above compilation swich might help to recognize mcuboot related
+	 * Above compilation switch might help to recognize mcuboot related
 	 * code when supports for another bootloader will be introduced.
 	 */
 
@@ -674,8 +674,7 @@ int img_mgmt_upload_inspect(const struct img_mgmt_upload_req *req,
 		/* First upload chunk. */
 		const struct flash_area *fa;
 #if defined(CONFIG_MCUMGR_GRP_IMG_TOO_LARGE_SYSBUILD) &&                                           \
-	(defined(CONFIG_MCUBOOT_BOOTLOADER_MODE_SWAP_WITHOUT_SCRATCH) ||                           \
-	 defined(CONFIG_MCUBOOT_BOOTLOADER_MODE_SWAP_USING_OFFSET) ||                              \
+	(defined(CONFIG_MCUBOOT_BOOTLOADER_MODE_SWAP_USING_OFFSET) ||                              \
 	 defined(CONFIG_MCUBOOT_BOOTLOADER_MODE_SWAP_USING_MOVE) ||                                \
 	 defined(CONFIG_MCUBOOT_BOOTLOADER_MODE_SWAP_SCRATCH) ||                                   \
 	 defined(CONFIG_MCUBOOT_BOOTLOADER_MODE_OVERWRITE_ONLY) ||                                 \
@@ -760,8 +759,7 @@ int img_mgmt_upload_inspect(const struct img_mgmt_upload_req *req,
 		}
 
 #if defined(CONFIG_MCUMGR_GRP_IMG_TOO_LARGE_SYSBUILD) &&                                           \
-	(defined(CONFIG_MCUBOOT_BOOTLOADER_MODE_SWAP_WITHOUT_SCRATCH) ||                           \
-	 defined(CONFIG_MCUBOOT_BOOTLOADER_MODE_SWAP_USING_OFFSET) ||                              \
+	(defined(CONFIG_MCUBOOT_BOOTLOADER_MODE_SWAP_USING_OFFSET) ||                              \
 	 defined(CONFIG_MCUBOOT_BOOTLOADER_MODE_SWAP_USING_MOVE) ||                                \
 	 defined(CONFIG_MCUBOOT_BOOTLOADER_MODE_SWAP_SCRATCH) ||                                   \
 	 defined(CONFIG_MCUBOOT_BOOTLOADER_MODE_OVERWRITE_ONLY) ||                                 \

@@ -140,8 +140,9 @@ static void capcode_set(uint8_t capcode_in, uint8_t capcode_out)
 	sys_write32(val, AON_XTAL_CFG_ADDR);
 }
 
-#define WIFI_NODE DT_INST(0, bflb_bl61x_wifi)
-#define BT_NODE   DT_INST(0, bflb_bt_hci)
+#define WIFI_NODE       DT_INST(0, bflb_wifi6)
+#define BT_NODE         DT_INST(0, bflb_bt_hci)
+#define IEEE802154_NODE DT_INST(0, bflb_ieee802154)
 
 #define DT_COPY_I8(node, prop, dst, n)                                                             \
 	do {                                                                                       \
@@ -274,12 +275,18 @@ int8_t rfparam_load(struct wl_param_t *param)
 #endif
 #if DT_NODE_HAS_PROP(BT_NODE, pwr_offset_bz)
 	DT_COPY_PWR_OFFSET(BT_NODE, pwr_offset_bz, param->pwrcal.channel_pwrcomp_bz, 5);
+#elif DT_NODE_HAS_PROP(IEEE802154_NODE, pwr_offset_bz)
+	DT_COPY_PWR_OFFSET(IEEE802154_NODE, pwr_offset_bz, param->pwrcal.channel_pwrcomp_bz, 5);
+#endif
+
+#if DT_NODE_HAS_PROP(IEEE802154_NODE, pwr_table_zigbee)
+	param->pwrtarget.pwr_zigbee = DT_PROP(IEEE802154_NODE, pwr_table_zigbee);
 #endif
 
 	param->pwrcal.Temperature_MP = TEMPERATURE_MP_DEFAULT;
-#ifdef CONFIG_BFLB_WIFI_BL61X_DEFAULT_COUNTRY
-	param->country_code = CONFIG_BFLB_WIFI_BL61X_DEFAULT_COUNTRY[0] |
-			      (CONFIG_BFLB_WIFI_BL61X_DEFAULT_COUNTRY[1] << 8);
+#ifdef CONFIG_WIFI_BFLB_WIFI6_DEFAULT_COUNTRY
+	param->country_code = CONFIG_WIFI_BFLB_WIFI6_DEFAULT_COUNTRY[0] |
+			      (CONFIG_WIFI_BFLB_WIFI6_DEFAULT_COUNTRY[1] << 8);
 #endif
 
 	for (i = 0; i < ARRAY_SIZE(tmp_mp_descs); i++) {
@@ -333,7 +340,8 @@ int bflb_rf_init(void)
 		return -ENOMEM;
 	}
 
-	if (IS_ENABLED(CONFIG_WIFI_BFLB) && IS_ENABLED(CONFIG_BT)) {
+	if (IS_ENABLED(CONFIG_WIFI_BFLB) &&
+	    (IS_ENABLED(CONFIG_BT) || IS_ENABLED(CONFIG_IEEE802154_BFLB))) {
 		cfg->mode = WL_API_MODE_ALL;
 	} else if (IS_ENABLED(CONFIG_WIFI_BFLB)) {
 		cfg->mode = WL_API_MODE_WLAN;

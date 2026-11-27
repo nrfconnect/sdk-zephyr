@@ -45,14 +45,15 @@
 				mspi-hardware-ce-num = <0>;
 				read-command = <0x20>;
 				write-command = <0xa0>;
-				st,timing-config = <1>;
 				command-length = "INSTR_1_BYTE";
 				address-length = "ADDR_4_BYTE";
 				rx-dummy = <5>;
 				tx-dummy = <5>;
-				xip-config = <1 0 0 0>;
+				memmap-config = <1 0 DT_SIZE_M(32) 0>;
 				ce-break-config = <1024 3>;
 				aps-version = "APS256";
+				st,mem-type = "apmem";
+				st,timing-config = <1>;
 			};
 		};
 	};

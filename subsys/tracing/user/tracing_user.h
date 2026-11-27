@@ -31,12 +31,8 @@ void sys_trace_isr_exit_user(void);
 void sys_trace_idle_user(void);
 void sys_trace_sys_init_enter_user(const struct init_entry *entry, int level);
 void sys_trace_sys_init_exit_user(const struct init_entry *entry, int level, int result);
-void sys_trace_k_thread_sleep_enter_user(k_timeout_t timeout);
-void sys_trace_k_thread_sleep_exit_user(k_timeout_t timeout, int32_t ret);
-void sys_trace_k_thread_msleep_enter_user(int32_t ms);
-void sys_trace_k_thread_msleep_exit_user(int32_t ms, int32_t ret);
-void sys_trace_k_thread_usleep_enter_user(int32_t us);
-void sys_trace_k_thread_usleep_exit_user(int32_t us, int32_t ret);
+void sys_trace_k_thread_sleep_ticks_enter_user(k_timeout_t timeout);
+void sys_trace_k_thread_sleep_ticks_exit_user(k_timeout_t timeout, int32_t ret);
 
 void sys_trace_thread_create(struct k_thread *thread);
 void sys_trace_thread_abort(struct k_thread *thread);
@@ -55,12 +51,8 @@ void sys_trace_idle(void);
 void sys_trace_idle_exit(void);
 void sys_trace_sys_init_enter(const struct init_entry *entry, int level);
 void sys_trace_sys_init_exit(const struct init_entry *entry, int level, int result);
-void sys_trace_k_thread_sleep_enter(k_timeout_t timeout);
-void sys_trace_k_thread_sleep_exit(k_timeout_t timeout, int32_t ret);
-void sys_trace_k_thread_msleep_enter(int32_t ms);
-void sys_trace_k_thread_msleep_exit(int32_t ms, int32_t ret);
-void sys_trace_k_thread_usleep_enter(int32_t us);
-void sys_trace_k_thread_usleep_exit(int32_t us, int32_t ret);
+void sys_trace_k_thread_sleep_ticks_enter(k_timeout_t timeout);
+void sys_trace_k_thread_sleep_ticks_exit(k_timeout_t timeout, int32_t ret);
 void sys_trace_timer_init(struct k_timer *timer);
 void sys_trace_timer_start(struct k_timer *timer, k_timeout_t duration, k_timeout_t period);
 void sys_trace_timer_stop(struct k_timer *timer);
@@ -124,11 +116,35 @@ void sys_trace_gpio_fire_callbacks_enter_user(sys_slist_t *list, const struct de
 					      gpio_pin_t pins);
 void sys_trace_gpio_fire_callback_user(const struct device *port, struct gpio_callback *callback);
 
+void sys_trace_rtio_submit_enter_user(const struct rtio *r, uint32_t wait_count);
+void sys_trace_rtio_submit_exit_user(const struct rtio *r);
+void sys_trace_rtio_sqe_acquire_enter_user(const struct rtio *r);
+void sys_trace_rtio_sqe_acquire_exit_user(const struct rtio *r, const struct rtio_sqe *sqe);
+void sys_trace_rtio_sqe_cancel_user(uint16_t index, uint16_t generation);
+void sys_trace_rtio_cqe_submit_enter_user(const struct rtio *r, int result, uint32_t flags);
+void sys_trace_rtio_cqe_submit_exit_user(const struct rtio *r);
+void sys_trace_rtio_cqe_acquire_enter_user(const struct rtio *r);
+void sys_trace_rtio_cqe_acquire_exit_user(const struct rtio *r, const struct rtio_cqe *cqe);
+void sys_trace_rtio_cqe_release_user(const struct rtio *r, const struct rtio_cqe *cqe);
+void sys_trace_rtio_cqe_consume_enter_user(const struct rtio *r);
+void sys_trace_rtio_cqe_consume_exit_user(const struct rtio *r, const struct rtio_cqe *cqe);
+void sys_trace_rtio_txn_next_enter_user(const struct rtio *r,
+					const struct rtio_iodev_sqe *iodev_sqe);
+void sys_trace_rtio_txn_next_exit_user(const struct rtio *r,
+				       const struct rtio_iodev_sqe *iodev_sqe);
+void sys_trace_rtio_chain_next_enter_user(const struct rtio *r,
+					  const struct rtio_iodev_sqe *iodev_sqe);
+void sys_trace_rtio_chain_next_exit_user(const struct rtio *r,
+					 const struct rtio_iodev_sqe *iodev_sqe);
+
 void sys_trace_rtio_submit_enter(const struct rtio *r, uint32_t wait_count);
 void sys_trace_rtio_submit_exit(const struct rtio *r);
 void sys_trace_rtio_sqe_acquire_enter(const struct rtio *r);
 void sys_trace_rtio_sqe_acquire_exit(const struct rtio *r, const struct rtio_sqe *sqe);
-void sys_trace_rtio_sqe_cancel(const struct rtio_sqe *sqe);
+/* Takes the raw rtio_sqe_handle_t value; typed as uint32_t here to avoid pulling
+ * the RTIO headers (which use these tracing hooks) into every tracing user.
+ */
+void sys_trace_rtio_sqe_cancel(uint32_t handle);
 void sys_trace_rtio_cqe_submit_enter(const struct rtio *r, int result, uint32_t flags);
 void sys_trace_rtio_cqe_submit_exit(const struct rtio *r);
 void sys_trace_rtio_cqe_acquire_enter(const struct rtio *r);
@@ -142,12 +158,10 @@ void sys_trace_rtio_chain_next_enter(const struct rtio *r, const struct rtio_iod
 void sys_trace_rtio_chain_next_exit(const struct rtio *r, const struct rtio_iodev_sqe *iodev_sqe);
 
 #define sys_port_trace_k_thread_create(new_thread) sys_trace_thread_create(new_thread)
-#define sys_port_trace_k_thread_sleep_enter(timeout) sys_trace_k_thread_sleep_enter(timeout)
-#define sys_port_trace_k_thread_sleep_exit(timeout, ret) sys_trace_k_thread_sleep_exit(timeout, ret)
-#define sys_port_trace_k_thread_msleep_enter(ms) sys_trace_k_thread_msleep_enter(ms)
-#define sys_port_trace_k_thread_msleep_exit(ms, ret) sys_trace_k_thread_msleep_exit(ms, ret)
-#define sys_port_trace_k_thread_usleep_enter(us) sys_trace_k_thread_usleep_enter(us)
-#define sys_port_trace_k_thread_usleep_exit(us, ret) sys_trace_k_thread_usleep_exit(us, ret)
+#define sys_port_trace_k_thread_sleep_ticks_enter(timeout)                                         \
+	sys_trace_k_thread_sleep_ticks_enter(timeout)
+#define sys_port_trace_k_thread_sleep_ticks_exit(timeout, ret)                                     \
+	sys_trace_k_thread_sleep_ticks_exit(timeout, ret)
 #define sys_port_trace_k_thread_abort(thread) sys_trace_thread_abort(thread)
 #define sys_port_trace_k_thread_suspend_enter(thread) sys_trace_thread_suspend(thread)
 #define sys_port_trace_k_thread_resume_enter(thread) sys_trace_thread_resume(thread)
@@ -250,7 +264,7 @@ void sys_trace_rtio_chain_next_exit(const struct rtio *r, const struct rtio_iode
 
 #define sys_port_trace_rtio_sqe_acquire_exit(rtio, sqe) sys_trace_rtio_sqe_acquire_exit(rtio, sqe)
 
-#define sys_port_trace_rtio_sqe_cancel(sqe) sys_trace_rtio_sqe_cancel(sqe)
+#define sys_port_trace_rtio_sqe_cancel(handle) sys_trace_rtio_sqe_cancel(handle)
 
 #define sys_port_trace_rtio_cqe_submit_enter(rtio, result, flags)                                  \
 	sys_trace_rtio_cqe_submit_enter(rtio, result, flags)

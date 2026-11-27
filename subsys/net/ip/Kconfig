@@ -40,9 +40,9 @@ config NET_NATIVE
 	bool "Native network stack support"
 	default y
 	help
-	  Enables Zephyr native IP stack. If you disable this, then
+	  Enables Zephyr native networking stack. If you disable this, then
 	  you need to enable the offloading support if you want to
-	  have IP connectivity.
+	  have connectivity.
 
 # Hidden options for enabling native IPv6/IPv4. Using these options
 # avoids having "defined(CONFIG_NET_IPV6) && defined(CONFIG_NET_NATIVE)"
@@ -97,6 +97,7 @@ config NET_NATIVE_UDP
 
 config NET_OFFLOAD
 	bool "Offload IP stack"
+	select NET_CONTEXT
 	help
 	  Enables TCP/IP stack to be offload to a co-processor.
 
@@ -132,7 +133,7 @@ DT_CHOSEN_ZEPHYR_PPP_UART := zephyr,ppp-uart
 
 choice NET_QEMU_NETWORKING
 	prompt "Qemu networking"
-	default NET_QEMU_PPP if NET_PPP
+	default NET_QEMU_PPP if NET_L2_PPP
 	default NET_QEMU_SLIP
 	depends on QEMU_TARGET
 	help
@@ -143,17 +144,20 @@ choice NET_QEMU_NETWORKING
 config NET_QEMU_SLIP
 	bool "SLIP"
 	depends on $(dt_chosen_enabled,$(DT_CHOSEN_ZEPHYR_UART_PIPE))
+	imply NET_DRIVERS
 	help
 	  Connect to host or to another Qemu via SLIP.
 
 config NET_QEMU_PPP
 	bool "PPP"
 	depends on NET_TEST || $(dt_chosen_enabled,$(DT_CHOSEN_ZEPHYR_PPP_UART))
+	imply NET_DRIVERS
 	help
 	  Connect to host via PPP.
 
 config NET_QEMU_ETHERNET
 	bool "Ethernet"
+	imply ETH_DRIVER
 	imply NET_L2_ETHERNET
 	help
 	  Connect to host system via Qemu ethernet driver support. One such
@@ -161,6 +165,7 @@ config NET_QEMU_ETHERNET
 
 config NET_QEMU_USER
 	bool "SLIRP"
+	imply ETH_DRIVER
 	imply NET_L2_ETHERNET
 	help
 	  Connect to host system via Qemu's built-in User Networking support. This
@@ -184,7 +189,8 @@ config NET_QEMU_DEVICE_EXTRA_ARGS
 	default ""
 	help
 	  Extra arguments passed to the QEMU networking device.
-	  This string is appended to the QEMU "-device" option.
+	  This string is appended to the QEMU "-device" option, or to the
+	  "-nic" option for a NIC built into the emulated machine.
 	  Typically this is used to set the network MAC address of
 	  Zephyr instance. This option can contain multiple QEMU option
 	  arguments. Each QEMU argument must be separated by comma "," and no
@@ -446,11 +452,6 @@ config NET_MAX_ROUTERS
 
 source "subsys/net/ip/Kconfig.tcp"
 
-config NET_TEST_PROTOCOL
-	bool "JSON based test protocol (UDP)"
-	help
-	  Enable JSON based test protocol (UDP).
-
 config NET_UDP
 	bool "UDP"
 	default y
@@ -475,6 +476,61 @@ config NET_UDP_MISSING_CHECKSUM
 	  debugging purposes for instance. That feature is however valid only
 	  for IPv4 and on reception only, since Zephyr will always compute the
 	  UDP checksum in transmission path.
+
+config NET_UDP_OPTIONS
+	bool "UDP transport options (RFC 9868) [EXPERIMENTAL]"
+	depends on NET_UDP
+	select EXPERIMENTAL
+	help
+	  Enable support for UDP transport options as defined in
+	  RFC 9868. This allows sending and receiving UDP options
+	  in the surplus area of IP datagrams.
+
+config NET_UDP_OPTIONS_DPLPMTUD
+	bool "DPLPMTUD over UDP options (RFC 9869) [EXPERIMENTAL]"
+	depends on NET_UDP_OPTIONS
+	depends on NET_PMTU_DPLPMTUD
+	select EXPERIMENTAL
+	help
+	  Enable Datagram Packetization Layer Path MTU Discovery
+	  (RFC 8899) for plain UDP sockets using UDP options (RFC 9869).
+	  When enabled on a socket, the stack probes the path for the
+	  largest usable datagram size using the Request (REQ) and
+	  Response (RES) UDP options and reports the result via
+	  getsockopt(IP_MTU/IPV6_MTU). It also answers incoming probes by
+	  echoing the REQ token back in a RES option.
+
+config NET_UDP_OPTIONS_DPLPMTUD_PROBE_TIMEOUT_MS
+	int "UDP options DPLPMTUD probe timeout (ms)"
+	depends on NET_UDP_OPTIONS_DPLPMTUD
+	default 1000
+	help
+	  Time to wait for a probe Response (RES) before a probe is
+	  declared lost and retransmitted (RFC 8899 PROBE_TIMER). UDP has
+	  no round-trip estimate, so a fixed value is used.
+
+config NET_UDP_OPTIONS_DPLPMTUD_RAISE_TIMEOUT_MS
+	int "UDP options DPLPMTUD raise timer (ms)"
+	depends on NET_UDP_OPTIONS_DPLPMTUD
+	default 600000
+	help
+	  Once the search completes, how long to wait before probing again
+	  to detect a possible increase in the path MTU (RFC 8899
+	  PMTU_RAISE_TIMER). Default is 10 minutes.
+
+config NET_UDP_OPTIONS_DPLPMTUD_ECHO_MIN_INTERVAL_MS
+	int "UDP options DPLPMTUD minimum RES echo interval (ms)"
+	depends on NET_UDP_OPTIONS_DPLPMTUD
+	default 50
+	help
+	  Minimum time between consecutive auto-generated Response (RES)
+	  echoes on a socket acting as a DPLPMTUD responder. The stack
+	  answers a Request (REQ) by sending a RES to the datagram source
+	  address, so an off-path attacker flooding spoofed-source REQs
+	  could otherwise use the socket to reflect traffic (the RES is
+	  never larger than the REQ, so there is no amplification). This
+	  rate limit caps that reflection. Set to 0 to disable the limit,
+	  e.g. on a server that must answer many distinct probers at once.
 
 if NET_UDP
 
@@ -501,18 +557,29 @@ config NET_CONN_PACKET_CLONE_TIMEOUT
 	help
 	  Maximum wait time when cloning a packet for a network connection.
 
-config NET_MAX_CONTEXTS
-	int "Number of network contexts to allocate"
-	default 6
+config NET_CONTEXT
+	bool "Network context support"
+	default y
+	depends on NET_NATIVE || NET_OFFLOAD
 	help
-	  Each network context is used to describe a network 5-tuple that
-	  is used when listening or sending network traffic. This is very
-	  similar as one could call a network socket in some other systems.
+	  Network contexts back the socket API and TCP. Without them the
+	  stack can still handle L2, ICMP, DHCP and forwarding.
 
 config ZVFS_OPEN_ADD_SIZE_NET
 	int "Number of network sockets to allocate"
 	default NET_MAX_CONTEXTS if NET_NATIVE && NET_SOCKETS
 	default 0
+
+if NET_CONTEXT
+
+config NET_MAX_CONTEXTS
+	int "Number of network contexts to allocate"
+	range 1 65535
+	default 6
+	help
+	  Each network context is used to describe a network 5-tuple that
+	  is used when listening or sending network traffic. This is very
+	  similar as one could call a network socket in some other systems.
 
 config NET_CONTEXT_NET_PKT_POOL
 	bool "Net_buf TX pool / context"
@@ -649,6 +716,8 @@ config NET_CONTEXT_CLAMP_PORT_RANGE
 	  range for a given context. The port range is typically set by
 	  IP_LOCAL_PORT_RANGE socket option.
 
+endif # NET_CONTEXT
+
 endif # NET_RAW_MODE
 
 config NET_SLIP_TAP
@@ -660,6 +729,7 @@ config NET_SLIP_TAP
 	select UART_INTERRUPT_DRIVEN
 	select SLIP_TAP
 	select NET_L2_ETHERNET
+	imply ETH_DRIVER
 	default y if (QEMU_TARGET && !NET_TEST)
 	help
 	  SLIP TAP support is necessary when testing with QEMU. The host
@@ -673,9 +743,23 @@ config NET_TEST
 	  Used for self-contained networking tests that do not require a
 	  network device.
 
+config NET_PKT_LARGE_DEFAULTS
+	bool "More networking packets by default"
+	default y if ETH_DRIVER
+	default y if NET_SLIP_TAP
+	default y if WIFI && !WIFI_USAGE_MODE_SCAN_ONLY
+	help
+	  Use larger defaults for the network packet and buffer pools.
+	  The larger defaults suit interfaces that carry full-size Ethernet
+	  frames at line rate.
+
+	  Disable this when the Ethernet L2 is enabled only for a purpose
+	  that does not move much traffic, such as a Wi-Fi driver used for
+	  scanning only, to reduce RAM usage.
+
 config NET_PKT_RX_COUNT
 	int "How many packet receives can be pending at the same time"
-	default 14 if NET_L2_ETHERNET
+	default 14 if NET_PKT_LARGE_DEFAULTS
 	default 4
 	help
 	  Each RX buffer will occupy smallish amount of memory.
@@ -683,7 +767,7 @@ config NET_PKT_RX_COUNT
 
 config NET_PKT_TX_COUNT
 	int "How many packet sends can be pending at the same time"
-	default 14 if NET_L2_ETHERNET
+	default 14 if NET_PKT_LARGE_DEFAULTS
 	default 4
 	help
 	  Each TX buffer will occupy smallish amount of memory.
@@ -691,7 +775,7 @@ config NET_PKT_TX_COUNT
 
 config NET_BUF_RX_COUNT
 	int "How many network buffers are allocated for receiving data"
-	default 36 if NET_L2_ETHERNET
+	default 36 if NET_PKT_LARGE_DEFAULTS
 	default 16
 	help
 	  Each data buffer will occupy CONFIG_NET_BUF_DATA_SIZE + smallish
@@ -699,7 +783,7 @@ config NET_BUF_RX_COUNT
 
 config NET_BUF_TX_COUNT
 	int "How many network buffers are allocated for sending data"
-	default 36 if NET_L2_ETHERNET
+	default 36 if NET_PKT_LARGE_DEFAULTS
 	default 16
 	help
 	  Each data buffer will occupy CONFIG_NET_BUF_DATA_SIZE + smallish
@@ -720,8 +804,7 @@ config NET_BUF_FIXED_DATA_SIZE
 	  as necessary to reach that request.
 
 config NET_BUF_VARIABLE_DATA_SIZE
-	bool "Variable data size buffer [EXPERIMENTAL]"
-	select EXPERIMENTAL
+	bool "Variable data size buffer"
 	help
 	  The buffer is dynamically allocated from runtime requested size.
 
@@ -736,7 +819,7 @@ config NET_BUF_DATA_SIZE
 
 config NET_PKT_BUF_RX_DATA_POOL_SIZE
 	int "Size of the RX memory pool where buffers are allocated from"
-	default 4096 if NET_L2_ETHERNET
+	default 4096 if NET_PKT_LARGE_DEFAULTS
 	default 2048
 	depends on NET_BUF_VARIABLE_DATA_SIZE
 	help
@@ -745,7 +828,7 @@ config NET_PKT_BUF_RX_DATA_POOL_SIZE
 
 config NET_PKT_BUF_TX_DATA_POOL_SIZE
 	int "Size of the TX memory pool where buffers are allocated from"
-	default 4096 if NET_L2_ETHERNET
+	default 4096 if NET_PKT_LARGE_DEFAULTS
 	default 2048
 	depends on NET_BUF_VARIABLE_DATA_SIZE
 	help
@@ -888,6 +971,7 @@ config NET_PKT_TIMESTAMP_THREAD
 
 config NET_PKT_TIMESTAMP_STACK_SIZE
 	int "Timestamp thread stack size"
+	default 2048 if 64BIT
 	default 1024
 	depends on NET_PKT_TIMESTAMP_THREAD
 	help

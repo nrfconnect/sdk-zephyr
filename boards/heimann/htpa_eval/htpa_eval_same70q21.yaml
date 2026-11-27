@@ -16,9 +16,9 @@ supported:
   - gpio
   - hwinfo
   - i2s
+  - ptp_clock
   - pwm
   - netif:eth
-  - sdhc
   - spi
   - usb_device
   - usbd

@@ -16,15 +16,16 @@ config LV_Z_DOUBLE_VDB
 
 # Force full refresh. This prevents memory copy associated with partial
 # display refreshes, which is not necessary for the GLCDC driver
-config LV_Z_FULL_REFRESH
-	default y
+choice LV_Z_RENDERING_MODE
+	default LV_Z_FULL_REFRESH
+endchoice
 
 # Use offloaded render thread
 config LV_Z_FLUSH_THREAD
 	default y
 
-choice LV_COLOR_DEPTH
-	default LV_COLOR_DEPTH_32
+choice LV_Z_COLOR_FORMAT
+	default LV_Z_COLOR_FORMAT_XRGB8888
 endchoice
 
 endif # LVGL

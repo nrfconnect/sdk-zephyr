@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
-cmake_minimum_required(VERSION 3.20.0)
+cmake_minimum_required(VERSION 3.28.0)
 
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(bsim_test_rpa_peripheral)
@@ -20,6 +20,7 @@ target_sources(app PRIVATE
   src/main_rpa_expired.c
   src/dut_rpa_rotation.c
   src/dut_rpa_expired.c
+  src/dut_rpa_expired_limited.c
 )
 
 zephyr_include_directories(

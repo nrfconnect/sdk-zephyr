@@ -10,8 +10,8 @@
  * @brief Header file for the SCMI (System Control and Management Interface) driver API.
  */
 
-#ifndef _INCLUDE_ZEPHYR_DRIVERS_FIRMWARE_SCMI_PROTOCOL_H_
-#define _INCLUDE_ZEPHYR_DRIVERS_FIRMWARE_SCMI_PROTOCOL_H_
+#ifndef ZEPHYR_INCLUDE_DRIVERS_FIRMWARE_SCMI_PROTOCOL_H_
+#define ZEPHYR_INCLUDE_DRIVERS_FIRMWARE_SCMI_PROTOCOL_H_
 
 /**
  * @brief Interfaces for ARM System Control and Management Interface (SCMI)
@@ -67,6 +67,19 @@
  * @brief Extract token (bits [27:18]) from SCMI message header
  */
 #define SCMI_MESSAGE_HDR_TAKE_TOKEN(hdr)    FIELD_GET(GENMASK(27, 18), (hdr))
+
+/**
+ * @brief Initialization level for SCMI protocols.
+ *
+ * SCMI protocols require POST_KERNEL initialization when OP-TEE transport
+ * is enabled, as the underlying OP-TEE driver initializes during POST_KERNEL.
+ * Defaults to PRE_KERNEL_1 for standard transports.
+ */
+#if defined(CONFIG_ARM_SCMI_OPTEE_TRANSPORT)
+#define SCMI_PROTOCOL_INIT_LEVEL  POST_KERNEL
+#else
+#define SCMI_PROTOCOL_INIT_LEVEL  PRE_KERNEL_1
+#endif
 
 struct scmi_channel;
 
@@ -295,4 +308,4 @@ int scmi_read_message(struct scmi_protocol *proto, struct scmi_message *msg);
  * @ingroup scmi_interface
  */
 
-#endif /* _INCLUDE_ZEPHYR_DRIVERS_FIRMWARE_SCMI_PROTOCOL_H_ */
+#endif /* ZEPHYR_INCLUDE_DRIVERS_FIRMWARE_SCMI_PROTOCOL_H_ */

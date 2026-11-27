@@ -531,7 +531,7 @@ struct http_client_ctx {
 	/** Websocket subprotocol selected from the client's
 	 *  Sec-WebSocket-Protocol request header. NUL-terminated; empty
 	 *  if the client did not list any subprotocol. Echoed back in
-	 *  the 101 Switching Protocols response per RFC 6455.
+	 *  the 101 Switching Protocols response per @rfc{6455}.
 	 */
 	IF_ENABLED(CONFIG_WEBSOCKET,
 		   (char ws_sec_protocol[HTTP_SERVER_WS_MAX_SEC_PROTOCOL_LEN]));
@@ -579,6 +579,9 @@ struct http_client_ctx {
 
 	/** Flag indicating that HTTP2 preface was sent. */
 	bool preface_sent : 1;
+
+	/** Flag indicating that the client acknowledged the server's SETTINGS. */
+	bool settings_acked : 1;
 
 	/** Flag indicating that HTTP1 headers were sent. */
 	bool http1_headers_sent : 1;

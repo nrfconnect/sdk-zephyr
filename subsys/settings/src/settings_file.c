@@ -12,7 +12,7 @@
 #include <zephyr/fs/fs.h>
 
 #include <zephyr/settings/settings.h>
-#include "settings/settings_file.h"
+#include <settings/settings_file.h>
 #include "settings_priv.h"
 
 #include <zephyr/logging/log.h>
@@ -289,7 +289,7 @@ static int settings_file_save_and_compress(struct settings_file *cf,
 			continue;
 		}
 
-		/* avoid copping value which will be overwritten by new value*/
+		/* avoid copying value which will be overwritten by new value*/
 		if ((val1_off == new_name_len) &&
 		    !memcmp(name1, name, val1_off)) {
 			continue;
@@ -352,7 +352,10 @@ static int settings_file_save_and_compress(struct settings_file *cf,
 		}
 		cf->cf_lines = lines + 1;
 	} else {
-		rc = -EIO;
+		if (rc2 == 0) {
+			(void)fs_unlink(tmp_file);
+		}
+		return -EIO;
 	}
 	/*
 	 * XXX at settings_file_load(), look for .cmp if actual file does not

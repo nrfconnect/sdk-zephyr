@@ -18,6 +18,7 @@ static const struct gain_desc gains[] = {
 	[ADC_GAIN_2_7] = {.mul = 7, .div = 2},
 	[ADC_GAIN_1_3] = {.mul = 3, .div = 1},
 	[ADC_GAIN_2_5] = {.mul = 5, .div = 2},
+	[ADC_GAIN_15_32] = {.mul = 32, .div = 15},
 	[ADC_GAIN_1_2] = {.mul = 2, .div = 1},
 	[ADC_GAIN_2_3] = {.mul = 3, .div = 2},
 	[ADC_GAIN_4_5] = {.mul = 5, .div = 4},
@@ -65,4 +66,20 @@ int adc_gain_invert_64(enum adc_gain gain, int64_t *value)
 	}
 
 	return rv;
+}
+
+int adc_sequence_validate_buffer(const struct adc_sequence *sequence,
+				 uint8_t active_channels, size_t data_size)
+{
+	size_t needed = (size_t)active_channels * data_size;
+
+	if (sequence->options) {
+		needed *= (1 + sequence->options->extra_samplings);
+	}
+
+	if (sequence->buffer_size < needed) {
+		return -ENOMEM;
+	}
+
+	return 0;
 }

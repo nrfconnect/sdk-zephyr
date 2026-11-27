@@ -105,6 +105,9 @@ class TestInstance(StatusMixin):
         self.required_applications = []
         self.required_build_dirs = []
         self.reserved_duts: list[CompoundHardwareData] = []
+        # Sidecar attached to this instance; defaults to the testsuite `sidecar:`
+        # field but twister may set it itself (e.g. to attach ivshmem coverage).
+        self.sidecar = testsuite.sidecar
 
     def setup_run_id(self):
         self.run_id = self._get_run_id()
@@ -298,10 +301,26 @@ class TestInstance(StatusMixin):
                 not simulator.is_runnable():
             target_ready = False
 
+        # A sidecar provisions host-side resources around the run; when the
+        # host lacks what it needs (for example no virtiofsd binary), build
+        # the test but do not try to run it, like a missing simulator.
+        if target_ready and self.sidecar:
+            from twisterlib.sidecars import SidecarImporter
+            try:
+                sidecar = SidecarImporter.get_sidecar(self.sidecar)
+            except ValueError:
+                # Unknown sidecar names are reported at the run stage.
+                sidecar = None
+            if sidecar is not None:
+                sidecar.configure(self)
+                if not sidecar.host_ready():
+                    target_ready = False
+
         if testsuite_runnable := self.testsuite.harness in SUPPORTED_HARNESSES:
             if device_testing:
                 testsuite_runnable = HardwareReservationManager(
-                    hardware_map, self.platform.name, self.testsuite.harness_config).is_runnable()
+                    hardware_map, self.platform.name, self.testsuite.harness_config
+                ).is_runnable()
 
             elif fixture := self.testsuite.harness_config.fixture:
                 # if we have a fixture that is also being supplied on the
@@ -486,7 +505,8 @@ class TestInstance(StatusMixin):
 
             pattern = f"{platform_name}/.*/{application_name}"
             for build_dir in self.required_build_dirs:
-                if re.search(pattern, build_dir):
+                # Normalize separators so the '/'-based pattern matches Windows '\' build dirs.
+                if re.search(pattern, build_dir.replace(os.sep, "/")):
                     # found matching build dir
                     break
             else:

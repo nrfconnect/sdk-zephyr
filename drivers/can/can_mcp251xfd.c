@@ -72,7 +72,7 @@ static void *mcp251xfd_read_reg(const struct device *dev, uint16_t addr, int len
 	const struct spi_buf_set tx = {.buffers = &tx_buf, .count = 1};
 	const struct spi_buf_set rx = {.buffers = &rx_buf, .count = 1};
 
-	ret = spi_transceive_dt(&dev_cfg->bus, &tx, &rx);
+	ret = spi_transceive(dev_cfg->bus.bus, dev_data->spi_cfg, &tx, &rx);
 	if (ret < 0) {
 		return NULL;
 	}
@@ -116,7 +116,7 @@ static void *mcp251xfd_read_crc(const struct device *dev, uint16_t addr, int len
 			       (uint8_t *)(&spi_data->header[0]),
 			       MCP251XFD_SPI_CMD_LEN + MCP251XFD_SPI_LEN_FIELD_LEN);
 
-		ret = spi_transceive_dt(&dev_cfg->bus, &tx, &rx);
+		ret = spi_transceive(dev_cfg->bus.bus, dev_data->spi_cfg, &tx, &rx);
 		if (ret < 0) {
 			continue;
 		}
@@ -153,7 +153,7 @@ static int mcp251xfd_write(const struct device *dev, uint16_t addr, int len)
 	spi_cmd = sys_cpu_to_be16(MCP251XFD_SPI_INSTRUCTION_WRITE | addr);
 	memcpy(&spi_data->header[1], &spi_cmd, sizeof(spi_cmd));
 
-	return spi_write_dt(&dev_cfg->bus, &tx);
+	return spi_write(dev_cfg->bus.bus, dev_data->spi_cfg, &tx);
 }
 
 static int mcp251xfd_fifo_write(const struct device *dev, int mailbox_idx,
@@ -227,6 +227,11 @@ static void mcp251xfd_rxobj_to_canframe(struct mcp251xfd_rxobj *src, struct can_
 
 	dst->dlc = FIELD_GET(MCP251XFD_OBJ_FLAGS_DLC_MASK, src->flags);
 
+	/* A classic CAN frame with a DLC greater than 8 carries 8 data bytes */
+	if ((dst->flags & CAN_FRAME_FDF) == 0U && dst->dlc > CAN_MAX_DLC) {
+		dst->dlc = CAN_MAX_DLC;
+	}
+
 #if defined(CONFIG_CAN_RX_TIMESTAMP)
 	dst->timestamp = sys_le32_to_cpu(src->timestamp);
 #endif
@@ -262,13 +267,7 @@ static int mcp251xfd_reg_check_value_wtimeout(const struct device *dev, uint16_t
 
 	for (;;) {
 		reg = mcp251xfd_read_crc(dev, addr, MCP251XFD_REG_SIZE);
-		if (!reg) {
-			return -EINVAL;
-		}
-
-		*reg = sys_le32_to_cpu(*reg);
-
-		if ((*reg & mask) == value) {
+		if ((reg != NULL) && ((sys_le32_to_cpu(*reg) & mask) == value)) {
 			return 0;
 		}
 
@@ -502,8 +501,18 @@ static int mcp251xfd_send(const struct device *dev, const struct can_frame *msg,
 	}
 
 	if ((msg->flags & CAN_FRAME_FDF) == 0 && msg->dlc > CAN_MAX_DLC) {
-		LOG_ERR("DLC of %d without fd flag set.", msg->dlc);
+		LOG_ERR("DLC of %d without FD flag set.", msg->dlc);
 		return -EINVAL;
+	}
+
+	if ((msg->flags & CAN_FRAME_FDF) != 0 && msg->dlc > CANFD_MAX_DLC) {
+		LOG_ERR("DLC of %d with FD flag set.", msg->dlc);
+		return -EINVAL;
+	}
+
+	if ((msg->flags & ~(CAN_FRAME_IDE | CAN_FRAME_RTR | CAN_FRAME_FDF | CAN_FRAME_BRS)) != 0) {
+		LOG_ERR("unsupported CAN frame flags 0x%02x", msg->flags);
+		return -ENOTSUP;
 	}
 
 	if ((msg->flags & CAN_FRAME_FDF) && !(dev_data->common.mode & CAN_MODE_FD)) {
@@ -659,15 +668,6 @@ done:
 	k_mutex_unlock(&dev_data->mutex);
 }
 
-static void mcp251xfd_set_state_change_callback(const struct device *dev,
-						can_state_change_callback_t cb, void *user_data)
-{
-	struct mcp251xfd_data *dev_data = dev->data;
-
-	dev_data->common.state_change_cb = cb;
-	dev_data->common.state_change_cb_user_data = user_data;
-}
-
 static int mcp251xfd_get_state(const struct device *dev, enum can_state *state,
 			       struct can_bus_err_cnt *err_cnt)
 {
@@ -723,7 +723,8 @@ static int mcp251xfd_get_core_clock(const struct device *dev, uint32_t *rate)
 {
 	const struct mcp251xfd_config *dev_cfg = dev->config;
 
-	*rate = dev_cfg->osc_freq;
+	/* When the PLL is enabled, SYSCLK is the oscillator frequency times 10 */
+	*rate = dev_cfg->pll_enable ? dev_cfg->osc_freq * 10 : dev_cfg->osc_freq;
 	return 0;
 }
 
@@ -904,10 +905,7 @@ static int mcp251xfd_handle_cerrif(const struct device *dev)
 		mcp251xfd_reset_tx_fifos(dev, -ENETDOWN);
 	}
 
-	if (dev_data->common.state_change_cb) {
-		dev_data->common.state_change_cb(dev, new_state, err_cnt,
-						 dev_data->common.state_change_cb_user_data);
-	}
+	can_fire_state_change_callbacks(dev, new_state, err_cnt);
 
 done:
 	k_mutex_unlock(&dev_data->mutex);
@@ -1047,7 +1045,7 @@ static void mcp251xfd_handle_interrupts(const struct device *dev)
 
 		if (!reg_int_hw) {
 			k_mutex_unlock(&dev_data->mutex);
-			continue;
+			goto check_int_pin;
 		}
 
 		*reg_int_hw = sys_le16_to_cpu(*reg_int_hw);
@@ -1121,6 +1119,7 @@ static void mcp251xfd_handle_interrupts(const struct device *dev)
 		}
 #endif
 
+check_int_pin:
 		/* Break from loop if INT pin is inactive */
 		consecutive_calls++;
 		ret = gpio_pin_get_dt(&dev_cfg->int_gpio_dt);
@@ -1368,9 +1367,15 @@ static inline int mcp251xfd_init_osc_reg(const struct device *dev)
 		return ret;
 	}
 
-	return mcp251xfd_reg_check_value_wtimeout(dev, MCP251XFD_REG_OSC, reg_value, reg_value,
-						  MCP251XFD_PLLRDY_TIMEOUT_USEC,
-						  MCP251XFD_PLLRDY_RETRIES, false);
+	ret = mcp251xfd_reg_check_value_wtimeout(dev, MCP251XFD_REG_OSC, reg_value, reg_value,
+						 MCP251XFD_PLLRDY_TIMEOUT_USEC,
+						 MCP251XFD_PLLRDY_RETRIES, false);
+	if ((ret == 0) && dev_cfg->pll_enable) {
+		/* SYSCLK is not yet stable when PLLRDY is set */
+		k_busy_wait(MCP251XFD_PLLRDY_SETTLE_USEC);
+	}
+
+	return ret;
 }
 
 static inline int mcp251xfd_init_iocon_reg(const struct device *dev)
@@ -1492,6 +1497,7 @@ static int mcp251xfd_init_tscon(const struct device *dev)
 static int mcp251xfd_reset(const struct device *dev)
 {
 	const struct mcp251xfd_config *dev_cfg = dev->config;
+	struct mcp251xfd_data *dev_data = dev->data;
 	uint16_t cmd = sys_cpu_to_be16(MCP251XFD_SPI_INSTRUCTION_RESET);
 	const struct spi_buf tx_buf = {.buf = &cmd, .len = sizeof(cmd),};
 	const struct spi_buf_set tx = {.buffers = &tx_buf, .count = 1};
@@ -1503,10 +1509,19 @@ static int mcp251xfd_reset(const struct device *dev)
 		return ret;
 	}
 
-	ret = spi_write_dt(&dev_cfg->bus, &tx);
+	ret = spi_write(dev_cfg->bus.bus, dev_data->spi_cfg, &tx);
 	/* Adding delay after init to fix occasional init issue. Delay time found experimentally. */
 	k_sleep(K_USEC(MCP251XFD_RESET_DELAY_USEC));
-	return ret;
+	if (ret < 0) {
+		return ret;
+	}
+
+	/* the oscillator restart may take longer than the delay */
+	return mcp251xfd_reg_check_value_wtimeout(
+		dev, MCP251XFD_REG_CON,
+		FIELD_PREP(MCP251XFD_REG_CON_OPMOD_MASK, MCP251XFD_REG_CON_MODE_CONFIG),
+		MCP251XFD_REG_CON_OPMOD_MASK, MCP251XFD_RESET_TIMEOUT_USEC, MCP251XFD_RESET_RETRIES,
+		true);
 }
 
 static int mcp251xfd_init(const struct device *dev)
@@ -1538,10 +1553,23 @@ static int mcp251xfd_init(const struct device *dev)
 		}
 	}
 
+	sys_slist_init(&dev_data->common.state_change_callbacks);
 	k_sem_init(&dev_data->int_sem, 0, 1);
 	k_sem_init(&dev_data->tx_sem, MCP251XFD_TX_QUEUE_ITEMS, MCP251XFD_TX_QUEUE_ITEMS);
 
 	k_mutex_init(&dev_data->mutex);
+
+	/* Until the PLL has locked, SYSCLK is the raw oscillator and SCK is
+	 * limited to 0.85 * (FSYSCLK / 2): run init on a clamped config copy.
+	 */
+	if (dev_cfg->pll_enable) {
+		dev_data->spi_cfg_init = dev_cfg->bus.config;
+		dev_data->spi_cfg_init.frequency =
+			MIN(dev_cfg->bus.config.frequency, dev_cfg->osc_freq * 17 / 40);
+		dev_data->spi_cfg = &dev_data->spi_cfg_init;
+	} else {
+		dev_data->spi_cfg = &dev_cfg->bus.config;
+	}
 
 	if (!spi_is_ready_dt(&dev_cfg->bus)) {
 		LOG_ERR_DEVICE_NOT_READY(dev_cfg->bus.bus);
@@ -1553,19 +1581,24 @@ static int mcp251xfd_init(const struct device *dev)
 		return -ENODEV;
 	}
 
-	if (gpio_pin_configure_dt(&dev_cfg->int_gpio_dt, GPIO_INPUT) < 0) {
-		LOG_ERR("Unable to configure GPIO pin");
+	ret = gpio_pin_configure_dt(&dev_cfg->int_gpio_dt, GPIO_INPUT);
+	if (ret < 0) {
+		LOG_ERR("Failed to configure GPIO interrupt pin [%d]", ret);
 		return -EINVAL;
 	}
 
 	gpio_init_callback(&dev_data->int_gpio_cb, mcp251xfd_int_gpio_callback,
 			   BIT(dev_cfg->int_gpio_dt.pin));
 
-	if (gpio_add_callback_dt(&dev_cfg->int_gpio_dt, &dev_data->int_gpio_cb) < 0) {
+	ret = gpio_add_callback_dt(&dev_cfg->int_gpio_dt, &dev_data->int_gpio_cb);
+	if (ret < 0) {
+		LOG_ERR("Failed to add GPIO interrupt callback [%d]", ret);
 		return -EINVAL;
 	}
 
-	if (gpio_pin_interrupt_configure_dt(&dev_cfg->int_gpio_dt, GPIO_INT_LEVEL_ACTIVE) < 0) {
+	ret = gpio_pin_interrupt_configure_dt(&dev_cfg->int_gpio_dt, GPIO_INT_LEVEL_ACTIVE);
+	if (ret < 0) {
+		LOG_ERR("Failed to configure level-triggered GPIO interrupt [%d]", ret);
 		return -EINVAL;
 	}
 
@@ -1632,6 +1665,11 @@ static int mcp251xfd_init(const struct device *dev)
 		LOG_ERR("Error initializing OSC register [%d]", ret);
 		return ret;
 	}
+
+	/* PLL locked, SYSCLK at full rate: switch to the full-speed config
+	 * (new pointer, so the SPI driver picks up the change).
+	 */
+	dev_data->spi_cfg = &dev_cfg->bus.config;
 
 	ret = mcp251xfd_init_iocon_reg(dev);
 	if (ret < 0) {
@@ -1701,7 +1739,6 @@ static DEVICE_API(can, mcp251xfd_api_funcs) = {
 	.add_rx_filter = mcp251xfd_add_rx_filter,
 	.remove_rx_filter = mcp251xfd_remove_rx_filter,
 	.get_state = mcp251xfd_get_state,
-	.set_state_change_callback = mcp251xfd_set_state_change_callback,
 	.get_core_clock = mcp251xfd_get_core_clock,
 	.get_max_filters = mcp251xfd_get_max_filters,
 	.timing_min = {

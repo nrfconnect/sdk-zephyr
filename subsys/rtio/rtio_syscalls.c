@@ -31,18 +31,25 @@ static inline bool rtio_vrfy_sqe(struct rtio_sqe *sqe)
 	case RTIO_OP_NOP:
 		break;
 	case RTIO_OP_TX:
-		valid_sqe &= K_SYSCALL_MEMORY(sqe->tx.buf, sqe->tx.buf_len, false);
+		valid_sqe &= !K_SYSCALL_MEMORY(sqe->tx.buf, sqe->tx.buf_len, false);
 		break;
 	case RTIO_OP_RX:
 		if ((sqe->flags & RTIO_SQE_MEMPOOL_BUFFER) == 0) {
-			valid_sqe &= K_SYSCALL_MEMORY(sqe->rx.buf, sqe->rx.buf_len, true);
+			valid_sqe &= !K_SYSCALL_MEMORY(sqe->rx.buf, sqe->rx.buf_len, true);
 		}
 		break;
 	case RTIO_OP_TINY_TX:
 		break;
+#ifdef CONFIG_RTIO_OP_DELAY
+	case RTIO_OP_DELAY:
+		/* Carries only a timeout value and opaque userdata; the iodev (the
+		 * shared timeout iodev) is validated by the K_SYSCALL_OBJ check above.
+		 */
+		break;
+#endif
 	case RTIO_OP_TXRX:
-		valid_sqe &= K_SYSCALL_MEMORY(sqe->txrx.tx_buf, sqe->txrx.buf_len, true);
-		valid_sqe &= K_SYSCALL_MEMORY(sqe->txrx.rx_buf, sqe->txrx.buf_len, true);
+		valid_sqe &= !K_SYSCALL_MEMORY(sqe->txrx.tx_buf, sqe->txrx.buf_len, false);
+		valid_sqe &= !K_SYSCALL_MEMORY(sqe->txrx.rx_buf, sqe->txrx.buf_len, true);
 		break;
 	default:
 		/* RTIO OP must be known and allowable from user mode
@@ -66,24 +73,35 @@ static inline int z_vrfy_rtio_cqe_get_mempool_buffer(const struct rtio *r, struc
 {
 	K_OOPS(K_SYSCALL_OBJ(r, K_OBJ_RTIO));
 	K_OOPS(K_SYSCALL_MEMORY_READ(cqe, sizeof(struct rtio_cqe)));
-	K_OOPS(K_SYSCALL_MEMORY_READ(buff, sizeof(void *)));
-	K_OOPS(K_SYSCALL_MEMORY_READ(buff_len, sizeof(uint32_t)));
+	K_OOPS(K_SYSCALL_MEMORY_WRITE(buff, sizeof(void *)));
+	K_OOPS(K_SYSCALL_MEMORY_WRITE(buff_len, sizeof(uint32_t)));
 	return z_impl_rtio_cqe_get_mempool_buffer(r, cqe, buff, buff_len);
 }
 #include <zephyr/syscalls/rtio_cqe_get_mempool_buffer_mrsh.c>
 
-static inline int z_vrfy_rtio_sqe_cancel(struct rtio_sqe *sqe)
+static inline int z_vrfy_rtio_sqe_cancel(struct rtio *r, rtio_sqe_handle_t handle)
 {
-	return z_impl_rtio_sqe_cancel(sqe);
+	/*
+	 * handle is an opaque integer identity (block index + generation), not a
+	 * pointer, so there is no user memory to validate. The impl resolves it
+	 * against r->sqe_pool with a bounds + generation check, turning any
+	 * garbage or stale value into a satisfied no-op. Only the context needs
+	 * verifying as a real RTIO k_object.
+	 */
+	K_OOPS(K_SYSCALL_OBJ(r, K_OBJ_RTIO));
+	return z_impl_rtio_sqe_cancel(r, handle);
 }
 #include <zephyr/syscalls/rtio_sqe_cancel_mrsh.c>
 
 static inline int z_vrfy_rtio_sqe_copy_in_get_handles(struct rtio *r, const struct rtio_sqe *sqes,
-						      struct rtio_sqe **handle, size_t sqe_count)
+						      rtio_sqe_handle_t *handles, size_t sqe_count)
 {
 	K_OOPS(K_SYSCALL_OBJ(r, K_OBJ_RTIO));
 
 	K_OOPS(K_SYSCALL_MEMORY_ARRAY_READ(sqes, sqe_count, sizeof(struct rtio_sqe)));
+	if (handles != NULL) {
+		K_OOPS(K_SYSCALL_MEMORY_ARRAY_WRITE(handles, sqe_count, sizeof(*handles)));
+	}
 	struct rtio_sqe *sqe;
 	uint32_t acquirable = rtio_sqe_acquirable(r);
 
@@ -95,8 +113,8 @@ static inline int z_vrfy_rtio_sqe_copy_in_get_handles(struct rtio *r, const stru
 	for (int i = 0; i < sqe_count; i++) {
 		sqe = rtio_sqe_acquire(r);
 		__ASSERT_NO_MSG(sqe != NULL);
-		if (handle != NULL && i == 0) {
-			*handle = sqe;
+		if (handles != NULL) {
+			handles[i] = rtio_sqe_handle(r, sqe);
 		}
 		*sqe = sqes[i];
 

@@ -29,7 +29,7 @@
 #include <zephyr/shell/shell_string_conv.h>
 #include <zephyr/sys/atomic_types.h>
 #include <zephyr/sys/byteorder.h>
-#include <zephyr/sys_clock.h>
+#include <zephyr/sys/clock.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/time_units.h>
 #include <zephyr/sys/util.h>
@@ -122,7 +122,7 @@ static int l2cap_recv(struct bt_l2cap_chan *chan, struct net_buf *buf)
 				       l2cap_recv_delay_ms);
 		}
 
-		k_fifo_put(&l2cap_recv_fifo, buf);
+		k_fifo_put(&l2cap_recv_fifo, net_buf_take(&buf));
 		k_work_schedule(&l2ch->recv_work, K_MSEC(l2cap_recv_delay_ms));
 
 		return -EINPROGRESS;

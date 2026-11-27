@@ -12,14 +12,15 @@
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 
 / {
-	model = "STMicroelectronics STM32L476RG-NUCLEO board";
 	compatible = "st,stm32l476rg-nucleo";
+	model = "STMicroelectronics STM32L476RG-NUCLEO board";
 
 	chosen {
 		zephyr,console = &usart2;
 		zephyr,shell-uart = &usart2;
 		zephyr,sram = &sram0;
 		zephyr,flash = &flash0;
+		zephyr,system-timer = &lptim1;
 	};
 
 	leds: leds {
@@ -78,7 +79,7 @@
 	apb2-prescaler = <1>;
 };
 
-stm32_lp_tick_source: &lptim1 {
+&lptim1 {
 	clocks = <&rcc STM32_CLOCK(APB1, 31)>,
 		 <&rcc STM32_SRC_LSI LPTIM1_SEL(1)>;
 	status = "okay";
@@ -118,8 +119,8 @@ stm32_lp_tick_source: &lptim1 {
 	pinctrl-names = "default";
 	scl-gpios = <&gpioc 0 GPIO_ACTIVE_HIGH>;
 	sda-gpios = <&gpioc 1 GPIO_ACTIVE_HIGH>;
-	status = "okay";
 	clock-frequency = <I2C_BITRATE_FAST>;
+	status = "okay";
 };
 
 &spi1 {
@@ -148,9 +149,9 @@ stm32_lp_tick_source: &lptim1 {
 	status = "okay";
 
 	pwm2: pwm {
-		status = "okay";
 		pinctrl-0 = <&tim2_ch3_pb10>;
 		pinctrl-names = "default";
+		status = "okay";
 	};
 };
 
@@ -159,9 +160,9 @@ stm32_lp_tick_source: &lptim1 {
 	status = "okay";
 
 	pwm3: pwm {
-		status = "okay";
 		pinctrl-0 = <&tim3_ch1_pb4>;
 		pinctrl-names = "default";
+		status = "okay";
 	};
 };
 
@@ -171,11 +172,15 @@ stm32_lp_tick_source: &lptim1 {
 	status = "okay";
 };
 
+&adc123_common {
+	st,adc-clock-source = "SYNC";
+	st,adc-prescaler = <4>;
+	status = "okay";
+};
+
 &adc1 {
 	pinctrl-0 = <&adc1_in1_pc0>;
 	pinctrl-names = "default";
-	st,adc-clock-source = "SYNC";
-	st,adc-prescaler = <4>;
 	status = "okay";
 };
 
@@ -189,15 +194,15 @@ stm32_lp_tick_source: &lptim1 {
 
 &flash0 {
 	partitions {
+		ranges;
 		#address-cells = <1>;
 		#size-cells = <1>;
-		ranges;
 
 		/* Set 32KB of storage at the end of 1024KB flash */
 		storage_partition: partition@f8000 {
 			compatible = "zephyr,mapped-partition";
-			label = "storage";
 			reg = <0x000f8000 DT_SIZE_K(32)>;
+			label = "storage";
 		};
 	};
 };

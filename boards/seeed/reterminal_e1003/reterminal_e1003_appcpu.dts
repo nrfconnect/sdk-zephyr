@@ -5,12 +5,12 @@
 
 /dts-v1/;
 
-#include <espressif/esp32s3/esp32s3_r8.dtsi>
+#include <espressif/esp32s3/esp32s3.dtsi>
 #include <espressif/partitions_0x0_amp_32M.dtsi>
 
 / {
-	model = "Seeed Studio reTerminal E1003 APPCPU";
 	compatible = "seeed,reterminal-e1003";
+	model = "Seeed Studio reTerminal E1003 APPCPU";
 
 	chosen {
 		zephyr,sram = &sram1;
@@ -23,6 +23,11 @@
 
 &flash0 {
 	reg = <0x0 DT_SIZE_M(32)>;
+	ranges = <0x0 0x0 DT_SIZE_M(32)>;
+};
+
+&psram0 {
+	size = <DT_SIZE_M(8)>;
 };
 
 &trng0 {

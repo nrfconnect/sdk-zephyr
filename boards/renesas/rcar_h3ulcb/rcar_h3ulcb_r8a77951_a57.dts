@@ -6,6 +6,7 @@
  */
 
 /dts-v1/;
+#include <freq.h>
 #include <mem.h>
 #include <arm64/renesas/r8a77951.dtsi>
 #include <zephyr/dt-bindings/gpio/gpio.h>
@@ -14,15 +15,14 @@
 / {
 	model = "H3ULCB CA57";
 
+	cpus {
+		timebase-frequency = <DT_FREQ_K(8300)>;
+	};
+
 	chosen {
 		zephyr,sram = &ram;
 		zephyr,console = &scif2;
 		zephyr,shell-uart = &scif2;
-	};
-
-	ram: memory@48000000 {
-		device_type = "memory";
-		reg = <0x0 0x48000000 0x0 DT_SIZE_M(512)>;
 	};
 
 	/* These aliases are provided for compatibility with samples */
@@ -51,6 +51,11 @@
 		states = <3300000 1>, <1800000 0>;
 
 		regulator-always-on;
+	};
+
+	ram: memory@48000000 {
+		reg = <0x0 0x48000000 0x0 DT_SIZE_M(512)>;
+		device_type = "memory";
 	};
 };
 
@@ -94,14 +99,14 @@
 		     &emmc2_data4 &emmc2_data5 &emmc2_data6 &emmc2_data7>;
 	pinctrl-names = "default", "uhs";
 
+	bus-width = <8>;
+	mmc-hs200-1_8v;
+	mmc-hs400-1_8v;
+	non-removable;
+
 	disk {
 		compatible = "zephyr,mmc-disk";
 		disk-name = "SD2";
 		status = "disabled";
 	};
-
-	bus-width = <8>;
-	mmc-hs200-1_8v;
-	mmc-hs400-1_8v;
-	non-removable;
 };

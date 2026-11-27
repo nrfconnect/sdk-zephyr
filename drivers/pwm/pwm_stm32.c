@@ -347,8 +347,13 @@ static int pwm_stm32_set_cycles(const struct device *dev, uint32_t channel,
 		if (IS_TIM_SLAVE_INSTANCE(timer) && !cfg->four_channel_capture_support) {
 			LL_TIM_SetSlaveMode(timer,
 					LL_TIM_SLAVEMODE_DISABLED);
+			/* LL_TIM_TS_ITR0 is not defined on WB0, nor on WBA23/WBA25 (no TIM1) */
+#ifdef LL_TIM_TS_ITR0
 			LL_TIM_SetTriggerInput(timer, LL_TIM_TS_ITR0);
+#endif
+#if HAS_MASTERMODE_SUPPORT
 			LL_TIM_DisableMasterSlaveMode(timer);
+#endif
 		}
 #endif /* CONFIG_PWM_CAPTURE */
 
@@ -728,13 +733,17 @@ static int pwm_stm32_init(const struct device *dev)
 		}
 
 		r = clock_control_get_rate(clk, (clock_control_subsys_t)&cfg->pclken[1], &tim_clk);
-		if (r < 0) {
-			LOG_ERR("Timer clock rate get error (%d)", r);
-			return r;
-		}
+	} else if (IS_ENABLED(CONFIG_SOC_SERIES_STM32MP1X) ||
+		   IS_ENABLED(CONFIG_SOC_SERIES_STM32MP2X)) {
+		/* No selectable source: the gate clock rate is the timer clock rate */
+		r = clock_control_get_rate(clk, (clock_control_subsys_t)&cfg->pclken[0], &tim_clk);
 	} else {
 		LOG_ERR("Timer clock source is not specified");
 		return -EINVAL;
+	}
+	if (r < 0) {
+		LOG_ERR("Timer clock rate get error (%d)", r);
+		return r;
 	}
 
 	data->tim_clk = tim_clk;

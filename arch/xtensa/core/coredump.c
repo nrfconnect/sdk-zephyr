@@ -13,6 +13,11 @@
 #define ARCH_HDR_VER			1
 #define XTENSA_BLOCK_HDR_VER		2
 
+/**
+ * @brief SoC identifiers stored in the coredump architecture block.
+ *
+ * Used by the GDB stub to select the register layout of the SoC.
+ */
 enum xtensa_soc_code {
 	XTENSA_SOC_UNKNOWN = 0,
 	XTENSA_SOC_SAMPLE_CONTROLLER,
@@ -23,6 +28,9 @@ enum xtensa_soc_code {
 	XTENSA_SOC_DC233C,
 };
 
+/**
+ * @brief Xtensa architecture-specific coredump block.
+ */
 struct xtensa_arch_block {
 	/* Each Xtensa SOC can omit registers (e.g. loop
 	 * registers) or assign different index numbers
@@ -141,7 +149,7 @@ void arch_coredump_info_dump(const struct arch_esf *esf)
 	int regs_blk_remaining;
 
 	/* Calculate number of high registers. */
-	num_high_regs = (uint8_t *)bsa - (uint8_t *)frame + sizeof(void *);
+	num_high_regs = (uint8_t *)bsa - ((uint8_t *)frame + sizeof(void *));
 	num_high_regs /= sizeof(uintptr_t);
 
 	/* And high registers are always comes in 4 in a block. */
@@ -176,6 +184,8 @@ void arch_coredump_info_dump(const struct arch_esf *esf)
 		arch_blk.r.a11 = frame->blks[regs_blk_remaining].r3;
 	}
 	if (regs_blk_remaining > 0) {
+		regs_blk_remaining--;
+
 		arch_blk.r.a12 = frame->blks[regs_blk_remaining].r0;
 		arch_blk.r.a13 = frame->blks[regs_blk_remaining].r1;
 		arch_blk.r.a14 = frame->blks[regs_blk_remaining].r2;

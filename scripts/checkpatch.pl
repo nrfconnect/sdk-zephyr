@@ -54,6 +54,9 @@ my @ignore = ();
 my @exclude = ();
 my $help = 0;
 my $configuration_file = ".checkpatch.conf";
+my $def_configuration_dirs_help = '.:$HOME:.scripts';
+(my $def_configuration_dirs = $def_configuration_dirs_help) =~ s/\$(\w+)/$ENV{$1}/g;
+my $env_config_dir = 'CHECKPATCH_CONFIG_DIR';
 my $max_line_length = 80;
 my $ignore_perl_version = 0;
 my $minimum_perl_version = 5.10.0;
@@ -62,7 +65,7 @@ my $spelling_file = "$D/spelling.txt";
 my $codespell = 0;
 my $codespellfile = "/usr/share/codespell/dictionary.txt";
 my $conststructsfile = "$D/const_structs.checkpatch";
-my $typedefsfile;
+my $typedefsfile = "$D/checkpatch/typedefsfile";
 my $color = "auto";
 my $allow_c99_comments = 0;
 # git output parsing needs US English output, so first set backtick child process LANGUAGE
@@ -134,6 +137,11 @@ Options:
   -h, --help, --version      display this help and exit
 
 When FILE is - read standard input.
+
+CONFIGURATION FILE
+Default configuration options can be stored in $configuration_file,
+search path: '$def_configuration_dirs_help' or in a directory specified by
+\$$env_config_dir environment variable (fallback to the default search path).
 EOM
 
 	exit($exitcode);
@@ -171,7 +179,7 @@ sub list_types {
 	exit($exitcode);
 }
 
-my $conf = which_conf($configuration_file);
+my $conf = which_conf($configuration_file, $env_config_dir, $def_configuration_dirs);
 if (-f $conf) {
 	my @conf_args;
 	open(my $conffile, '<', "$conf")
@@ -508,6 +516,7 @@ our $signature_tags = qr{(?xi:
 	Reviewed-by:|
 	Reported-by:|
 	Suggested-by:|
+	Assisted-by:|
 	To:|
 	Cc:
 )};
@@ -868,6 +877,7 @@ our $FuncArg = qr{$Typecast{0,1}($LvalOrFunc|$Constant|$String)};
 our $declaration_macros = qr{(?x:
 	(?:$Storage\s+)?(?:[A-Z_][A-Z0-9]*_){0,2}(?:DEFINE|DECLARE)(?:_[A-Z0-9]+){0,6}\s*\(|
 	(?:$Storage\s+)?[HLP]?LIST_HEAD\s*\(|
+	(?:DEVICE_MMIO_)(?:NAMED_)?(?:ROM|RAM)(?!_PTR)|
 	(?:SKCIPHER_REQUEST|SHASH_DESC|AHASH_REQUEST)_ON_STACK\s*\(
 )};
 
@@ -1235,9 +1245,15 @@ sub which {
 }
 
 sub which_conf {
-	my ($conf) = @_;
+	my ($conf, $env_key, $paths) = @_;
+	my $env_dir = $ENV{$env_key};
 
-	foreach my $path (split(/:/, ".:$ENV{HOME}:.scripts")) {
+	if (defined($env_dir) && $env_dir ne "") {
+		return "$env_dir/$conf" if (-e "$env_dir/$conf");
+		warn "$P: Can't find a readable $conf in '$env_dir', falling back to default search paths\n";
+	}
+
+	foreach my $path (split(/:/, $paths)) {
 		if (-e "$path/$conf") {
 			return "$path/$conf";
 		}
@@ -1823,6 +1839,19 @@ sub annotate_values {
 			push(@av_paren_type, $type);
 			$type = 'c';
 
+		} elsif ($perl_version_ok &&
+			 $cur =~ /^((?:$Modifier\s+|const\s+)*(?:struct|union|enum)\s+$Ident\s*$balanced_parens(?:\s|\*)*)(?:$Ident|,|\)|\s*$)/) {
+			# A tagged type whose name is produced by a
+			# function-like macro, e.g. "struct MY_MACRO(NODE)
+			# *spec". Consume the macro's parenthesized argument, and
+			# any trailing pointer '*', as part of the type. This
+			# mirrors how the plain $Type regex absorbs the '*' so it
+			# is not annotated as a binary operator. Requiring a
+			# struct/union/enum tag keeps this from matching a lone
+			# macro that returns a value, e.g. "u32(5) * 2".
+			print "DECLARE($1)\n" if ($dbg_values > 1);
+			$type = 'T';
+
 		} elsif ($cur =~ /^($Type)\s*(?:$Ident|,|\)|\(|\s*$)/) {
 			print "DECLARE($1)\n" if ($dbg_values > 1);
 			$type = 'T';
@@ -1996,6 +2025,165 @@ sub annotate_values {
 	}
 
 	return ($res, $var);
+}
+
+# Scan a confirmed C++ template argument list.
+# Return "closed", "open", or "abort" with the relevant offset or state.
+sub cxx_template_scan {
+	my ($opline, $start, $state, $skip) = @_;
+	my $len = length($opline);
+
+	for (my $i = $start; $i < $len; $i++) {
+		my $c = substr($opline, $i, 1);
+		my $lookahead = substr($opline, $i + 1, 1);
+		my $nested = $state->{parens} > 0 || $state->{brackets} > 0;
+
+		if ($c eq '(') {
+			$state->{parens}++;
+		} elsif ($c eq ')') {
+			if ($state->{parens} == 0) {
+				return ("abort", $i);
+			}
+			$state->{parens}--;
+		} elsif ($c eq '[') {
+			$state->{brackets}++;
+		} elsif ($c eq ']') {
+			if ($state->{brackets} == 0) {
+				return ("abort", $i);
+			}
+			$state->{brackets}--;
+		} elsif (($c eq '*' || $c eq '&') &&
+			 $i > 0 && substr($opline, $i - 1, 1) =~ /\s/ &&
+			 substr($opline, $i + 1) =~ /^\s*[\),>]/) {
+			# A pointer or reference at the end of a type is unary.
+			$skip->{$i} = 1;
+		} elsif (!$nested && $c =~ /[;{}]/) {
+			# Prevent a false match from leaking to later lines.
+			return ("abort", $i);
+		} elsif ($c eq '<') {
+			my $before = substr($opline, 0, $i);
+
+			if ($lookahead eq '<' || $lookahead eq '=') {
+				# Shifts and <= inside () / [] stay comparisons.
+				return ("abort", $i) if (!$nested);
+				next;
+			}
+
+			# Require tight syntax to preserve spaced comparisons.
+			if ($before =~ /$Ident$/ ||
+			    $before =~ /\btemplate\s*$/) {
+				$state->{angles}++;
+				$skip->{$i} = 1;
+			}
+		} elsif ($c eq '>') {
+			# Ignore member access and comparison assignment.
+			next if ($i > 0 && substr($opline, $i - 1, 1) eq '-');
+			if ($lookahead eq '=') {
+				return ("abort", $i) if (!$nested);
+				next;
+			}
+			# A comparison or shift at the outer list depth inside
+			# () / [] must not close the template.
+			if ($nested && $state->{angles} <= 1) {
+				next;
+			}
+			# Unparenthesized >> in an NTTP is a shift, not a closer.
+			if ($lookahead eq '>' && $state->{angles} == 1) {
+				return ("abort", $i);
+			}
+			$state->{angles}--;
+			$skip->{$i} = 1;
+			if ($state->{angles} == 0) {
+				return ("closed", $i);
+			}
+		}
+	}
+
+	return ("open", $state);
+}
+
+# Angle brackets are ambiguous with C comparison operators. Start a list
+# only after a high-confidence C++ introducer and carry open lists across
+# lines. "template" is accepted only at a declaration boundary because it
+# is also a valid C identifier. Preprocessor lines preserve the open state.
+sub cxx_template_args {
+	my ($opline, $state) = @_;
+	my %skip = ();
+	my $pos = 0;
+	my $cxx_context = 0;
+	my $context_start = 0;
+
+	if (defined $state && $opline =~ /^\s*#/) {
+		return (\%skip, $state);
+	}
+
+	if (defined $state) {
+		my %candidate = ();
+		my ($status, $result) =
+			cxx_template_scan($opline, 0, $state, \%candidate);
+
+		if ($status eq "closed") {
+			$skip{$_} = 1 for keys %candidate;
+			$pos = $result + 1;
+			$cxx_context = 1;
+			$context_start = $pos;
+		} elsif ($status eq "open") {
+			$skip{$_} = 1 for keys %candidate;
+			return (\%skip, $result);
+		} else {
+			$pos = $result + 1;
+		}
+	}
+
+	while (($pos = index($opline, '<', $pos)) >= 0) {
+		my $before = substr($opline, 0, $pos);
+		my $is_template = ($before =~
+			/(?:^|[;{}>]|\b(?:public|protected|private)\s*:)\s*(?:export\s+)?template\s*$/);
+		my $is_cast = ($before =~
+			/\b(?:const|dynamic|reinterpret|static)_cast\s*$/);
+		my $is_qualified = ($before =~
+			/(?:\b$Ident\s*::\s*)+(?:template\s+)?$Ident$/);
+		my $is_dependent = ($before =~ /\btypename\s+$Ident\s*$/);
+		my $in_declaration = $cxx_context &&
+			(substr($opline, $context_start,
+				$pos - $context_start) !~ /[;{}=]/);
+		my $is_introducer = $is_template || $is_cast || $is_qualified ||
+			$is_dependent ||
+			($in_declaration && $before =~ /(?<!\w)$Ident$/);
+
+		if (!$is_introducer || $before =~ /\boperator\s*$/ ||
+		    substr($opline, $pos + 1, 1) =~ /[<=]/) {
+			$pos++;
+			next;
+		}
+
+		my %candidate = ($pos => 1);
+		my $open = {
+			angles => 1,
+			parens => 0,
+			brackets => 0,
+		};
+		my ($status, $result) =
+			cxx_template_scan($opline, $pos + 1, $open, \%candidate);
+
+		if ($status eq "closed") {
+			if (substr($opline, $result + 1) =~ /^\w/) {
+				$pos++;
+				next;
+			}
+			$skip{$_} = 1 for keys %candidate;
+			$pos = $result + 1;
+			$cxx_context = 1;
+			$context_start = $pos;
+		} elsif ($status eq "open") {
+			$skip{$_} = 1 for keys %candidate;
+			return (\%skip, $result);
+		} else {
+			$pos = $result + 1;
+		}
+	}
+
+	return (\%skip, undef);
 }
 
 sub possible {
@@ -2370,6 +2558,7 @@ sub process {
 	my $p1_prefix = '';
 
 	my $prev_values = 'E';
+	my $cxx_tmpl_state;
 
 	# suppression flags
 	my %suppress_ifbraces;
@@ -2506,6 +2695,7 @@ sub process {
 			}
 			annotate_reset();
 			$prev_values = 'E';
+			$cxx_tmpl_state = undef;
 
 			%suppress_ifbraces = ();
 			%suppress_whiletrailers = ();
@@ -2731,6 +2921,15 @@ sub process {
 					$fixed[$fixlinenr] =
 					    "$ucfirst_sign_off $email";
 				}
+			}
+
+			# Assisted-by uses AGENT_NAME:MODEL_VERSION format, not email
+			if ($sign_off =~ /^Assisted-by:/i) {
+				if ($email !~ /^\S+:\S+/) {
+					WARN("BAD_SIGN_OFF",
+					     "Assisted-by expects 'AGENT_NAME:MODEL_VERSION [TOOL1] [TOOL2]' format\n" . $herecurr);
+				}
+				next;
 			}
 
 			my ($email_name, $email_address, $comment) = parse_email($email);
@@ -3910,6 +4109,13 @@ sub process {
 		}
 		$prev_values = substr($curr_values, -1);
 
+		# C++ syntax currently reaches code checks only through .h files.
+		my $cxx_tmpl_skip = {};
+		if ($realfile =~ /\.h$/) {
+			($cxx_tmpl_skip, $cxx_tmpl_state) =
+				cxx_template_args($opline, $cxx_tmpl_state);
+		}
+
 #ignore lines not being added
 		next if ($line =~ /^[^\+]/);
 
@@ -4231,6 +4437,37 @@ sub process {
 			$to =~ s/(\b$Modifier$)/$1 /;
 
 ##			print "2: from<$from> to<$to> ident<$ident>\n";
+			if ($from ne $to && $ident !~ /^$Modifier$/) {
+				if (ERROR("POINTER_LOCATION",
+					  "\"foo${from}bar\" should be \"foo${to}bar\"\n" .  $herecurr) &&
+				    $fix) {
+
+					my $sub_from = $match;
+					my $sub_to = $match;
+					$sub_to =~ s/\Q$from\E/$to/;
+					$fixed[$fixlinenr] =~
+					    s@\Q$sub_from\E@$sub_to@;
+				}
+			}
+		}
+		# Same as above, but for a tagged type whose name is produced by
+		# a function-like macro, e.g. "struct MY_MACRO(NODE)*spec". The
+		# macro's parenthesized argument sits between the type and the
+		# '*', so the plain $NonptrType patterns above do not match it.
+		while ($perl_version_ok &&
+		       $line =~ m{(\b(?:$Modifier\b\s*|const\s+)*(?:struct|union|enum)\s+$Ident\s*$balanced_parens(\s*(?:$Modifier\b\s*|\*\s*)+)($Ident))}g) {
+			my ($match, $from, $to, $ident) = ($1, $3, $3, $4);
+
+			# Should start with a space.
+			$to =~ s/^(\S)/ $1/;
+			# Should not end with a space.
+			$to =~ s/\s+$//;
+			# '*'s should not have spaces between.
+			while ($to =~ s/\*\s+\*/\*\*/) {
+			}
+			# Modifiers should have spaces.
+			$to =~ s/(\b$Modifier$)/$1 /;
+
 			if ($from ne $to && $ident !~ /^$Modifier$/) {
 				if (ERROR("POINTER_LOCATION",
 					  "\"foo${from}bar\" should be \"foo${to}bar\"\n" .  $herecurr) &&
@@ -4571,6 +4808,9 @@ sub process {
 				# Ignore operators passed as parameters.
 				if ($op_type ne 'V' &&
 				    $ca =~ /\s$/ && $cc =~ /^\s*[,\)]/) {
+
+				# Ignore C++ template brackets.
+				} elsif ($cxx_tmpl_skip->{$off}) {
 
 #				# Ignore comments
 #				} elsif ($op =~ /^$;+$/) {
@@ -5017,9 +5257,17 @@ sub process {
 #	avoid cases like "foo + BAR < baz"
 #	only fix matches surrounded by parentheses to avoid incorrect
 #	conversions like "FOO < baz() + 5" being "misfixed" to "baz() > FOO + 5"
+#	Mask C++ template brackets before checking constant comparisons.
+		my $cmpline = $line;
+		foreach my $off (keys %{$cxx_tmpl_skip}) {
+			if ($off < length($cmpline) &&
+			    substr($cmpline, $off, 1) =~ /[<>]/) {
+				substr($cmpline, $off, 1) = ' ';
+			}
+		}
 		if ($perl_version_ok &&
-			!($line =~ /^\+(.*)($Constant|[A-Z_][A-Z0-9_]*)\s*($Compare)\s*(.*)($Constant|[A-Z_][A-Z0-9_]*)(.*)/) &&
-		    $line =~ /^\+(.*)\b($Constant|[A-Z_][A-Z0-9_]*)\s*($Compare)\s*($LvalOrFunc)/) {
+			!($cmpline =~ /^\+(.*)($Constant|[A-Z_][A-Z0-9_]*)\s*($Compare)\s*(.*)($Constant|[A-Z_][A-Z0-9_]*)(.*)/) &&
+		    $cmpline =~ /^\+(.*)\b($Constant|[A-Z_][A-Z0-9_]*)\s*($Compare)\s*($LvalOrFunc)/) {
 			my $lead = $1;
 			my $const = $2;
 			my $comp = $3;

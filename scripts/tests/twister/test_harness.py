@@ -199,12 +199,12 @@ TEST_DATA_RECORDING = [
         "match 1 field",
         "match 2 fields",
         "2 or-ed groups one miss",
-        "one line, two patters, match 2 fields -> 2 records",
-        "two lines, two patters -> 2 records",
-        "two lines, two patters same field -> 2 same records",
-        "two lines, two patters same field merge -> 1 records 2 values",
-        "one line, two patters, match 2 fields, merge -> 1 record",
-        "one line, two patters, match 1 field, merge -> 1 record list",
+        "one line, two patterns, match 2 fields -> 2 records",
+        "two lines, two patterns -> 2 records",
+        "two lines, two patterns same field -> 2 same records",
+        "two lines, two patterns same field merge -> 1 records 2 values",
+        "one line, two patterns, match 2 fields, merge -> 1 record",
+        "one line, two patterns, match 1 field, merge -> 1 record list",
         "match 2 records",
         "as_json empty",
         "as_json no such field",
@@ -276,6 +276,91 @@ def test_harness_process_test(line, fault, fail_on_fault, cap_cov, exp_stat, exp
     assert harness.status == exp_stat
     assert harness.capture_coverage == cap_cov
     assert harness.recording == []
+
+
+def test_harness_process_test_fault_is_logged_with_a_prefix():
+    """A fault is emitted through the logging subsystem, so the marker is
+    surrounded by a timestamp and a module name rather than being a line of
+    its own."""
+    harness = Harness()
+    harness.status = TwisterStatus.NONE
+    harness.fail_on_fault = True
+
+    harness.process_test(
+        "[00:00:02.130,000] <err> os: >>> ZEPHYR FATAL ERROR 0: CPU exception on CPU 0"
+    )
+
+    assert harness.fault
+
+
+def test_harness_process_test_fault_after_run_passed():
+    """A fault reported once the test has already announced success still
+    fails the run."""
+    harness = Harness()
+    harness.status = TwisterStatus.NONE
+    harness.fail_on_fault = True
+
+    harness.process_test("PROJECT EXECUTION SUCCESSFUL")
+    assert harness.status == TwisterStatus.PASS
+
+    harness.process_test(
+        "[00:00:02.130,000] <err> os: >>> ZEPHYR FATAL ERROR 0: CPU exception on CPU 0"
+    )
+
+    assert harness.fault
+    assert harness.status == TwisterStatus.FAIL
+    assert harness.reason == "Fault detected while running test"
+
+
+def test_harness_process_test_fault_after_run_passed_ignored():
+    """Tests that fault on purpose opt out with ignore_faults, and keep their
+    PASS even when the fault comes last."""
+    harness = Harness()
+    harness.status = TwisterStatus.NONE
+    harness.fail_on_fault = False
+
+    harness.process_test("PROJECT EXECUTION SUCCESSFUL")
+    harness.process_test(
+        "[00:00:02.130,000] <err> os: >>> ZEPHYR FATAL ERROR 0: CPU exception on CPU 0"
+    )
+
+    assert not harness.fault
+    assert harness.status == TwisterStatus.PASS
+
+
+@pytest.mark.parametrize(
+    'line',
+    [
+        'Fatal error was unexpected, aborting...',
+        'fatal error was unexpected, aborting',
+        'Assert failed was unexpected, aborting...',
+    ],
+    ids=['ztest fatal hook', 'custom lowercase hook', 'ztest assert hook']
+)
+def test_harness_process_test_unexpected_hook_fault_overrides_ignore_faults(line):
+    """The Ztest error/assert hooks (and equivalent custom hooks) announce a
+    fault the test did not expect. That is a crash even for ignore_faults
+    tests, where the generic fatal-error banner is not acted upon."""
+    harness = Harness()
+    harness.status = TwisterStatus.NONE
+    harness.fail_on_fault = False
+
+    harness.process_test(line)
+
+    assert harness.fault
+
+
+def test_harness_process_test_expected_hook_fault_not_a_crash():
+    """The hooks' expected-fault messages must not trip crash detection."""
+    harness = Harness()
+    harness.status = TwisterStatus.NONE
+    harness.fail_on_fault = False
+
+    harness.process_test('Caught system error -- reason 3 1')
+    harness.process_test('Fatal error expected as part of test case.')
+    harness.process_test('Assert error expected as part of test case.')
+
+    assert not harness.fault
 
 
 def test_robot_configure(tmp_path):
@@ -384,13 +469,12 @@ def test_robot_run_robot_test(tmp_path, caplog, exp_out, returncode, expected_st
     robot.option = option
     robot.instance = instance
     proc_mock = mock.Mock(
-        returncode=returncode, communicate=mock.Mock(return_value=(b"output", None))
+        returncode=returncode,
+        communicate=mock.Mock(return_value=(b"output", None)),
     )
-    popen_mock = mock.Mock(
-        return_value=mock.Mock(
-            __enter__=mock.Mock(return_value=proc_mock), __exit__=mock.Mock()
-        )
-    )
+    proc_mock.__enter__ = mock.Mock(return_value=proc_mock)
+    proc_mock.__exit__ = mock.Mock()
+    popen_mock = mock.Mock(return_value=proc_mock)
 
     # Act
     with mock.patch("subprocess.Popen", popen_mock) as mock.mock_popen, mock.patch(
@@ -562,16 +646,15 @@ def test_pytest__generate_parameters_for_hardware(tmp_path):
     assert pytest_test.pytest_params.flash_command == "flash_command"
 
 
-def test_pytest__update_command_with_env_dependencies():
-    cmd = ["cmd"]
+def test_pytest_get_run_env():
     pytest_test = Pytest()
-    mock.patch.object(Pytest, "PYTEST_PLUGIN_INSTALLED", False)
 
     # Act
-    result_cmd, _ = pytest_test._update_command_with_env_dependencies(cmd)
+    with mock.patch("twisterlib.harness.PYTEST_PLUGIN_INSTALLED", False):
+        env = pytest_test._get_run_env()
 
     # Assert
-    assert result_cmd == ["cmd", "-p", "twister_harness.plugin"]
+    assert "pytest-twister-harness" in env["PYTHONPATH"]
 
 
 def test_pytest_run(tmp_path, caplog):
@@ -915,6 +998,118 @@ def test_test_handle(
         assert test_obj.instance.testcases[0].status == exp_status
     if "ztest" in exp_out:
         assert test_obj.instance.testcases[1].status == exp_status
+
+
+@pytest.fixture
+def stale_state_ztest(tmp_path):
+    """A configured Ztest harness carrying stale state from a previous image."""
+    mock_platform = mock.Mock()
+    mock_platform.name = "mock_platform"
+    mock_platform.normalized_name = "mock_platform"
+
+    mock_testsuite = mock.Mock(id="dummy.test_id", testcases=[])
+    mock_testsuite.name = "dummy_suite/dummy.test_id"
+    mock_testsuite.harness_config = {}
+    mock_testsuite.ztest_suite_names = []
+    mock_testsuite.detailed_test_id = True
+    mock_testsuite.source_dir_rel = "dummy_suite"
+    mock_testsuite.compose_case_name.return_value = "dummy.test_id.testcase"
+
+    outdir = tmp_path / "ztest_out"
+    with mock.patch('twisterlib.testsuite.TestSuite.get_unique', return_value="dummy_suite"):
+        instance = TestInstance(
+            testsuite=mock_testsuite, platform=mock_platform, toolchain='zephyr', outdir=outdir
+        )
+    instance.handler = mock.Mock(options=mock.Mock(verbose=0), type_str="handler_type")
+
+    test_obj = Test()
+    test_obj.configure(instance)
+    test_obj.id = "dummy.test_id"
+    test_obj.expect_reboot = False
+
+    phantom = instance.get_case_or_create("dummy.test_id.testcase")
+    phantom.status = TwisterStatus.STARTED
+    test_obj.ztest = True
+    test_obj.started_suites = {'suite_name': {'count': 1, 'repeat': 0}}
+    test_obj.started_cases = {'dummy.test_id.testcase': {'count': 1}}
+    test_obj.detected_suite_names = ['suite_name']
+
+    return test_obj, phantom
+
+
+def test_test_handle_duplicate_suite_marker_resets_stale_state(stale_state_ztest):
+    """A suite that starts again while still running means the image restarted,
+    so the pending state from before it is stale and must be discarded. Ztest
+    always emits this marker, unlike the optional boot banner."""
+    test_obj, phantom = stale_state_ztest
+
+    test_obj.handle("Running TESTSUITE suite_name")
+
+    assert test_obj.started_suites == {'suite_name': {'count': 1, 'repeat': 0}}
+    assert test_obj.started_cases == {}
+    assert phantom.status == TwisterStatus.NONE
+
+
+def test_test_handle_duplicate_case_marker_resets_stale_state(stale_state_ztest):
+    """The same applies to a test case that starts again while still running."""
+    test_obj, phantom = stale_state_ztest
+
+    test_obj.handle("START - test_testcase")
+
+    assert test_obj.started_suites == {}
+    assert test_obj.started_cases == {'dummy.test_id.testcase': {'count': 1}}
+    # handle() re-marks the case as started for the run that is now beginning.
+    assert phantom.status == TwisterStatus.STARTED
+
+
+def test_test_handle_runid_start_marker_resets_stale_state(stale_state_ztest):
+    """The RunID start marker (TC_PRINT_RUNID_START), printed at the start of
+    every run, covers a restart that never re-emits a pending marker, e.g. when
+    the interrupted run had only partially printed one. Unlike the boot banner
+    it is test output, not an application artifact."""
+    test_obj, phantom = stale_state_ztest
+
+    test_obj.handle("RunID started: deadbeefcafe1234")
+
+    assert test_obj.started_suites == {}
+    assert test_obj.started_cases == {}
+    assert test_obj.detected_suite_names == []
+    assert test_obj.ztest is False
+    assert phantom.status == TwisterStatus.NONE
+
+
+@pytest.mark.parametrize(
+    "line",
+    ["Running TESTSUITE suite_name", "START - test_testcase",
+     "RunID started: deadbeefcafe1234"],
+    ids=["suite_marker", "case_marker", "runid_start"],
+)
+def test_test_handle_expect_reboot_keeps_state(stale_state_ztest, line):
+    """A suite that legitimately reboots must keep its pending state."""
+    test_obj, phantom = stale_state_ztest
+    test_obj.expect_reboot = True
+
+    test_obj.handle(line)
+
+    assert test_obj.started_suites['suite_name']['count'] >= 1
+    assert phantom.status == TwisterStatus.STARTED
+
+
+def test_test_handle_repeated_suite_is_not_stale(stale_state_ztest):
+    """A suite that ends before starting again is a legitimate repeat, not a
+    restart, and must not have its state discarded."""
+    test_obj, _ = stale_state_ztest
+    test_obj.started_suites = {}
+    test_obj.started_cases = {}
+    test_obj.detected_suite_names = []
+
+    test_obj.handle("Running TESTSUITE suite_name")
+    test_obj.handle("TESTSUITE suite_name succeeded")
+    test_obj.handle("Running TESTSUITE suite_name")
+
+    assert test_obj.started_suites == {'suite_name': {'count': 1, 'repeat': 1}}
+    assert test_obj.detected_suite_names == ['suite_name']
+    assert test_obj.ztest is True
 
 
 @pytest.fixture
@@ -1803,6 +1998,104 @@ def test_gtest_did_not_finish(gtest):
         gtest.instance.get_case_by_name("id.suite_name.test_name").status
         == TwisterStatus.STARTED
     )
+
+
+# (name as printed by GoogleTest, internal test name without the instance id prefix)
+GTEST_NAME_LAYOUTS = [
+    pytest.param("Suite.Test", "Suite.Test", id="plain"),
+    pytest.param("Suite/0.Test", "Suite.0.Test", id="typed"),
+    pytest.param("Suite/MyType.Test", "Suite.MyType.Test", id="typed-custom-type-name"),
+    pytest.param("Prefix/Suite/0.Test", "Prefix.Suite.0.Test", id="typed-with-prefix"),
+    pytest.param("Prefix/Suite/MyType.Test", "Prefix.Suite.MyType.Test", id="typed-with-prefix-custom-type-name"),
+    pytest.param("Prefix/Suite.Test/0", "Prefix.Suite.Test.0", id="value-parameterized"),
+    pytest.param("Prefix/Suite.Test/MyParam", "Prefix.Suite.Test.MyParam", id="value-parameterized-custom-name"),
+    pytest.param("Suite.Test/0", "Suite.Test.0", id="value-parameterized-no-prefix"),
+]
+
+
+@pytest.mark.parametrize("printed_name, internal_name", GTEST_NAME_LAYOUTS)
+def test_gtest_name_layouts(gtest, printed_name, internal_name):
+    process_logs(
+        gtest,
+        [
+            SAMPLE_GTEST_START,
+            f"[ RUN      ] {printed_name}",
+            f"[       OK ] {printed_name} (0 ms)",
+            SAMPLE_GTEST_END,
+        ],
+    )
+    assert gtest.status == TwisterStatus.PASS
+    assert gtest.detected_suite_names == [printed_name.replace(".", "/").split("/")[0]]
+    assert gtest.instance.get_case_by_name(f"id.{internal_name}").status == TwisterStatus.PASS
+
+
+@pytest.mark.parametrize("printed_name, internal_name", GTEST_NAME_LAYOUTS)
+def test_gtest_name_layouts_fail_with_param(gtest, printed_name, internal_name):
+    process_logs(
+        gtest,
+        [
+            SAMPLE_GTEST_START,
+            f"[ RUN      ] {printed_name}",
+            f"[  FAILED  ] {printed_name}, where TypeParam = int and GetParam() = 4 (0 ms)",
+            SAMPLE_GTEST_END,
+        ],
+    )
+    assert gtest.status == TwisterStatus.FAIL
+    assert gtest.instance.get_case_by_name(f"id.{internal_name}").status == TwisterStatus.FAIL
+
+
+def test_gtest_value_parameterized_instances_are_distinct(gtest):
+    printed_names = [f"Instance/ParamSuite.Test/{index}" for index in range(3)]
+    logs = [SAMPLE_GTEST_START]
+    for printed_name in printed_names:
+        logs += [f"[ RUN      ] {printed_name}", f"[       OK ] {printed_name} (0 ms)"]
+    logs.append(SAMPLE_GTEST_END)
+
+    process_logs(gtest, logs)
+
+    assert gtest.status == TwisterStatus.PASS
+    for index in range(3):
+        assert (
+            gtest.instance.get_case_by_name(f"id.Instance.ParamSuite.Test.{index}").status
+            == TwisterStatus.PASS
+        )
+
+
+def test_gtest_value_parameterized_failure_is_attributed_to_instance(gtest):
+    process_logs(
+        gtest,
+        [
+            SAMPLE_GTEST_START,
+            "[ RUN      ] Instance/ParamSuite.Test/0",
+            "[       OK ] Instance/ParamSuite.Test/0 (0 ms)",
+            "[ RUN      ] Instance/ParamSuite.Test/1",
+            "[  FAILED  ] Instance/ParamSuite.Test/1, where GetParam() = 4 (0 ms)",
+            "[ RUN      ] Instance/ParamSuite.Test/2",
+            "[       OK ] Instance/ParamSuite.Test/2 (0 ms)",
+            SAMPLE_GTEST_END,
+        ],
+    )
+    assert gtest.status == TwisterStatus.FAIL
+    assert gtest.instance.get_case_by_name("id.Instance.ParamSuite.Test.0").status == TwisterStatus.PASS
+    assert gtest.instance.get_case_by_name("id.Instance.ParamSuite.Test.1").status == TwisterStatus.FAIL
+    assert gtest.instance.get_case_by_name("id.Instance.ParamSuite.Test.2").status == TwisterStatus.PASS
+
+
+def test_gtest_typed_tests_with_custom_type_names_are_distinct(gtest):
+    process_logs(
+        gtest,
+        [
+            SAMPLE_GTEST_START,
+            "[ RUN      ] Prefix/TypedSuite/MyInt.TestA",
+            "[       OK ] Prefix/TypedSuite/MyInt.TestA (0 ms)",
+            "[ RUN      ] Prefix/TypedSuite/MyInt.TestB",
+            "[       OK ] Prefix/TypedSuite/MyInt.TestB (0 ms)",
+            SAMPLE_GTEST_END,
+        ],
+    )
+    assert gtest.status == TwisterStatus.PASS
+    assert gtest.instance.get_case_by_name("id.Prefix.TypedSuite.MyInt.TestA").status == TwisterStatus.PASS
+    assert gtest.instance.get_case_by_name("id.Prefix.TypedSuite.MyInt.TestB").status == TwisterStatus.PASS
 
 
 def test_bsim_build(monkeypatch, tmp_path):

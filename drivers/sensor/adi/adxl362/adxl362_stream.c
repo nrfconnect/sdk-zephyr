@@ -199,6 +199,7 @@ static void adxl362_process_fifo_samples_cb(struct rtio *r, const struct rtio_sq
 	hdr->timestamp = data->timestamp;
 	hdr->int_status = data->status;
 	hdr->selected_range = data->selected_range;
+	hdr->accel_odr = data->accel_odr;
 	hdr->has_tmp = data->en_temp_read;
 
 	uint32_t buf_avail = buf_len;
@@ -268,6 +269,7 @@ static void adxl362_process_status_cb(struct rtio *r, const struct rtio_sqe *sqe
 	uint8_t status = data->status;
 
 	if (data->sqe == NULL) {
+		data->fifo_wmark_irq = false;
 		return;
 	}
 
@@ -397,7 +399,9 @@ void adxl362_stream_irq_handler(const struct device *dev)
 	struct adxl362_data *data = (struct adxl362_data *) dev->data;
 	uint64_t cycles;
 	int rc;
+
 	if (data->sqe == NULL) {
+		data->fifo_wmark_irq = false;
 		return;
 	}
 

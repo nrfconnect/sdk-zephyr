@@ -13,7 +13,6 @@ config BUILD_OUTPUT_UF2_FAMILY_ID
 if SOC_SERIES_IMXRT10XX || SOC_SERIES_IMXRT11XX || SOC_SERIES_IMXRT118X
 
 config ROM_START_OFFSET
-	default 0x400 if BOOTLOADER_MCUBOOT
 	default 0x2000 if BOOT_FLEXSPI_NOR || BOOT_SEMC_NOR
 
 config LOG_BACKEND_SWO_FREQ_HZ
@@ -84,7 +83,7 @@ if CPU_CORTEX_M7
 
 # Enable cache management features when using M7 core, since these parts
 # have L1 instruction and data caches that should be enabled at boot
-config CACHE_MANAGEMENT
+configdefault CACHE_MANAGEMENT
 	default y
 
 config FLASH_MCUX_FLEXSPI_XIP_MEM

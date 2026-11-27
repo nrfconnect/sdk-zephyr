@@ -37,7 +37,7 @@ Hardware
 - Board connectors:
 
   - USB Type-C® connector
-  - M.2 Key A serial memory connector
+  - M.2 Key A serial memory connector is supported through the :ref:`st_b_m2mem_pack1_shield` shield.
   - MIPI20 connector for debugging (SWD, JTAG, 4-bit Trace)
   - 10/100 Mbit/s Ethernet connector
   - ARDUINO® Uno V3 connector
@@ -73,6 +73,17 @@ In this configuration, the user LEDs are off when the STM32 I/O is in a high sta
 STM32 I/O is in a low state.
 
 For more details please refer to `STM32 Nucleo-144 board User Manual`_.
+
+USB
+===
+
+.. warning::
+
+  By default, the dead-battery pull-downs are not present on the connector (self-powered mode).
+  Therefore, the board cannot be powered from the user USB-C connector using a USB-C-to-USB-C cable.
+  A legacy USB-C-to-USB-A cable should still work.
+  Another option is to connect both the user USB and the ST-Link USB.
+  The board can also be modified to support bus-powered mode.
 
 Programming and Debugging
 *************************

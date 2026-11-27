@@ -183,7 +183,7 @@ config RISCV_ISA_EXT_ZCA
 	bool
 	default y if $(dt_compat_all_has_prop,riscv,$(RISCV_ISA_EXT_PROP),zca)
 	help
-	  (Zca) - Zba Extension for Compressed Instructions
+	  (Zca) - Zca Extension for Compressed Instructions
 
 	  The Zca extension is a subset of the C extension that does not include
 	  the floating-point load and store instructions.
@@ -277,6 +277,7 @@ config RISCV_ISA_EXT_ZBC
 config RISCV_ISA_EXT_ZBKB
 	bool
 	default y if $(dt_compat_all_has_prop,riscv,$(RISCV_ISA_EXT_PROP),zbkb)
+	select ARCH_HAS_BIT_REV
 	help
 	  (Zbkb) - Zbkb BitManip Extension (Bit-manipulation for Cryptography)
 
@@ -332,6 +333,7 @@ config RISCV_ISA_EXT_SSAIA
 config RISCV_ISA_EXT_ZK
 	bool
 	default y if $(dt_compat_all_has_prop,riscv,$(RISCV_ISA_EXT_PROP),zk)
+	select RISCV_ISA_EXT_ZBKB
 	help
 	  (Zk) - Standard Extension for Scalar Cryptography
 
@@ -342,9 +344,23 @@ config RISCV_ISA_EXT_ZK
 	  (NIST AES decryption/encryption), Zknh (NIST hash functions
 	  such as SHA-256 and SHA-512), and Zkr (entropy source).
 
+config RISCV_ISA_EXT_ZKR
+	bool
+	default y if $(dt_compat_all_has_prop,riscv,$(RISCV_ISA_EXT_PROP),zkr)
+	default y if RISCV_ISA_EXT_ZK
+	depends on RISCV_ISA_EXT_ZICSR
+	help
+	  (Zkr) - Standard Extension for Entropy Source
+
+	  The "Zkr" extension provides the seed CSR, a physical entropy
+	  source delivering 16 bits of randomness per access. The CSR is
+	  accessible from M-mode only, unless access from S-mode or U-mode
+	  is granted through the SSEED and USEED bits of the mseccfg CSR.
+
 config RISCV_ISA_EXT_ZKS
 	bool
 	default y if $(dt_compat_all_has_prop,riscv,$(RISCV_ISA_EXT_PROP),zks)
+	select RISCV_ISA_EXT_ZBKB
 	help
 	  (Zks) - Standard Extension for ShangMi Suite
 
@@ -353,3 +369,13 @@ config RISCV_ISA_EXT_ZKS
 	  standards. It includes sub-extensions Zbkb, Zbkc, Zbkx
 	  (shared with Zk), Zksed (SM4 block cipher), and Zksh
 	  (SM3 hash function).
+
+config RISCV_ISA_EXT_ZICFILP
+	bool
+	default y if $(dt_compat_all_has_prop,riscv,$(RISCV_ISA_EXT_PROP),zicfilp)
+	help
+	  (Zicfilp) - Zicfilp Extensions for Landing Pads
+
+	  The Zicfilp extension introduces landing pad (lpad) instructions to enforce
+	  forward-edge control-flow integrity, ensuring indirect calls and jumps target
+	  valid, predefined locations.

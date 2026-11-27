@@ -12,7 +12,7 @@ static inline int z_vrfy_i2c_configure(const struct device *dev,
 				       uint32_t dev_config)
 {
 	K_OOPS(K_SYSCALL_DRIVER_I2C(dev, configure));
-	return z_impl_i2c_configure((const struct device *)dev, dev_config);
+	return z_impl_i2c_configure(dev, dev_config);
 }
 #include <zephyr/syscalls/i2c_configure_mrsh.c>
 
@@ -65,22 +65,20 @@ static inline int z_vrfy_i2c_transfer(const struct device *dev,
 	K_OOPS(K_SYSCALL_MEMORY_ARRAY_READ(msgs, num_msgs,
 					   sizeof(struct i2c_msg)));
 
-	return copy_msgs_and_transfer((const struct device *)dev,
-				      (struct i2c_msg *)msgs,
-				      (uint8_t)num_msgs, (uint16_t)addr);
+	return copy_msgs_and_transfer(dev, msgs, num_msgs, addr);
 }
 #include <zephyr/syscalls/i2c_transfer_mrsh.c>
 
 static inline int z_vrfy_i2c_target_driver_register(const struct device *dev)
 {
-	K_OOPS(K_SYSCALL_OBJ(dev, K_OBJ_DRIVER_I2C));
+	K_OOPS(K_SYSCALL_DRIVER_I2C_TARGET(dev, driver_register));
 	return z_impl_i2c_target_driver_register(dev);
 }
 #include <zephyr/syscalls/i2c_target_driver_register_mrsh.c>
 
 static inline int z_vrfy_i2c_target_driver_unregister(const struct device *dev)
 {
-	K_OOPS(K_SYSCALL_OBJ(dev, K_OBJ_DRIVER_I2C));
+	K_OOPS(K_SYSCALL_DRIVER_I2C_TARGET(dev, driver_unregister));
 	return z_impl_i2c_target_driver_unregister(dev);
 }
 #include <zephyr/syscalls/i2c_target_driver_unregister_mrsh.c>

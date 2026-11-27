@@ -207,7 +207,7 @@ static void gmac_free_rx_bufs(struct net_buf **rx_frag_list, uint16_t len)
 {
 	for (int i = 0; i < len; i++) {
 		if (rx_frag_list[i] != NULL) {
-			net_buf_unref(rx_frag_list[i]);
+			net_pkt_frag_unref(rx_frag_list[i]);
 			rx_frag_list[i] = NULL;
 		}
 	}
@@ -589,9 +589,8 @@ static struct net_pkt *gmac_extract_and_replace_buffers(struct gmac_queue *queue
 		frag = new_frag;
 		rx_frag_list[tail] = frag;
 		rx_desc->status = 0U;
-		rx_desc->addr &= (~GMAC_RXW0_ADDR);
-		rx_desc->addr |= ((uint32_t)frag->data & GMAC_RXW0_ADDR);
-		rx_desc->addr &= (~GMAC_RXW0_OWNERSHIP);
+		rx_desc->addr = ((uint32_t)frag->data & GMAC_RXW0_ADDR) |
+				(rx_desc->addr & GMAC_RXW0_WRAP);
 
 		MODULO_INC(tail, rx_desc_list->len);
 		rx_desc = &rx_desc_list->buf_desc[tail];
@@ -987,11 +986,6 @@ static struct net_stats_eth *eth_mchp_get_stats(const struct device *dev,
 	eth_stats->tx_restart_queue = 0;
 	eth_stats->tx_timeout_count = 0;
 	eth_stats->unknown_protocol = 0;
-
-#ifdef CONFIG_NET_STATISTICS_ETHERNET_VENDOR
-	eth_stats->vendor.key = NULL;
-	eth_stats->vendor.value = 0;
-#endif /* CONFIG_NET_STATISTICS_ETHERNET_VENDOR */
 
 	return eth_stats;
 }

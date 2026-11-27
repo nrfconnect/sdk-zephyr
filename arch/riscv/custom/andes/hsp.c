@@ -107,6 +107,8 @@ void z_riscv_custom_stack_guard_init(void)
  * with the specified thread or interrupt context.
  *
  * @param thread Thread whose stack will be monitored by the stack guard.
+ *               May be NULL in no-multithreading mode, in which case the
+ *               main stack is guarded.
  */
 void z_riscv_custom_stack_guard_enable(struct k_thread *thread)
 {
@@ -127,13 +129,22 @@ void z_riscv_custom_stack_guard_enable(struct k_thread *thread)
 
 #ifdef CONFIG_USERSPACE
 		/* For user threads, set bound to the bottom of the privileged stack */
-		if (thread->base.user_options & K_USER) {
+		if (k_thread_is_user_thread(thread)) {
 			bound = (unsigned long)K_KERNEL_STACK_BUFFER(
 				(k_thread_stack_t *)thread->arch.priv_stack_start);
 		}
 #endif /* CONFIG_USERSPACE */
 #else  /* !CONFIG_MULTITHREADING */
-		bound = (unsigned long)K_KERNEL_STACK_BUFFER(z_main_stack);
+		/*
+		 * No thread object exists for the main thread in
+		 * no-multithreading mode; the caller passes NULL and the
+		 * main stack is guarded instead.
+		 */
+		if (thread != NULL) {
+			bound = thread->stack_info.start;
+		} else {
+			bound = (unsigned long)K_KERNEL_STACK_BUFFER(z_main_stack);
+		}
 #endif /* CONFIG_MULTITHREADING */
 	}
 

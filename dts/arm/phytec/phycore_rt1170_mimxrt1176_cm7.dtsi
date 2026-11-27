@@ -5,7 +5,7 @@
 
 /dts-v1/;
 
-#include <nxp/imxrt/nxp_rt1170_cm7.dtsi>
+#include <nxp/imxrt/imxrt11xx/nxp_rt1170_cm7.dtsi>
 #include <phytec/phycore_rt1170_common.dtsi>
 
 / {
@@ -32,13 +32,13 @@
 };
 
 &lpuart1 {
-	status = "okay";
 	current-speed = <115200>;
+	status = "okay";
 };
 
 &lpuart5 {
-	status = "okay";
 	current-speed = <115200>;
+	status = "okay";
 };
 
 &som_green_led {

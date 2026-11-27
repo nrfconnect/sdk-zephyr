@@ -1,6 +1,6 @@
 /*
- * SPDX-FileCopyrightText: <text>Copyright 2024-2025 Arm Limited and/or its
- * affiliates <open-source-office@arm.com></text>
+ * SPDX-FileCopyrightText: Copyright 2024-2025 Arm Limited and/or its
+ * SPDX-FileCopyrightText: affiliates <open-source-office@arm.com>
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -618,6 +618,10 @@ static int mbox_mhuv3_sender_send_data(const struct device *dev,
 {
 	struct mbox_mhuv3_channel *chan = mbox_mhuv3_get_channel(dev, channel_id);
 	int ret;
+
+	if (chan == NULL) {
+		return -EINVAL;
+	}
 
 	ret = chan->ops->last_tx_done(dev, chan);
 	if (ret) {

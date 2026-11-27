@@ -289,7 +289,7 @@ static int sdmmc_switch(struct sd_card *card, enum sd_switch_arg mode, enum sd_g
 	struct sdhc_data data = {0};
 
 	cmd.opcode = SD_SWITCH;
-	cmd.arg = ((mode & 0x1) << 31) | 0x00FFFFFF;
+	cmd.arg = ((mode & 0x1U) << 31) | 0x00FFFFFF;
 	cmd.arg &= ~(0xFU << (group * 4));
 	cmd.arg |= (value & 0xF) << (group * 4);
 	cmd.response_type = (SD_RSP_TYPE_R1 | SD_SPI_RSP_TYPE_R1);
@@ -352,8 +352,8 @@ static int sdmmc_read_switch(struct sd_card *card)
 	} else {
 		card->switch_caps.uhs_max_dtr = UHS_UNSUPPORTED;
 	}
+	card->switch_caps.bus_speed = status[13];
 	if (card->sd_version >= SD_SPEC_VER3_0) {
-		card->switch_caps.bus_speed = status[13];
 		card->switch_caps.sd_drv_type = status[9];
 		card->switch_caps.sd_current_limit = status[7];
 	}

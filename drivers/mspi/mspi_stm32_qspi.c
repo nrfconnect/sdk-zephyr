@@ -150,6 +150,7 @@ static int mspi_stm32_qspi_dma_init(DMA_HandleTypeDef *hdma, struct stm32_stream
 
 	/* Configure Zephyr DMA driver */
 	dma_stream->cfg.user_data = hdma;
+	dma_stream->cfg.channel_direction = PERIPHERAL_TO_MEMORY;
 	/* This field is used to inform driver that it is overridden */
 	dma_stream->cfg.linked_channel = STM32_DMA_HAL_OVERRIDE;
 
@@ -159,27 +160,11 @@ static int mspi_stm32_qspi_dma_init(DMA_HandleTypeDef *hdma, struct stm32_stream
 		return ret;
 	}
 
-	/* Validate data size alignment */
-	if (dma_stream->cfg.source_data_size != dma_stream->cfg.dest_data_size) {
-		LOG_ERR("DMA Source and destination data sizes not aligned");
-		return -EINVAL;
+	ret = dma_stm32_zcfg_to_halcfg(dma_stream->dev, &dma_stream->cfg, &hdma->Init,
+				       DMA_ADDR_ADJ_NO_CHANGE, DMA_ADDR_ADJ_INCREMENT);
+	if (ret < 0) {
+		return ret;
 	}
-
-	/* Configure HAL DMA driver for QSPI */
-	int index = find_lsb_set(dma_stream->cfg.source_data_size) - 1;
-
-	hdma->Init.PeriphDataAlignment = mspi_stm32_table_dest_size[index];
-	hdma->Init.MemDataAlignment = mspi_stm32_table_src_size[index];
-	hdma->Init.PeriphInc = DMA_PINC_DISABLE;
-	hdma->Init.MemInc = DMA_MINC_ENABLE;
-	hdma->Init.Mode = DMA_NORMAL;
-	hdma->Init.Priority = mspi_stm32_table_priority[dma_stream->cfg.channel_priority];
-#ifdef CONFIG_DMA_STM32_V1
-	/* TODO: Not tested in this configuration */
-	hdma->Init.Channel = dma_stream->cfg.dma_slot;
-#else
-	hdma->Init.Request = dma_stream->cfg.dma_slot;
-#endif /* CONFIG_DMA_STM32_V1 */
 
 	/* Get DMA channel instance */
 	hdma->Instance = STM32_DMA_GET_CHANNEL_INSTANCE(dma_stream->reg, dma_stream->channel);
@@ -473,7 +458,7 @@ static int mspi_stm32_qspi_access(const struct device *dev, const struct mspi_xf
 	int ret;
 
 	/* === XIP Mode: Handle memory-mapped or indirect mode switching === */
-	if (dev_data->xip_cfg.enable) {
+	if (dev_data->memmap_cfg.enable) {
 		/* Read operations can use memory-mapped mode */
 		if (!mspi_stm32_qspi_needs_indirect_mode(packet)) {
 			return mspi_stm32_qspi_memory_mapped_read(dev, packet);
@@ -508,7 +493,8 @@ static int mspi_stm32_qspi_access(const struct device *dev, const struct mspi_xf
 		cmd.DataMode = QSPI_DATA_NONE;
 	}
 
-	if (cmd.Instruction == MSPI_NOR_CMD_WREN) {
+	if (dev_data->ctx.xfer.addr_length == 0) {
+		/* Commands without an address phase, e.g. RDID or WREN */
 		cmd.AddressMode = QSPI_ADDRESS_NONE;
 	}
 
@@ -556,7 +542,7 @@ static int mspi_stm32_qspi_conf_validate(const struct mspi_cfg *config, uint32_t
 		return -ENOTSUP;
 	}
 
-	if (config->num_periph > MSPI_MAX_DEVICE) {
+	if (config->sw_multi_periph && config->num_periph > MSPI_MAX_DEVICE) {
 		LOG_ERR("Invalid MSPI peripheral number.");
 		return -ENOTSUP;
 	}
@@ -619,7 +605,6 @@ static int mspi_stm32_qspi_hal_init(QSPI_HandleTypeDef *hmspi)
 
 	/* Initialize remaining QSPI handle parameters */
 	hmspi->Init.FifoThreshold = MSPI_STM32_FIFO_THRESHOLD;
-	hmspi->Init.ChipSelectHighTime = QSPI_CS_HIGH_TIME_1_CYCLE;
 	hmspi->Init.ClockMode = QSPI_CLOCK_MODE_0;
 	hmspi->Init.FlashID = QSPI_FLASH_ID_1;
 	hmspi->Init.DualFlash = QSPI_DUALFLASH_DISABLE;
@@ -961,6 +946,10 @@ static int mspi_stm32_qspi_dev_config(const struct device *controller,
 
 	/* Check if device ID has changed and lock accordingly */
 	if (data->dev_id != dev_id) {
+		/* The controller lock is taken here and kept for the whole
+		 * session, until the device releases it through
+		 * mspi_get_channel_status().
+		 */
 		if (k_mutex_lock(&data->lock, K_MSEC(CONFIG_MSPI_COMPLETION_TIMEOUT_TOLERANCE))) {
 			LOG_ERR("Failed to acquire lock for device config");
 			return -EBUSY;
@@ -974,21 +963,25 @@ static int mspi_stm32_qspi_dev_config(const struct device *controller,
 		goto e_return;
 	}
 
+	data->dev_id = dev_id;
+
 	if (param_mask == MSPI_DEVICE_CONFIG_NONE && !cfg->mspicfg.sw_multi_periph) {
 		/* Nothing to do but saving the device ID */
-		data->dev_id = dev_id;
-		goto e_return;
+		return 0;
 	}
 
-	data->dev_id = dev_id;
 	/* Validate and save device configuration */
 	ret = mspi_stm32_qspi_dev_cfg_save(controller, param_mask, dev_cfg);
 	if (ret != 0) {
 		LOG_ERR("failed to change device cfg");
+		goto e_return;
 	}
+
+	return 0;
 
 e_return:
 	if (locked) {
+		data->dev_id = NULL;
 		k_mutex_unlock(&data->lock);
 	}
 
@@ -996,36 +989,36 @@ e_return:
 }
 
 /**
- * API implementation of mspi_xip_config : XIP configuration
+ * API implementation of mspi_memmap_config : XIP configuration
  *
  * @param controller Pointer to the device structure for the driver instance.
  * @param dev_id Pointer to the device ID structure from a device.
- * @param xip_cfg The controller XIP configuration for MSPI.
+ * @param memmap_cfg The controller XIP configuration for MSPI.
  *
  * @retval 0 if successful.
  * @retval -ESTALE device ID don't match, need to call mspi_dev_config first.
  */
-static int mspi_stm32_qspi_xip_config(const struct device *controller,
-				      const struct mspi_dev_id *dev_id,
-				      const struct mspi_xip_cfg *xip_cfg)
+static int mspi_stm32_qspi_memmap_config(const struct device *controller,
+					 const struct mspi_dev_id *dev_id,
+					 const struct mspi_memmap_cfg *memmap_cfg)
 {
 	struct mspi_stm32_data *dev_data = controller->data;
 	int ret = 0;
 
 	if (dev_id != dev_data->dev_id) {
-		LOG_ERR("xip_config: dev_id don't match");
+		LOG_ERR("memmap_config: dev_id don't match");
 		return -ESTALE;
 	}
 
 	ret = pm_device_runtime_get(controller);
 	if (ret != 0) {
-		LOG_ERR("%u, pm_device_runtime_get() failed: %d", __LINE__, ret);
+		LOG_ERR_PM_DEVICE_RUNTIME_GET(controller, __LINE__);
 		return ret;
 	}
 
 	pm_policy_state_lock_get(PM_STATE_SUSPEND_TO_IDLE, PM_ALL_SUBSTATES);
 
-	if (!xip_cfg->enable) {
+	if (!memmap_cfg->enable) {
 		/* This is for aborting memory mapped mode */
 		ret = mspi_stm32_qspi_memmap_off(controller);
 	} else {
@@ -1033,13 +1026,13 @@ static int mspi_stm32_qspi_xip_config(const struct device *controller,
 	}
 
 	if (ret == 0) {
-		dev_data->xip_cfg = *xip_cfg;
-		LOG_INF("QSPI XIP configured %d", xip_cfg->enable);
+		dev_data->memmap_cfg = *memmap_cfg;
+		LOG_INF("QSPI XIP configured %d", memmap_cfg->enable);
 	}
 
 	pm_policy_state_lock_put(PM_STATE_SUSPEND_TO_IDLE, PM_ALL_SUBSTATES);
 	if (pm_device_runtime_put(controller)) {
-		LOG_ERR("%u, pm_device_runtime_put() failed", __LINE__);
+		LOG_ERR_PM_DEVICE_RUNTIME_PUT(controller, __LINE__);
 	}
 
 	return ret;
@@ -1058,17 +1051,20 @@ static int mspi_stm32_qspi_get_channel_status(const struct device *controller, u
 {
 	struct mspi_stm32_data *data = controller->data;
 	QSPI_HandleTypeDef *hmspi = &data->hmspi.qspi;
-	int ret = 0;
 
 	ARG_UNUSED(ch);
 
 	if (mspi_is_inp(controller) || (hmspi->Instance->SR & QUADSPI_SR_BUSY) != 0) {
-		ret = -EBUSY;
+		return -EBUSY;
 	}
 
+	/* The controller is idle: end the session started by
+	 * mspi_dev_config() and release the controller lock.
+	 */
 	data->dev_id = NULL;
+	k_mutex_unlock(&data->lock);
 
-	return ret;
+	return 0;
 }
 
 /**
@@ -1213,7 +1209,7 @@ static int mspi_stm32_qspi_pm_action(const struct device *dev, enum pm_device_ac
 		}
 
 		/* Check if XIP is enabled or if controller is in use */
-		if (dev_data->xip_cfg.enable || k_mutex_lock(&dev_data->lock, K_NO_WAIT) != 0) {
+		if (dev_data->memmap_cfg.enable || k_mutex_lock(&dev_data->lock, K_NO_WAIT) != 0) {
 			LOG_ERR("Controller in use, cannot be suspended");
 			return -EBUSY;
 		}
@@ -1261,7 +1257,7 @@ static int mspi_stm32_qspi_init(const struct device *controller)
 static DEVICE_API(mspi, mspi_stm32_qspi_driver_api) = {
 	.config = mspi_stm32_qspi_config,
 	.dev_config = mspi_stm32_qspi_dev_config,
-	.xip_config = mspi_stm32_qspi_xip_config,
+	.memmap_config = mspi_stm32_qspi_memmap_config,
 	.get_channel_status = mspi_stm32_qspi_get_channel_status,
 	.transceive = mspi_stm32_qspi_transceive,
 };
@@ -1347,8 +1343,9 @@ static DEVICE_API(mspi, mspi_stm32_qspi_driver_api) = {
 				.SampleShifting = (DT_INST_PROP(index, st_ssht_enable)         \
 						  ? QSPI_SAMPLE_SHIFTING_HALFCYCLE             \
 						  : QSPI_SAMPLE_SHIFTING_NONE),                \
-				.FlashSize = 0x19,                                             \
-				.ChipSelectHighTime = QSPI_CS_HIGH_TIME_1_CYCLE,               \
+				.FlashSize = MSPI_STM32_INST_MEM_ADDR_BITS(index, 26) - 1,     \
+				.ChipSelectHighTime =                                          \
+					DT_INST_PROP(index, st_cs_high_time) - 1,              \
 				.ClockMode = QSPI_CLOCK_MODE_0,                                \
 				.FlashID = QSPI_FLASH_ID_1,                                    \
 				.DualFlash = QSPI_DUALFLASH_DISABLE,                           \
@@ -1358,7 +1355,7 @@ static DEVICE_API(mspi, mspi_stm32_qspi_driver_api) = {
 		.lock = Z_MUTEX_INITIALIZER(mspi_stm32_qspi_dev_data_##index.lock),            \
 		.sync = Z_SEM_INITIALIZER(mspi_stm32_qspi_dev_data_##index.sync, 0, 1),        \
 		.dev_cfg = {0},                                                                \
-		.xip_cfg = {0},                                                                \
+		.memmap_cfg = {0},                                                             \
 		.ctx.lock = Z_SEM_INITIALIZER(mspi_stm32_qspi_dev_data_##index.ctx.lock, 0, 1),\
 		QSPI_DMA_CHANNEL(DT_DRV_INST(index), tx_rx)                                    \
 	};                                                                                     \

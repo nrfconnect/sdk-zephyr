@@ -10,8 +10,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#ifndef ZEPHYR_SUBSYS_NET_IP_NET_PRIVATE_H_
+#define ZEPHYR_SUBSYS_NET_IP_NET_PRIVATE_H_
+
 #include <errno.h>
 #include <zephyr/sys/printk.h>
+#include <zephyr/net/ethernet.h>
 #include <zephyr/net/net_context.h>
 #include <zephyr/net/net_pkt.h>
 #include <zephyr/net/icmp.h>
@@ -94,7 +98,12 @@ static inline void socket_service_init(void) { }
 #endif
 
 #if defined(CONFIG_NET_NATIVE) || defined(CONFIG_NET_OFFLOAD)
-extern void net_context_init(void);
+extern void net_pkt_init(void);
+#else
+static inline void net_pkt_init(void) { }
+#endif
+
+#if defined(CONFIG_NET_CONTEXT)
 extern const char *net_context_state(struct net_context *context);
 extern bool net_context_is_reuseaddr_set(struct net_context *context);
 extern bool net_context_is_reuseport_set(struct net_context *context);
@@ -102,13 +111,10 @@ extern bool net_context_is_v6only_set(struct net_context *context);
 extern bool net_context_is_recv_pktinfo_set(struct net_context *context);
 extern bool net_context_is_recv_hoplimit_set(struct net_context *context);
 extern bool net_context_is_timestamping_set(struct net_context *context);
-extern void net_pkt_init(void);
 int net_context_get_local_addr(struct net_context *context,
 			       struct net_sockaddr *addr,
 			       net_socklen_t *addrlen);
 #else
-static inline void net_context_init(void) { }
-static inline void net_pkt_init(void) { }
 static inline const char *net_context_state(struct net_context *context)
 {
 	ARG_UNUSED(context);
@@ -123,6 +129,11 @@ static inline bool net_context_is_reuseport_set(struct net_context *context)
 {
 	ARG_UNUSED(context);
 	return false;
+}
+static inline bool net_context_is_v6only_set(struct net_context *context)
+{
+	ARG_UNUSED(context);
+	return !IS_ENABLED(CONFIG_NET_IPV4_MAPPING_TO_IPV6);
 }
 static inline bool net_context_is_recv_pktinfo_set(struct net_context *context)
 {
@@ -150,12 +161,6 @@ static inline int net_context_get_local_addr(struct net_context *context,
 
 	return -ENOTSUP;
 }
-#endif
-
-#if defined(CONFIG_DNS_SOCKET_DISPATCHER)
-extern void dns_dispatcher_init(void);
-#else
-static inline void dns_dispatcher_init(void) { }
 #endif
 
 #if defined(CONFIG_MDNS_RESPONDER)
@@ -289,16 +294,13 @@ struct sock_obj {
 /* This is needed by ipv6_pe.c when privacy extension support is enabled */
 void net_if_ipv6_start_dad(struct net_if *iface,
 			   struct net_if_addr *ifaddr);
-#endif
 
-#if defined(CONFIG_NET_GPTP)
-/**
- * @brief Initialize Precision Time Protocol Layer.
+/* Same as net_if_ipv6_addr_update_lifetime() for a caller that already
+ * holds the lock of the interface owning the address.
  */
-void net_gptp_init(void);
-#else
-#define net_gptp_init()
-#endif /* CONFIG_NET_GPTP */
+void net_if_ipv6_addr_update_lifetime_locked(struct net_if_addr *ifaddr,
+					     uint32_t vlifetime);
+#endif
 
 #if defined(CONFIG_NET_IPV4_FRAGMENT)
 int net_ipv4_send_fragmented_pkt(struct net_if *iface, struct net_pkt *pkt,
@@ -450,8 +452,8 @@ static inline void net_pkt_print_buffer_info(struct net_pkt *pkt, const char *st
 	}
 
 	while (buf) {
-		printk("%p[%ld/%u (%u/%u)]", buf, atomic_get(&pkt->atomic_ref),
-		       buf->len, net_buf_max_len(buf), buf->size);
+		printk("%p[%ld/%u (%zu/%u)]", buf, atomic_get(&pkt->atomic_ref),
+		       buf->len, net_buf_tailroom(buf), buf->size);
 
 		buf = buf->frags;
 		if (buf) {
@@ -471,14 +473,34 @@ void net_pkt_tx_init(struct net_pkt *pkt);
 
 /** Rejoin IGMP mcast group w/o registering address, for internal use only. */
 #if defined(CONFIG_NET_IPV4_IGMP)
-int net_ipv4_igmp_rejoin(struct net_if *iface, const struct net_in_addr *addr);
+int net_ipv4_igmp_rejoin(struct net_if *iface, struct net_if_mcast_addr *addr);
 #else
 #define net_ipv4_igmp_rejoin(...) -ENOSYS
 #endif
 
 /** Rejoin MLD mcast group w/o registering address, for internal use only. */
 #if defined(CONFIG_NET_IPV6_MLD)
-int net_ipv6_mld_rejoin(struct net_if *iface, const struct net_in6_addr *addr);
+int net_ipv6_mld_rejoin(struct net_if *iface, struct net_if_mcast_addr *addr);
 #else
 #define net_ipv6_mld_rejoin(...) -ENOSYS
 #endif
+
+#if defined(CONFIG_NET_IPV4_IGMP)
+void net_ipv4_igmp_send_leave(struct net_if *iface, const struct net_if_mcast_addr *addr);
+#else
+static inline void net_ipv4_igmp_send_leave(struct net_if *iface __unused,
+					    const struct net_if_mcast_addr *addr __unused)
+{
+}
+#endif
+
+#if defined(CONFIG_NET_IPV6_MLD)
+void net_ipv6_mld_send_leave(struct net_if *iface, const struct net_if_mcast_addr *addr);
+#else
+static inline void net_ipv6_mld_send_leave(struct net_if *iface __unused,
+					   const struct net_if_mcast_addr *addr __unused)
+{
+}
+#endif /* CONFIG_NET_IPV6_MLD */
+
+#endif /* ZEPHYR_SUBSYS_NET_IP_NET_PRIVATE_H_ */

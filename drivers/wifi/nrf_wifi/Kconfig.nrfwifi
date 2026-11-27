@@ -10,8 +10,6 @@ menuconfig WIFI_NRF70
 	select NET_L2_WIFI_MGMT if NETWORKING
 	select NET_L2_ETHERNET_MGMT if NETWORKING && NET_L2_ETHERNET
 	select WIFI_USE_NATIVE_NETWORKING if NETWORKING
-	select EXPERIMENTAL if !SOC_SERIES_NRF53 && !SOC_SERIES_NRF91 && \
-		!SOC_NRF54LM20A && !SOC_NRF54LM20B
 	select NRF70_BUSLIB
 	select NET_CHECKSUM_OFFLOAD_SUPPORTED if NET_L2_ETHERNET
 	default y
@@ -75,6 +73,23 @@ config NRF70_RADIO_TEST
 	  This mode is used for testing RF performance and regulatory
 	  compliance. It provides direct control of the radio hardware
 	  for transmitting test patterns and measuring RF parameters.
+
+config NRF70_RADIO_TEST_SHELL
+	bool "Radio test shell commands"
+	default y
+	depends on NRF70_RADIO_TEST && SHELL
+	help
+	  Register the wifi_radio_test shell command set for nRF70 radio test
+	  mode. Disable to provide a custom shell integration in the application.
+
+config NRF70_RADIO_TEST_FICR_SHELL
+	bool "Radio test FICR/OTP programming shell"
+	default y
+	depends on NRF70_RADIO_TEST_SHELL
+	help
+	  Register the wifi_radio_ficr_prog shell command set for programming
+	  nRF7002 OTP memory. Disable if the application provides its own
+	  integration.
 
 config NRF70_OFFLOADED_RAW_TX
 	bool "Offloaded raw TX mode of the nRF70 driver"
@@ -470,11 +485,11 @@ config NRF70_RX_NUM_BUFS
 	int "Number of RX buffers"
 	range 3 256
 	default 6 if !NRF70_DATA_TX
-	default 48
+	default 16
 
 config NRF70_MAX_TX_AGGREGATION
 	int "Maximum number of TX packets to aggregate"
-	default 12
+	default 4
 
 config NRF70_MAX_TX_TOKENS
 	int "Maximum number of TX tokens"
@@ -581,10 +596,10 @@ config WIFI_FIXED_MAC_ADDRESS_ENABLED
 
 config WIFI_RANDOM_MAC_ADDRESS
 	bool "Random MAC address generation at runtime"
-	depends on ENTROPY_GENERATOR
+	depends on HAS_RANDOM_GENERATOR
 	help
 	  This option enables random MAC address generation at runtime.
-	  The random MAC address is generated using the entropy device random generator.
+	  The random MAC address is generated using sys_rand_get.
 
 endchoice
 
@@ -628,7 +643,8 @@ config NRF_WIFI_DATA_HEAP_SIZE
 	default 0 if NRF70_RADIO_TEST || NRF70_OFFLOADED_RAW_TX
 	default 8000 if NRF70_SCAN_ONLY
 	default 110000 if !SOC_FAMILY_NORDIC_NRF
-	default 130000
+	default 65536
+
 endif
 
 if NETWORKING
@@ -737,6 +753,14 @@ config NRF_WIFI_AP_DEAD_DETECT_TIMEOUT
 	help
 		The number of seconds after which the AP is declared dead if no beacons
 		are received from the AP. This is used to detect AP silently going down, for example, due to power off.
+
+config WIFI_NRF70_VHT_HT_FALLBACK
+	bool "Allow fallback from VHT to HT on 802.11ac access points"
+	default y
+	help
+	  On 802.11ac 80 MHz access points, allow the link to fall back from
+	  VHT to HT when needed. Clear this option to keep VHT mode. Applies
+	  only to 802.11ac 80 MHz links; other modes are unaffected.
 
 config NRF_WIFI_RPU_RECOVERY
 	bool "RPU recovery mechanism"
