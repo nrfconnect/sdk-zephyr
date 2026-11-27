@@ -447,8 +447,10 @@ static int spi_nrfx_init(const struct device *dev)
 	PINCTRL_DT_INST_DEFINE(idx);					       \
 	static const struct spi_nrfx_config spi_##idx##z_config = {	       \
 		.def_config = {						       \
+#if !IS_ENABLED(CONFIG_NRFX_SPI_SKIP_PIN_CFG)
 			.skip_gpio_cfg = true,				       \
 			.skip_psel_cfg = true,				       \
+#endif
 			.ss_pin = NRFX_SPI_PIN_NOT_USED,		       \
 			.orc    = SPI_PROP(idx, overrun_character),	       \
 		},							       \
