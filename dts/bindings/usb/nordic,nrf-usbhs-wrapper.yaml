@@ -16,9 +16,3 @@ properties:
     type: phandle
     description: |
       USB PHY and controller function depends on the USB regulator VREGUSB.
-
-  phy:
-    required: true
-    type: phandle
-    description: |
-      USB PHY configuration
