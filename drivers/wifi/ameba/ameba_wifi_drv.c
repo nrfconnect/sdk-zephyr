@@ -12,7 +12,6 @@
 #include <zephyr/net/net_pkt.h>
 #include <zephyr/net/net_if.h>
 #include <zephyr/net/wifi_mgmt.h>
-#include <zephyr/net/wifi_utils.h>
 #include <zephyr/device.h>
 #include <soc.h>
 #include "diag.h"
@@ -215,7 +214,11 @@ static int ameba_scan_done_cb(unsigned int scanned_AP_num, void *user_data)
 			memcpy(res.mac, scanned_AP_info->BSSID.octet, WIFI_MAC_ADDR_LEN);
 			res.mac_length = WIFI_MAC_ADDR_LEN;
 			res.security = WIFI_SECURITY_TYPE_NONE;
-			res.band = wifi_utils_chan_to_band(res.channel);
+			if (res.channel > 14) {
+				res.band = WIFI_FREQ_BAND_5_GHZ;
+			} else {
+				res.band = WIFI_FREQ_BAND_2_4_GHZ;
+			}
 
 			switch (scanned_AP_info->security & ~ENTERPRISE_ENABLED) {
 			case RTW_SECURITY_OPEN:
@@ -541,7 +544,11 @@ static int ameba_wifi_status(const struct device *dev, struct net_if *iface,
 	wifi_get_setting_zephyr(idx, status->ssid, (uint8_t *)&status->ssid_len, status->bssid,
 				&status->channel, &security_type);
 
-	status->band = wifi_utils_chan_to_band(status->channel);
+	if (status->channel > 11) {
+		status->band = WIFI_FREQ_BAND_5_GHZ;
+	} else {
+		status->band = WIFI_FREQ_BAND_2_4_GHZ;
+	}
 
 	status->link_mode = WIFI_LINK_MODE_UNKNOWN;
 	status->mfp = WIFI_MFP_DISABLE;
