@@ -12,7 +12,8 @@ clic: &cpuflpr_clic {};
 
 /delete-node/ &cpuapp;
 /delete-node/ &cpuapp_ppb;
-/delete-node/ &cpuapp_sram;
+/delete-node/ &ipc_shm_area_cpuapp_cpuuma;
+/delete-node/ &cpuapp_sram_app;
 /delete-node/ &cpuapp_mram;
 
 &mram_controller {
@@ -33,20 +34,24 @@ clic: &cpuflpr_clic {};
 		interrupt-parent = <&cpuflpr_clic>;
 		ranges;
 
-		/* RAM02/03 is single cycle access for FLPR core while RAM00/01 is 2 cycle access */
+		/* RAM02/03 is single cycle access for FLPR core while RAM00/01 is 2 cycle access.
+		 * The end of RAM03 holds the 0x300 byte radio DMA region (radio_dma_region_default)
+		 * and the 0x20 byte VTF region (vtf_region_default), 0x320 in total, so they are
+		 * not part of the FLPR SRAM.
+		 */
 		cpuflpr_sram: memory@200e0000 {
 			compatible = "mmio-sram";
-			reg = <0x200e0000 DT_SIZE_K(120)>;
+			reg = <0x200e0000 (DT_SIZE_K(120) - 0x320)>;
 			#address-cells = <1>;
 			#size-cells = <1>;
-			ranges = <0x0 0x200e0000 DT_SIZE_K(120)>;
+			ranges = <0x0 0x200e0000 (DT_SIZE_K(120) - 0x320)>;
 
 			ram03_sram: memory@0 {
 				compatible = "mmio-sram";
-				reg = <0x0 DT_SIZE_K(120)>;
+				reg = <0x0 (DT_SIZE_K(120) - 0x320)>;
 				#address-cells = <1>;
 				#size-cells = <1>;
-				ranges = <0x0 0x0 DT_SIZE_K(120)>;
+				ranges = <0x0 0x0 (DT_SIZE_K(120) - 0x320)>;
 			};
 		};
 	};
